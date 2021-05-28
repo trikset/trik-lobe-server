@@ -17,6 +17,7 @@ import sys
 import asyncio
 import socket
 import configparser
+import requests
 from PIL import Image
 import cv2
 from lobe import ImageModel
@@ -108,7 +109,11 @@ def formatted_data_in_bytes(msg: str) -> bytes:
 
 def predict():
     if PHOTO_URL != "":
-        return model.predict_from_url(PHOTO_URL).prediction
+        im = Image.open(requests.get(PHOTO_URL
+                                     , stream=True
+                                     , auth=(config["Settings"]["USERNAME"], config["Settings"]["PASSWORD"])).raw)
+
+        return model.predict(im).prediction
     elif GET_IMAGES_FROM_ROBOT:
         return model.predict_from_url(ROBOT_PHOTO_URL).prediction
     else:
