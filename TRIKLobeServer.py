@@ -27,7 +27,7 @@ print("Starting program")
 
 if os.path.exists("settings.ini"):
     config = configparser.ConfigParser()  # создаём объекта парсера
-    config.read("settings.ini")  # читаем конфиг
+    config.read("settings.ini", encoding="utf8")  # читаем конфиг
 else:
     print("settings.ini not found")
     print("Press any key to close the window...")
