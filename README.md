@@ -1,22 +1,20 @@
 # TRIK Lobe Server
 
 ## Установка
-
-Скачайте архив `.zip` с последней версией сервера по [ссылке](https://github.com/khodand/trik-lobe-server/releases/latest).
-Распакуйте архив.
-
-В файле `settings.ini` установите значения переменных `SERVER_IP`, `MY_HULL_NUMBER`, `SERVER_PORT` и `MODEL_PATH` cоответственно комментарию.
+1. Скачайте архив `.zip` с последней версией сервера по [ссылке](https://github.com/khodand/trik-lobe-server/releases/latest).
+2. Распакуйте архив.
+3. В файле `settings.ini` установите значения переменных `SERVER_IP`, `MY_HULL_NUMBER`, `SERVER_PORT` и `MODEL_PATH` в соответствии с комментариями внутри файла.
 
 ## Использование с беспроводной камерой или получение изображений по URL
-- Переменной `PHOTO_URL` присвоить значение ссылки на snapshot вебкамеры. `PHOTO_URL=http://127.0.0.1:8080/?action=snapshot`.
-- Данные для аутентификации, если требуется, присвоить переменным `USERNAME` и `PASSWORD`.
+1. Переменной `PHOTO_URL` присвойте значение ссылки на snapshot вебкамеры: `PHOTO_URL=http://127.0.0.1:8080/?action=snapshot`.
+2. Присвойте переменным `USERNAME` и `PASSWORD` данные для аутентификации (если требуется).
 
 ## Использование с камерой TRIK
-- Активировать камеру на роботе.
-- В `settings.ini` значение параметра `PHOTO_URL` **оставить пустым** `PHOTO_URL=`
-- `GET_IMAGES_FROM_ROBOT` присвоить `True` - `GET_IMAGES_FROM_ROBOT=True`
+1. Активируйте камеру на роботе.
+2. В `settings.ini` значение параметра `PHOTO_URL` **оставьте пустым**: `PHOTO_URL=`.
+3. Параметру `GET_IMAGES_FROM_ROBOT` присвойте `True`: `GET_IMAGES_FROM_ROBOT=True`.
 
 ## Использование с камерой ПК
-- Значение параметра `PHOTO_URL` **оставить пустым** `PHOTO_URL=`
-- `GET_IMAGES_FROM_ROBOT` присвоить `False` - `GET_IMAGES_FROM_ROBOT=False`
-- `CAMERA_NUMBER` присвоить номер камеры в ОС Windows (0, 1, 2...) - `CAMERA_NUMBER=0`
+1. Значение параметра `PHOTO_URL` **оставьте пустым**: `PHOTO_URL=`.
+2. Параметру `GET_IMAGES_FROM_ROBOT` присвойте `False`: `GET_IMAGES_FROM_ROBOT=False`.
+3. Параметру `CAMERA_NUMBER` присвойте номер камеры в ОС Windows (0, 1, 2...): `CAMERA_NUMBER=0`.
