@@ -19,7 +19,7 @@
 2. Параметру `GET_IMAGES_FROM_ROBOT` присвойте `False`: `GET_IMAGES_FROM_ROBOT=False`.
 3. Параметру `CAMERA_NUMBER` присвойте номер камеры в ОС Windows (0, 1, 2...): `CAMERA_NUMBER=0`.
 
-## Чтение данных с TRIK
+## Чтение данных в TRIK
 Запустите данный скрипт на TRIK с помощью TRIK Studio:
 ```python
 def main():
