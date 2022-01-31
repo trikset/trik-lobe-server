@@ -18,3 +18,16 @@
 1. Значение параметра `PHOTO_URL` **оставьте пустым**: `PHOTO_URL=`.
 2. Параметру `GET_IMAGES_FROM_ROBOT` присвойте `False`: `GET_IMAGES_FROM_ROBOT=False`.
 3. Параметру `CAMERA_NUMBER` присвойте номер камеры в ОС Windows (0, 1, 2...): `CAMERA_NUMBER=0`.
+
+## Чтения данных с TRIK
+Запустите данный скрипт на TRIK с помощью TRIK Studio:
+```python
+def main():
+  while True:
+      predict = mailbox.receive(True)
+      print(predict)
+      script.wait(1000)
+
+if __name__ == '__main__':
+  main()
+```
