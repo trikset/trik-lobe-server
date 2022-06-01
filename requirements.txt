@@ -9,7 +9,7 @@ lobe==0.6.2
 matplotlib==3.5.2
 numpy==1.22.4
 opencv-python==4.5.5.64
-pefile==2021.9.3
+pefile==2022.5.30
 Pillow==9.1.1
 pyinstaller==5.1
 pyinstaller-hooks-contrib==2022.6
