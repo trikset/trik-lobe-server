@@ -13,8 +13,8 @@ jobs:
       Script_Name: TRIKLobeServer
     steps:
       - uses: actions/checkout@v2
-      - name: Get short SHA
-        run: echo "GITHUB_SHA_SHORT=$(echo $GITHUB_SHA | cut -c 1-6)" >> $env:GITHUB_ENV
+      - uses: benjlevesque/short-sha@v1.2
+        id: short-sha
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
@@ -35,7 +35,7 @@ jobs:
       - name: Archive artifact
         uses: actions/upload-artifact@v2
         with:
-          name: ${{env.SCRIPT_NAME }}-${{ env.GITHUB_SHA_SHORT }}.zip
+          name: ${{env.SCRIPT_NAME }}-${{ steps.short-sha.outputs.sha }}.zip
           path: |
             dist/$${{ env.SCRIPT_NAME }}.exe
             settings.ini
