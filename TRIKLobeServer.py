@@ -24,7 +24,6 @@ from lobe import ImageModel
 
 print("Starting program")
 
-
 if os.path.exists("settings.ini"):
     config = configparser.ConfigParser()  # создаём объекта парсера
     config.read("settings.ini", encoding="utf8")  # читаем конфиг
@@ -33,7 +32,6 @@ else:
     print("Press any key to close the window...")
     input()
     exit(0)
-
 
 # IP робота или студии. Для студии обычно использовать SERVER_IP = '127.0.0.1'
 SERVER_IP = config["Settings"]["SERVER_IP"]
@@ -66,13 +64,12 @@ CAMERA_NUMBER = int(config["Settings"]["CAMERA_NUMBER"])
 KEEPALIVE_TIMER = 5
 
 """
-Простой скрипт для робота или студии. 
+Простой скрипт для робота или студии.
 while True:
       predict = mailbox.receive(True)
       print(predict)
       script.wait(1000)
 """
-
 
 try:
     print("Loading lobe model...")
@@ -109,9 +106,9 @@ def formatted_data_in_bytes(msg: str) -> bytes:
 
 def predict():
     if PHOTO_URL != "":
-        im = Image.open(requests.get(PHOTO_URL
-                                     , stream=True
-                                     , auth=(config["Settings"]["USERNAME"], config["Settings"]["PASSWORD"])).raw)
+        im = Image.open(requests.get(PHOTO_URL,
+                                     stream=True,
+                                     auth=(config["Settings"]["USERNAME"], config["Settings"]["PASSWORD"])).raw)
 
         return model.predict(im).prediction
     elif GET_IMAGES_FROM_ROBOT:

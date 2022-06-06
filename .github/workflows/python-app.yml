@@ -9,9 +9,12 @@ jobs:
   build:
 
     runs-on: windows-latest
-
+    env:
+      Script_Name: TRIKLobeServer
     steps:
       - uses: actions/checkout@v2
+      - name: Get short SHA
+        run: echo "GITHUB_SHA_SHORT=$(echo $GITHUB_SHA | cut -c 1-6)" >> $env:GITHUB_ENV
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
@@ -27,12 +30,12 @@ jobs:
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
-      - name: Build with pyinstaller
-        run: pyinstaller TRIKLobeServer.py --icon=trik-studio.ico --onefile
+      - name: Build single app for ${{ env.SCRIPT_NAME }}
+        run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
       - name: Archive artifact
         uses: actions/upload-artifact@v2
         with:
-          name: Executable and settings.ini
+          name: ${{env.SCRIPT_NAME }}-${{ env.GITHUB_SHA_SHORT }}.zip
           path: |
-            dist
+            dist/$${{ env.SCRIPT_NAME }}.exe
             settings.ini
