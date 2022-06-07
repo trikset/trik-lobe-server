@@ -64,7 +64,7 @@ CAMERA_NUMBER = int(config["Settings"]["CAMERA_NUMBER"])
 KEEPALIVE_TIMER = 5
 
 """
-Простой скрипт для робота или студии.
+Простой скрипт для робота или TRIK Studio.
 while True:
       predict = mailbox.receive(True)
       print(predict)
