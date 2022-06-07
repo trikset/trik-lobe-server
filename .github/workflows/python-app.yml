@@ -9,17 +9,21 @@ jobs:
   build:
 
     runs-on: windows-latest
+    env:
+      Script_Name: TRIKLobeServer
+      Python_Version: 3.9 # 3.10 is missing pre-built `tflite-runtime`
 
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python 3.9
+      - uses: benjlevesque/short-sha@v1.2
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v2
         with:
-          python-version: 3.9
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
         run: |
           python --version
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip wheel
           pip install flake8
           pip install -r requirements.txt
       - name: Lint with flake8
@@ -27,12 +31,12 @@ jobs:
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
-      - name: Build with pyinstaller
-        run: pyinstaller TRIKLobeServer.py --icon=trik-studio.ico --onefile
+      - name: Build single app for ${{ env.SCRIPT_NAME }}
+        run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
       - name: Archive artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
-          name: Executable and settings.ini
+          name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}-${{ env.SHA }}
           path: |
             dist
             settings.ini
