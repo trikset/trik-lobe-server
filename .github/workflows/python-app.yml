@@ -33,12 +33,10 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
       - name: Build single app for ${{ env.SCRIPT_NAME }}
         run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
-      - name: list
-        run: ls ; ls dist
       - name: Archive artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ${{env.SCRIPT_NAME }}-${{ env.SHA }}
+          name: ${{ env.SCRIPT_NAME }}-$${ runner.os }}-${{ env.SHA }}
           path: |
-            dist/$${{ env.SCRIPT_NAME }}.exe
+            dist/$${{ env.SCRIPT_NAME }}.*
             settings.ini
