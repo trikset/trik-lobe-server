@@ -11,7 +11,7 @@ numpy==1.22.4
 opencv-python==4.5.5.64
 pefile==2022.5.30
 pyinstaller==5.1
-pyinstaller-hooks-contrib==2022.6
+pyinstaller-hooks-contrib==2022.7
 pyparsing==3.0.9
 python-dateutil==2.8.2
 pywin32-ctypes==0.2.0
