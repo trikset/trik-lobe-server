@@ -7,7 +7,7 @@ idna==3.3
 kiwisolver==1.4.2
 lobe==0.6.2
 matplotlib==3.5.2
-numpy==1.22.4
+numpy==1.23.0
 opencv-python==4.5.5.64
 pefile==2022.5.30
 pyinstaller==5.1
