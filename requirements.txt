@@ -1,6 +1,6 @@
 lobe==0.6.2
 opencv-python==4.5.5.64
-pyinstaller==5.1
+pyinstaller==5.3
 
 --extra-index-url https://google-coral.github.io/py-repo/
 tflite-runtime==2.5.0.post1
