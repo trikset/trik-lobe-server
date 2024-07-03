@@ -7,19 +7,22 @@ on: [ workflow_dispatch, push, pull_request ]
 
 jobs:
   build:
-
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:        
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9']
+    runs-on: ${{ matrix.os }}
     env:
-      Script_Name: TRIKLobeServer
-      Python_Version: 3.9 # 3.10 is missing pre-built `tflite-runtime`
+      Script_Name: TRIKLobeServer      
 
     steps:
       - uses: actions/checkout@v2
       - uses: benjlevesque/short-sha@v1.2
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python --version
