@@ -14,10 +14,10 @@ jobs:
       Python_Version: 3.9 # 3.10 is missing pre-built `tflite-runtime`
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: benjlevesque/short-sha@v1.2
+      - uses: actions/checkout@v4
+      - uses: benjlevesque/short-sha@v3.0
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -34,7 +34,7 @@ jobs:
       - name: Build single app for ${{ env.SCRIPT_NAME }}
         run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
       - name: Archive artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}-${{ env.SHA }}
           path: |
