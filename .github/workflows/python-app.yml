@@ -37,7 +37,7 @@ jobs:
       - name: Build single app for ${{ env.SCRIPT_NAME }}
         run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
       - name: Archive artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}-${{ env.SHA }}
           path: |
