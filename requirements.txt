@@ -1,6 +1,6 @@
 numpy<2.0.0 # matplotlib is built with NumPy 1.x and conflicts with OpenCV 4.9+
 opencv-python==4.11.0.86
-pyinstaller==6.17.0
+pyinstaller==6.18.0
 lobe==0.6.2
 
 --extra-index-url https://google-coral.github.io/py-repo/
