@@ -1,5 +1,5 @@
 numpy<2.0.0 # matplotlib is built with NumPy 1.x and conflicts with OpenCV 4.9+
-opencv-python==4.11.0.86
+opencv-python==4.13.0.90
 pyinstaller==6.18.0
 lobe==0.6.2
 
