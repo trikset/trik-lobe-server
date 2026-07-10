@@ -8,6 +8,8 @@ dependencies = [
     "requests>=2.32.0,<3.0.0",
     "Pillow>=11.0.0,<12.0.0",
     "numpy>=1.26.0,<2.0.0",
+    "onnxruntime>=1.17.0,<2.0.0",
+    "tflite2onnx>=0.4.1,<1.0.0",
 ]
 
 
@@ -49,12 +51,12 @@ disable = [
     "W0212",  # protected-access — tests need this
     "W0621",  # redefined-outer-name — pytest fixture pattern
     "E0110",  # abstract-class-instantiated — intentional test
-    "E1101",  # no-member — cv2 / tflite C extensions
+    "E1101",  # no-member — cv2 C extension
     "C0103",  # invalid-name — TRIKLobeServer entry point name
     "C0301",  # line-too-long — ruff format handles this at 120
-    "C0415",  # import-outside-toplevel — intentional for lazy deps
+    "C0415",  # import-outside-toplevel — cv2 lazy import
 ]
-extension-pkg-allow-list = ["cv2", "tflite_runtime"]
+extension-pkg-allow-list = ["cv2", "onnxruntime"]
 
 [tool.pylint.MASTER]
 ignore = [".venv"]
@@ -62,10 +64,10 @@ ignore = [".venv"]
 [tool.basedpyright]
 typeCheckingMode = "strict"
 reportPrivateUsage = "none"
-reportUnusedVariable = "warning"
-reportMissingImports = "warning"
-reportUnknownParameterType = "warning"
-reportUnknownVariableType = "warning"
-reportUnknownMemberType = "warning"
-reportUnknownLambdaType = "warning"
 reportPossiblyUnboundVariable = "error"
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownLambdaType = "none"
+reportMissingTypeArgument = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"

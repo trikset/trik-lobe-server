@@ -1,8 +1,7 @@
 import json
 import tempfile
-import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import numpy as np
 import pytest
@@ -10,11 +9,13 @@ from PIL import Image
 
 from lobe_server.model import (
     ClassificationResult,
-    TFLiteImageModel,
+    ONNXImageModel,
     _crop_center,
+    _ensure_converted,
     _preprocess,
     _resize_uniform_to_fill,
     _update_orientation,
+    load_model,
 )
 
 
@@ -69,68 +70,59 @@ def test_update_orientation_no_exif() -> None:
     assert result is im or result.size == im.size
 
 
-def _make_mock_tflite() -> MagicMock:
-    mock_tflite = MagicMock()
-    mock_interp = MagicMock()
-    mock_interp.get_input_details.return_value = [{"index": 0, "name": "input", "shape": [1, 3, 3, 1]}]
-    mock_interp.get_output_details.return_value = [{"index": 1, "name": "output", "shape": [1, 2]}]
-    mock_tflite.Interpreter.return_value = mock_interp
-    return mock_tflite, mock_interp
+def _make_onnx_session(labels_n: int) -> MagicMock:
+    session = MagicMock()
+    output = np.array([[1.0 / labels_n] * labels_n], dtype=np.float32)
+    output[0][0] = 0.8
+    output[0][1] = 0.15
+    session.run.return_value = [output]
+    return session
 
 
-def _write_fake_model_dir(tmp: str, labels: list | None = None) -> None:
+def _write_fake_model_dir(
+    tmp: str,
+    fmt: str = "tf_lite",
+    labels: list[str] | None = None,
+) -> None:
     sig = {
-        "format": "tf_lite",
-        "filename": "model.tflite",
-        "inputs": {"Image": {"name": "input", "shape": [1, 128, 128, 3]}},
-        "outputs": {"Confidences": {"name": "output", "shape": [1, 3]}},
+        "format": fmt,
+        "filename": "saved_model.tflite" if fmt == "tf_lite" else "model.onnx",
+        "inputs": {"Image": {"dtype": "float32", "shape": [None, 224, 224, 3], "name": "Image"}},
+        "outputs": {"Confidences": {"dtype": "float32", "shape": [None, 3], "name": "uuid/dense_2/Softmax"}},
         "classes": {"Label": labels or ["cat", "dog", "bird"]},
         "export_model_version": 1,
     }
     (Path(tmp) / "signature.json").write_text(json.dumps(sig), encoding="utf-8")
-    (Path(tmp) / "model.tflite").write_bytes(b"fake model")
+    (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite model")
 
 
-def test_model_load() -> None:
-    mock_tflite, mock_interp = _make_mock_tflite()
-    tflite_mod = types.ModuleType("tflite_runtime")
-    interp_mod = types.ModuleType("tflite_runtime.interpreter")
-    interp_mod.Interpreter = mock_tflite.Interpreter
-
-    with (
-        patch.dict(
-            "sys.modules",
-            {"tflite_runtime": tflite_mod, "tflite_runtime.interpreter": interp_mod},
-        ),
-        tempfile.TemporaryDirectory() as tmp,
-    ):
-        _write_fake_model_dir(tmp)
-        model = TFLiteImageModel.load(tmp)
+def test_onnx_model_load() -> None:
+    session = _make_onnx_session(3)
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        _write_fake_model_dir(tmp, fmt="onnx")
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        model = ONNXImageModel.load(tmp)
 
     assert model._labels == ["cat", "dog", "bird"]
-    assert model._input_size == (128, 128)
-    mock_tflite.Interpreter.assert_called_once()
-    mock_interp.allocate_tensors.assert_called_once()
+    assert model._input_size == (224, 224)
+    assert model._input_name == "Image"
 
 
-def test_model_predict() -> None:
-    _, mock_interp = _make_mock_tflite()
-    mock_interp.get_tensor.return_value = np.array([[0.1, 0.9]], dtype=np.float32)
-
-    model = TFLiteImageModel(mock_interp, ["dog", "cat"], (3, 3))
+def test_onnx_model_predict() -> None:
+    session = _make_onnx_session(2)
+    model = ONNXImageModel(session, ["dog", "cat"], "Image", (224, 224))
     im = Image.new("RGB", (10, 10))
     result = model.predict(im)
 
-    assert result.prediction == "cat"
-    mock_interp.set_tensor.assert_called_once()
-    mock_interp.invoke.assert_called_once()
+    assert result.prediction == "dog"
+    session.run.assert_called_once_with(None, {"Image": ANY})
 
 
-def test_model_predict_ordering() -> None:
-    _, mock_interp = _make_mock_tflite()
-    mock_interp.get_tensor.return_value = np.array([[0.3, 0.6, 0.1]], dtype=np.float32)
+def test_onnx_model_predict_ordering() -> None:
+    session = MagicMock()
+    session.run.return_value = [np.array([[0.3, 0.6, 0.1]], dtype=np.float32)]
 
-    model = TFLiteImageModel(mock_interp, ["a", "b", "c"], (3, 3))
+    model = ONNXImageModel(session, ["a", "b", "c"], "Image", (224, 224))
     im = Image.new("RGB", (10, 10))
     result = model.predict(im)
 
@@ -141,3 +133,74 @@ def test_model_predict_ordering() -> None:
     assert result.labels[1][1] == pytest.approx(0.3)
     assert result.labels[2][0] == "c"
     assert result.labels[2][1] == pytest.approx(0.1)
+
+
+def test_load_model_onnx_direct() -> None:
+    session = _make_onnx_session(3)
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        _write_fake_model_dir(tmp, fmt="onnx")
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        model = load_model(tmp)
+    assert isinstance(model, ONNXImageModel)
+
+
+def test_load_model_tflite_converts() -> None:
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("tflite2onnx.convert") as mock_convert,
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        _write_fake_model_dir(tmp, fmt="tf_lite")
+        model = load_model(tmp)
+
+        sig = json.loads((Path(tmp) / "signature.json").read_text(encoding="utf-8"))
+        assert sig["format"] == "onnx"
+        assert sig["filename"] == "model.onnx"
+
+    assert isinstance(model, ONNXImageModel)
+    mock_convert.assert_called_once()
+
+
+def test_load_model_tflite_cached_onx_exists() -> None:
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("tflite2onnx.convert") as mock_convert,
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        _write_fake_model_dir(tmp, fmt="tf_lite")
+        (Path(tmp) / "model.onnx").write_bytes(b"already converted")
+        model = load_model(tmp)
+
+    assert isinstance(model, ONNXImageModel)
+    mock_convert.assert_not_called()
+
+
+def test_ensure_converted_no_tflite_file() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        sig = {"filename": "nonexistent.tflite"}
+        with pytest.raises(FileNotFoundError):
+            _ensure_converted(Path(tmp), sig)
+
+
+def test_ensure_converted_missing_tflite2onnx() -> None:
+    sig = {"filename": "model.tflite"}
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.tflite").write_bytes(b"fake")
+        with patch.dict("sys.modules", {"tflite2onnx": None}), pytest.raises(ImportError):
+            _ensure_converted(Path(tmp), sig)
+
+
+def test_load_model_tflite_no_convert_no_onnx() -> None:
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("tflite2onnx.convert") as mock_convert,
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        _write_fake_model_dir(tmp, fmt="tf_lite")
+        model = load_model(tmp)
+
+    assert isinstance(model, ONNXImageModel)
+    mock_convert.assert_called_once()

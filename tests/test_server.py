@@ -35,7 +35,7 @@ def mock_camera() -> MagicMock:
 
 def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
     with (
-        patch("lobe_server.server._load_model", return_value=mock_model),
+        patch("lobe_server.server._load_onnx_model", return_value=mock_model),
         patch("lobe_server.server.create_camera", return_value=mock_camera),
     ):
         return LobeServer(settings, MagicMock())
@@ -222,12 +222,10 @@ async def test_handle_connection(settings: Settings, mock_model: MagicMock, mock
 def test_load_model() -> None:
     mock_img_model = MagicMock()
 
-    with (
-        patch("lobe_server.server.TFLiteImageModel.load", return_value=mock_img_model),
-    ):
-        from lobe_server.server import _load_model
+    with patch("lobe_server.server.load_onnx_model", return_value=mock_img_model):
+        from lobe_server.server import _load_onnx_model
 
-        result = _load_model(MagicMock())
+        result = _load_onnx_model(MagicMock())
     assert result is mock_img_model
 
 

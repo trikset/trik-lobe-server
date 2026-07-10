@@ -8,14 +8,14 @@ from pathlib import Path
 
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
-from lobe_server.model import TFLiteImageModel
+from lobe_server.model import load_model as load_onnx_model
 from lobe_server.protocol import format_message, is_quit_command, make_command
 
 logger = logging.getLogger(__name__)
 
 
-def _load_model(model_path: Path):
-    return TFLiteImageModel.load(str(model_path))
+def _load_onnx_model(model_path: Path):
+    return load_onnx_model(str(model_path))
 
 
 class LobeServer:
@@ -27,7 +27,7 @@ class LobeServer:
 
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
-        self._model = _load_model(model_path)
+        self._model = _load_onnx_model(model_path)
         self._camera: CameraSource = create_camera(settings, settings.server_ip)
         self._lock = asyncio.Lock()
         self._running = False
