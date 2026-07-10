@@ -2,7 +2,6 @@ import configparser
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -18,7 +17,7 @@ class Settings:
     password: str = ""
 
 
-def load_settings(path: Optional[Path] = None) -> Settings:
+def load_settings(path: Path | None = None) -> Settings:
     if path is None:
         path = Path("settings.ini")
 

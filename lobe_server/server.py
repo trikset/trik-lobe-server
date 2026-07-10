@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 def _load_model(model_path: Path):
     from lobe import ImageModel
+
     return ImageModel.load(str(model_path))
 
 
@@ -27,9 +28,7 @@ class LobeServer:
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
         self._model = _load_model(model_path)
-        self._camera: CameraSource = create_camera(
-            settings, settings.server_ip
-        )
+        self._camera: CameraSource = create_camera(settings, settings.server_ip)
         self._lock = asyncio.Lock()
         self._running = False
 
@@ -87,9 +86,7 @@ class LobeServer:
             asyncio.create_task(self._prediction_loop(sock)),
             asyncio.create_task(self._reader(sock)),
         ]
-        done, pending = await asyncio.wait(
-            tasks, return_when=asyncio.FIRST_COMPLETED
-        )
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
 

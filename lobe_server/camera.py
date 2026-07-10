@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Optional, Tuple
 
 import requests
 from PIL import Image
@@ -12,22 +11,20 @@ from lobe_server.config import Settings
 
 class CameraSource(ABC):
     @abstractmethod
-    def capture(self) -> Optional[Image.Image]:
-        ...
+    def capture(self) -> Image.Image | None: ...
 
     @abstractmethod
-    def release(self) -> None:
-        ...
+    def release(self) -> None: ...
 
 
 class UrlCamera(CameraSource):
     def __init__(self, url: str, username: str = "", password: str = ""):
         self._url = url
-        self._auth: Optional[Tuple[str, str]] = None
+        self._auth: tuple[str, str] | None = None
         if username and password:
             self._auth = (username, password)
 
-    def capture(self) -> Optional[Image.Image]:
+    def capture(self) -> Image.Image | None:
         resp = requests.get(self._url, stream=True, auth=self._auth)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
@@ -40,7 +37,7 @@ class RobotCamera(CameraSource):
     def __init__(self, server_ip: str):
         self._url = f"http://{server_ip}:8080/?action=snapshot"
 
-    def capture(self) -> Optional[Image.Image]:
+    def capture(self) -> Image.Image | None:
         resp = requests.get(self._url, stream=True)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
@@ -56,7 +53,7 @@ class WebcamCamera(CameraSource):
         self._cv2 = _cv2
         self._camera = _cv2.VideoCapture(camera_number)
 
-    def capture(self) -> Optional[Image.Image]:
+    def capture(self) -> Image.Image | None:
         ret, frame = self._camera.read()
         if not ret:
             return None
