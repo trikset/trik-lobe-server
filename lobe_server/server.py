@@ -8,15 +8,14 @@ from pathlib import Path
 
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
+from lobe_server.model import TFLiteImageModel
 from lobe_server.protocol import format_message, is_quit_command, make_command
 
 logger = logging.getLogger(__name__)
 
 
 def _load_model(model_path: Path):
-    from lobe import ImageModel
-
-    return ImageModel.load(str(model_path))
+    return TFLiteImageModel.load(str(model_path))
 
 
 class LobeServer:

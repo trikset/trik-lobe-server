@@ -221,17 +221,14 @@ async def test_handle_connection(settings: Settings, mock_model: MagicMock, mock
 
 def test_load_model() -> None:
     mock_img_model = MagicMock()
-    mock_img_model.load.return_value = mock_img_model
 
-    fake_lobe = MagicMock()
-    fake_lobe.ImageModel = mock_img_model
-
-    with patch.dict("sys.modules", {"lobe": fake_lobe}):
+    with (
+        patch("lobe_server.server.TFLiteImageModel.load", return_value=mock_img_model),
+    ):
         from lobe_server.server import _load_model
 
         result = _load_model(MagicMock())
     assert result is mock_img_model
-    mock_img_model.load.assert_called_once()
 
 
 @pytest.mark.asyncio
