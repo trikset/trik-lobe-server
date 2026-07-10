@@ -58,8 +58,8 @@ ______________________________________________________________________
 ### Testing
 
 - **pytest** + **pytest-cov** with `--cov-fail-under=90`
-- 50 tests covering: config loading, camera sources, protocol, server
-  lifecycle, TFLite model loading and inference
+- 56 tests covering: config loading, camera sources, protocol, server
+  lifecycle, ONNX model loading, TFLite auto-conversion, inference
 - Mock-based: no real camera, no real network, no real TFLite runtime needed
 - Coverage report shows exactly what isn't tested and why
 
@@ -91,23 +91,47 @@ prediction = result.prediction        # top class label string
 
 That's it. No visualization, no Grad-CAM, no ONNX fallback, no batching.
 
-**Replacement:** `lobe_server/model.py` — an 80-line TFLite compatibility shim:
+**Replacement:** `lobe_server/model.py` — `ONNXImageModel` class:
 
 1. Reads `signature.json` (the standard Lobe export metadata file)
-1. Loads the `.tflite` model via `tflite-runtime`
+1. If the model is TFLite format, auto-converts to ONNX on first load via
+   `tflite2onnx` (caches `model.onnx` + updates `signature.json`)
+1. Loads the `.onnx` model via `onnxruntime` for inference
 1. Preprocesses images using the same algorithm Lobe used
 1. Returns a `ClassificationResult` with the same `.prediction` API
 
-The call site in `server.py` (`_load_model` → `TFLiteImageModel.load`)
-needed zero changes — the new class exposes the same `predict()` → `.prediction`
-interface.
+The call site in `server.py` needed zero changes — the new class exposes the
+same `predict()` → `.prediction` interface.
 
 **What this unblocks:**
 
 - No more `matplotlib` dependency (was only needed for Lobe visualization)
 - `Pillow` can be any modern version
-- Server works on Python 3.10-3.14
+- Server works on Python 3.10-3.12
 - CI no longer needs to install `lobe` (which pulled in broken deps)
+- No C extension for TFLite runtime needed — `onnxruntime` has pre-built
+  wheels for all platforms (including Windows ARM64)
+- PyInstaller bundles cleanly: all dependencies are pure-Python or have
+  standard wheels
+
+### Added: `onnxruntime`
+
+The sole inference backend. Chosen because:
+
+- Pre-built wheels on PyPI for Windows / Linux / macOS (x64 + ARM64)
+- Python 3.10-3.14 support with no compilation needed
+- Actively maintained by Microsoft
+- Bundles cleanly with PyInstaller (auto-detected)
+
+### Added: `tflite2onnx`
+
+Pure-Python library (42 KB) to convert TFLite models to ONNX format.
+Used only for the one-time conversion of legacy Lobe TFLite models.
+
+- Zero C extensions — no compilation risk
+- PyInstaller bundles it trivially
+- Fallback: if missing, user gets a clear error message with manual
+  conversion instructions
 
 ### Removed: `matplotlib`
 
@@ -118,44 +142,41 @@ never called this method.
 
 Core runtime dependencies. Versions widened for cross-platform compatibility.
 
-### Not bundled: `tflite-runtime`
+### Removed: `tflite-runtime`
 
-**Why it's not in `pyproject.toml`:**
-`tflite-runtime` is a C extension with no pre-built wheel for Python 3.14 (and
-limited platform coverage in general). It's available from Google Coral's custom
-PyPI index, not from PyPI proper.
+No longer needed. Previous versions of this project used `tflite-runtime`
+directly, but it was:
 
-**How it's handled instead:**
-
-- Imported lazily inside `TFLiteImageModel.load()` with a clear error message
-
-- Install on your target device via:
-
-  ```bash
-  pip install --index-url https://google-coral.github.io/py-repo/ tflite-runtime
-  ```
-
-  Or if you have TensorFlow installed, it ships `tensorflow.lite` which
-  `model.py` can use instead (see the original `lobe` SDK for reference).
+- Unavailable on PyPI (required Google Coral's custom index)
+- No pre-built wheel for Python 3.13+
+- C extension that can't bundle with PyInstaller without special handling
+- Replaced entirely by `tflite2onnx` + `onnxruntime`
 
 ______________________________________________________________________
 
-## 4. Lobe → TFLite Shim: How It Works
+## 4. Lobe → ONNX: How It Works
 
 ```
 Lobe-exported model directory:
   model_path/
     signature.json          ← metadata: labels, input size, model filename
-    saved_model.tflite      ← standard TFLite model file
+    saved_model.tflite      ← original TFLite model (kept)
+    model.onnx              ← converted ONNX (written on first load)
+    signature.json.tflite-backup  ← backup of original signature.json
 ```
 
 `lobe_server/model.py` flow:
 
-1. **`TFLiteImageModel.load(path)`**
+1. **`ONNXImageModel.load(path)`**
 
-   - Reads `signature.json` → class labels, image size, model filename
-   - Loads `.tflite` via `tflite_runtime.interpreter.Interpreter`
-   - Returns a `TFLiteImageModel` instance
+   - Reads `signature.json` → format, class labels, image size, model filename
+   - If format is `"tf_lite"` or `"tf"`:
+     - Checks if `model.onnx` exists (cached from previous conversion)
+     - If not cached: calls `tflite2onnx.convert(tflite_path, onnx_path)`
+     - Updates `signature.json`: `format = "onnx"`, `filename = "model.onnx"`
+     - Backs up original `signature.json` → `signature.json.tflite-backup`
+   - Loads `.onnx` via `onnxruntime.InferenceSession`
+   - Returns an `ONNXImageModel` instance
 
 1. **`model.predict(pil_image)`**
 
@@ -163,7 +184,7 @@ Lobe-exported model directory:
      `resize_uniform_to_fill` (scale shortest side to target) →
      `crop_center` → normalize `[0, 255]` uint8 → `[0, 1]` float32 →
      add batch dimension → shape `[1, H, W, 3]`
-   - **Inference:** `interpreter.set_tensor()` → `invoke()` → `get_tensor()`
+   - **Inference:** `session.run(None, {input_name: processed})`
    - **Postprocess:** zip softmax outputs with labels → sort by confidence →
      `ClassificationResult`
 
@@ -196,9 +217,9 @@ ______________________________________________________________________
 | Lines missed | Module | Why not tested? |
 | --------------------- | --------------- | ------------------------------------------------ |
 | `camera.py:51-54` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
-| `server.py:108-115` | `run_forever` success | Requires a real TCP server to connect to |
-| `model.py:58-64` | `TFLiteImageModel.load` import | `tflite-runtime` not installed locally |
-| `model.py:114-124` | EXIF orientation | Covered in `test_update_orientation_no_exif` but the EXIF branch requires an image with EXIF metadata |
+| `server.py:108-114` | `run_forever` success | Requires a real TCP server to connect to |
+| `model.py:78` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
+| `model.py:148-158` | `_ensure_converted` exception branches | `json.dump` / `shutil.copy2` edge cases |
 
 All gaps require real hardware (camera, network) or platform-specific packages.
 
@@ -211,9 +232,6 @@ history is clean and each commit is a logical unit:
 
 ```
 2594bab ci: migrate to uv, add ruff/pylint/basedpyright/pytest-cov
-1405a05 fix: address lint/type issues, add timeouts, fix test assertions
-d2ccdde test: 39 tests at 96.6% coverage, expand test suite
-892bc20 chore: untrack local dev db
-a0648f1 style: apply ruff format + mdformat
-f7d6d7e migrate to uv with pyproject.toml and dev toolchain
+442f70b feat: replace abandoned lobe SDK with onnxruntime + tflite2onnx
+01c770b chore: track uv.lock for deterministic CI installs
 ```
