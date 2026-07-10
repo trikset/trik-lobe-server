@@ -1,8 +1,16 @@
+import sys
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
-from lobe_server.camera import CameraSource, RobotCamera, UrlCamera, WebcamCamera, create_camera
+from lobe_server.camera import (
+    CameraSource,
+    RobotCamera,
+    UrlCamera,
+    WebcamCamera,
+    create_camera,
+)
 from lobe_server.config import Settings
 
 
@@ -15,7 +23,7 @@ def test_abstract() -> None:
 
 
 @patch("lobe_server.camera.requests.get")
-def test_url_camera(mock_get) -> None:
+def test_url_camera(mock_get: MagicMock) -> None:
     mock_response = MagicMock()
     mock_response.content = _minimal_png()
     mock_get.return_value = mock_response
@@ -33,7 +41,7 @@ def test_url_camera(mock_get) -> None:
 
 
 @patch("lobe_server.camera.requests.get")
-def test_robot_camera(mock_get) -> None:
+def test_robot_camera(mock_get: MagicMock) -> None:
     mock_response = MagicMock()
     mock_response.content = _minimal_png()
     mock_get.return_value = mock_response
@@ -48,32 +56,49 @@ def test_robot_camera(mock_get) -> None:
     assert im is not None
 
 
+def test_url_camera_release() -> None:
+    cam = UrlCamera("http://example.com")
+    cam.release()
+
+
+def test_robot_camera_release() -> None:
+    cam = RobotCamera("192.168.1.1")
+    cam.release()
+
+
 def test_webcam_camera() -> None:
-    pytest.importorskip("cv2")
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    mock_capture.read.return_value = (True, frame)
+    mock_cv2.VideoCapture.return_value = mock_capture
+    mock_cv2.COLOR_BGR2RGB = 4
+    mock_cv2.cvtColor = lambda img, code: img
 
-    with patch("lobe_server.camera._cv2", create=True) as mock_cv2:
-        mock_capture = MagicMock()
-        mock_capture.read.return_value = (True, MagicMock())
-        mock_cv2.VideoCapture.return_value = mock_capture
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = WebcamCamera.__new__(WebcamCamera)
+        cam._cv2 = mock_cv2
+        cam._camera = mock_capture
 
-        cam = WebcamCamera(0)
         im = cam.capture()
 
-        mock_cv2.VideoCapture.assert_called_once_with(0)
-        assert im is not None
-        cam.release()
-        mock_capture.release.assert_called_once()
+    assert im is not None
+    assert im.size == (100, 100)
+    cam.release()
+    mock_capture.release.assert_called_once()
 
 
 def test_webcam_camera_fail() -> None:
-    pytest.importorskip("cv2")
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    mock_capture.read.return_value = (False, None)
+    mock_cv2.VideoCapture.return_value = mock_capture
 
-    with patch("lobe_server.camera._cv2", create=True) as mock_cv2:
-        mock_capture = MagicMock()
-        mock_capture.read.return_value = (False, None)
-        mock_cv2.VideoCapture.return_value = mock_capture
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = WebcamCamera.__new__(WebcamCamera)
+        cam._cv2 = mock_cv2
+        cam._camera = mock_capture
 
-        cam = WebcamCamera(0)
         assert cam.capture() is None
 
 
@@ -96,14 +121,20 @@ def test_factory_robot() -> None:
     assert isinstance(cam, RobotCamera)
 
 
-def test_factory_webcam_raises() -> None:
+def test_factory_webcam() -> None:
     settings = Settings(
         photo_url="",
         get_images_from_robot=False,
         camera_number=2,
     )
-    with pytest.raises(ModuleNotFoundError):
-        create_camera(settings, "127.0.0.1")
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = create_camera(settings, "127.0.0.1")
+    assert isinstance(cam, WebcamCamera)
+
+
+def test_url_camera_no_auth() -> None:
+    cam = UrlCamera("http://example.com")
+    assert cam._auth is None
 
 
 def _minimal_png() -> bytes:

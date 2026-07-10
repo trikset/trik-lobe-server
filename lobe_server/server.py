@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import socket
 from pathlib import Path
@@ -36,10 +37,8 @@ class LobeServer:
         data = format_message(msg)
         logger.debug("Send: %s", data)
         async with self._lock:
-            try:
+            with contextlib.suppress(OSError):
                 sock.send(data)
-            except OSError:
-                pass
 
     async def _send_message(self, sock: socket.socket, message: str) -> None:
         await self._send(sock, f"data:{message}")

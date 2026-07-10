@@ -1,10 +1,12 @@
+import sys
 import tempfile
 from pathlib import Path
 from textwrap import dedent
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lobe_server.config import load_settings
+from lobe_server.config import load_settings, resolve_model_path
 
 
 @pytest.fixture
@@ -68,3 +70,35 @@ def test_load_settings_minimal(minimal_ini: str) -> None:
 def test_load_settings_not_found() -> None:
     with pytest.raises(FileNotFoundError):
         load_settings(Path("nonexistent.ini"))
+
+
+def test_load_settings_default_path() -> None:
+    with patch("lobe_server.config.Path.exists", return_value=False):
+        with pytest.raises(FileNotFoundError, match="settings.ini"):
+            load_settings()
+
+
+def test_resolve_model_path_custom() -> None:
+    settings = MagicMock()
+    settings.model_path = "/custom/path"
+    result = resolve_model_path(settings)
+    assert result == Path("/custom/path").resolve()
+
+
+def test_resolve_model_path_default() -> None:
+    settings = MagicMock()
+    settings.model_path = ""
+    result = resolve_model_path(settings)
+    expected = Path(__file__).resolve().parent.parent
+    assert result == expected
+
+
+def test_resolve_model_path_frozen() -> None:
+    settings = MagicMock()
+    settings.model_path = ""
+    with (
+        patch.object(sys, "frozen", True, create=True),
+        patch.object(sys, "executable", "/usr/local/bin/server.exe"),
+    ):
+        result = resolve_model_path(settings)
+    assert result == Path("/usr/local/bin").resolve()
