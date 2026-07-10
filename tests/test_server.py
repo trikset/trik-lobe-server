@@ -1,5 +1,4 @@
 import asyncio
-import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -34,9 +33,7 @@ def mock_camera() -> MagicMock:
     return cam
 
 
-def _make_server(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> LobeServer:
+def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
     with (
         patch("lobe_server.server._load_model", return_value=mock_model),
         patch("lobe_server.server.create_camera", return_value=mock_camera),
@@ -45,9 +42,7 @@ def _make_server(
 
 
 @pytest.mark.asyncio
-async def test_send_format(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_send_format(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = AsyncMock()
     sock.send = MagicMock()
 
@@ -57,9 +52,7 @@ async def test_send_format(
 
 
 @pytest.mark.asyncio
-async def test_send_message(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_send_message(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = AsyncMock()
     sock.send = MagicMock()
 
@@ -69,9 +62,7 @@ async def test_send_message(
 
 
 @pytest.mark.asyncio
-async def test_send_oserror(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_send_oserror(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = AsyncMock()
     sock.send.side_effect = OSError("broken")
 
@@ -79,9 +70,7 @@ async def test_send_oserror(
     await server._send(sock, "hello")
 
 
-def test_predict(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+def test_predict(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     server = _make_server(settings, mock_model, mock_camera)
     result = server._predict()
     assert result == "cat"
@@ -89,9 +78,7 @@ def test_predict(
     mock_model.predict.assert_called_once()
 
 
-def test_predict_none(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+def test_predict_none(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     mock_camera.capture.return_value = None
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -100,9 +87,7 @@ def test_predict_none(
     mock_model.predict.assert_not_called()
 
 
-def test_shutdown(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+def test_shutdown(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     server = _make_server(settings, mock_model, mock_camera)
     assert server._running is False
     server._running = True
@@ -110,18 +95,14 @@ def test_shutdown(
     assert server._running is False
 
 
-def test_close(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+def test_close(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     server = _make_server(settings, mock_model, mock_camera)
     server.close()
     mock_camera.release.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_reader_quit(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_reader_quit(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     loop = asyncio.get_event_loop()
     loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
@@ -133,9 +114,7 @@ async def test_reader_quit(
 
 
 @pytest.mark.asyncio
-async def test_reader_connection_reset(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_reader_connection_reset(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     loop = asyncio.get_event_loop()
     loop.sock_recv = AsyncMock(side_effect=ConnectionResetError)
@@ -157,9 +136,7 @@ async def test_reader_connection_reset(
 
 
 @pytest.mark.asyncio
-async def test_reader_ignore_garbage(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     loop = asyncio.get_event_loop()
     loop.sock_recv = AsyncMock(return_value=b"some garbage")
@@ -181,9 +158,7 @@ async def test_reader_ignore_garbage(
 
 
 @pytest.mark.asyncio
-async def test_keepalive_loop(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_keepalive_loop(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     sock.send = MagicMock()
 
@@ -205,9 +180,7 @@ async def test_keepalive_loop(
 
 
 @pytest.mark.asyncio
-async def test_prediction_loop(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_prediction_loop(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     sock.send = MagicMock()
 
@@ -229,9 +202,7 @@ async def test_prediction_loop(
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_handle_connection(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     sock.getsockname.return_value = ("127.0.0.1", 54321)
     sock.send = MagicMock()
@@ -264,9 +235,7 @@ def test_load_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_once(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_connect_once(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     mock_sock = MagicMock()
 
     with patch("lobe_server.server.socket.socket", return_value=mock_sock):
@@ -279,9 +248,7 @@ async def test_connect_once(
 
 
 @pytest.mark.asyncio
-async def test_run_forever_connect_failure(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_run_forever_connect_failure(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     with patch(
         "lobe_server.server.LobeServer._connect_once",
         side_effect=ConnectionRefusedError,

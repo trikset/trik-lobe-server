@@ -2,7 +2,7 @@ def format_message(msg: str) -> bytes:
     return bytes(f"{len(msg)}:{msg}", encoding="UTF-8")
 
 
-def make_command(cmd: str, *args) -> str:
+def make_command(cmd: str, *args: str | int) -> str:
     return f"{cmd}:" + ":".join(str(a) for a in args)
 
 

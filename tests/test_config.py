@@ -73,9 +73,11 @@ def test_load_settings_not_found() -> None:
 
 
 def test_load_settings_default_path() -> None:
-    with patch("lobe_server.config.Path.exists", return_value=False):
-        with pytest.raises(FileNotFoundError, match="settings.ini"):
-            load_settings()
+    with (
+        patch("lobe_server.config.Path.exists", return_value=False),
+        pytest.raises(FileNotFoundError, match="settings.ini"),
+    ):
+        load_settings()
 
 
 def test_resolve_model_path_custom() -> None:

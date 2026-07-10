@@ -25,7 +25,7 @@ class UrlCamera(CameraSource):
             self._auth = (username, password)
 
     def capture(self) -> Image.Image | None:
-        resp = requests.get(self._url, stream=True, auth=self._auth)
+        resp = requests.get(self._url, stream=True, auth=self._auth, timeout=10)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
 
@@ -38,7 +38,7 @@ class RobotCamera(CameraSource):
         self._url = f"http://{server_ip}:8080/?action=snapshot"
 
     def capture(self) -> Image.Image | None:
-        resp = requests.get(self._url, stream=True)
+        resp = requests.get(self._url, stream=True, timeout=10)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
 

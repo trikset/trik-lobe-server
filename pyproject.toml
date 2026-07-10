@@ -42,7 +42,30 @@ select = ["E", "F", "I", "N", "UP", "B", "W", "SIM"]
 ignore = ["N802", "N803", "N806", "N815", "N816"]
 
 [tool.pylint.'MESSAGES CONTROL']
-disable = ["C0114", "C0115", "C0116", "R0903"]
+disable = [
+    "C0114", "C0115", "C0116", "R0903",
+    "C0415",  # import-outside-toplevel — intentional for lazy deps
+    "W0718",  # broad-exception-caught — intentional for reconnect loop
+    "R0902",  # too-many-instance-attributes — Settings has 9 fields
+    "W0212",  # protected-access — tests need this
+    "W0621",  # redefined-outer-name — pytest fixture pattern
+    "E0110",  # abstract-class-instantiated — intentional test
+    "E0401",  # import-error — optional dep lobe
+    "E1101",  # no-member — cv2 runtime C extension
+    "C0103",  # invalid-name — TRIKLobeServer entry point name
+]
+extension-pkg-allow-list = ["cv2"]
+
+[tool.pylint.MASTER]
+ignore = [".venv"]
 
 [tool.basedpyright]
 typeCheckingMode = "strict"
+reportPrivateUsage = "none"
+reportUnusedVariable = "warning"
+reportMissingImports = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownMemberType = "warning"
+reportUnknownLambdaType = "warning"
+reportPossiblyUnboundVariable = "error"

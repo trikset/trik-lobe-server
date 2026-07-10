@@ -1,4 +1,3 @@
-import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -19,7 +18,7 @@ def test_abstract() -> None:
         pass
 
     with pytest.raises(TypeError):
-        Impl()
+        Impl()  # type: ignore[reportAbstractUsage]
 
 
 @patch("lobe_server.camera.requests.get")
@@ -35,6 +34,7 @@ def test_url_camera(mock_get: MagicMock) -> None:
         "http://example.com/snapshot",
         stream=True,
         auth=("user", "pass"),
+        timeout=10,
     )
     assert im is not None
     assert im.mode
@@ -52,6 +52,7 @@ def test_robot_camera(mock_get: MagicMock) -> None:
     mock_get.assert_called_once_with(
         "http://192.168.1.10:8080/?action=snapshot",
         stream=True,
+        timeout=10,
     )
     assert im is not None
 
@@ -77,8 +78,8 @@ def test_webcam_camera() -> None:
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)
-        cam._cv2 = mock_cv2
-        cam._camera = mock_capture
+        cam._cv2 = mock_cv2  # type: ignore[reportAttributeAccessIssue]
+        cam._camera = mock_capture  # type: ignore[reportAttributeAccessIssue]
 
         im = cam.capture()
 
@@ -96,8 +97,8 @@ def test_webcam_camera_fail() -> None:
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)
-        cam._cv2 = mock_cv2
-        cam._camera = mock_capture
+        cam._cv2 = mock_cv2  # type: ignore[reportAttributeAccessIssue]
+        cam._camera = mock_capture  # type: ignore[reportAttributeAccessIssue]
 
         assert cam.capture() is None
 
@@ -140,6 +141,8 @@ def test_url_camera_no_auth() -> None:
 def _minimal_png() -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n"
-        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
-        b"\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
+        b"\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
     )

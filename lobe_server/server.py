@@ -75,7 +75,7 @@ class LobeServer:
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
-        ip, port = sock.getsockname()
+        _ip, port = sock.getsockname()
         hull = self._settings.my_hull_number
         await self._send(sock, make_command("register", port, hull))
         await self._send(sock, make_command("self", hull))
@@ -85,7 +85,7 @@ class LobeServer:
             asyncio.create_task(self._prediction_loop(sock)),
             asyncio.create_task(self._reader(sock)),
         ]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
 
@@ -98,6 +98,7 @@ class LobeServer:
     async def run_forever(self) -> None:
         self._running = True
         while self._running:
+            sock: socket.socket | None = None
             try:
                 logger.info(
                     "Connecting to %s:%s",
@@ -110,7 +111,7 @@ class LobeServer:
             except Exception:
                 logger.exception("Connection error")
             finally:
-                if "sock" in locals():
+                if sock is not None:
                     sock.close()
                 self._running = False
 
