@@ -63,7 +63,7 @@ async def test_send_message(settings: Settings, mock_model: MagicMock, mock_came
 
 @pytest.mark.asyncio
 async def test_send_oserror(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = AsyncMock()
+    sock = MagicMock()
     sock.send.side_effect = OSError("broken")
 
     server = _make_server(settings, mock_model, mock_camera)
