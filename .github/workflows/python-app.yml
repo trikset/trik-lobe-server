@@ -23,6 +23,8 @@ jobs:
         run: uv sync --frozen
       - name: Lint with ruff
         run: uv run ruff check .
+      - name: Check markdown formatting
+        run: uv run mdformat . --check
       - name: Type check with basedpyright
         run: uv run basedpyright .
       - name: Lint with pylint
