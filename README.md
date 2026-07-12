@@ -1,7 +1,7 @@
 # TRIK Lobe Server
 
 [![CI](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml/badge.svg)](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml)
-![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
 
 Сервер для выполнения инференса ML-моделей (Microsoft Lobe / ONNX / TFLite) на
 ПК и отправки результатов на робота TRIK или в TRIK Studio по TCP.
@@ -10,8 +10,8 @@
 
 1. Скачайте `.zip` с последней версией сервера
    [здесь](https://github.com/khodand/trik-lobe-server/releases/latest).
-2. Распакуйте архив.
-3. Отредактируйте `settings.ini` (см. ниже).
+1. Распакуйте архив.
+1. Отредактируйте `settings.ini` (см. ниже).
 
 ## Настройка (`settings.ini`)
 
