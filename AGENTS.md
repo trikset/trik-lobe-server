@@ -46,7 +46,3 @@ expected.
 - `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
 - `macos-latest` is ARM64 (Apple Silicon).
 - Build produces per-OS artifacts via PyInstaller `--onefile`.
-
-## GPG signing
-Disabled for `auto-mode-1` branch (`branch.auto-mode-1.commit.gpgsign = false`).
-Other branches may sign by default — use `--no-gpg-sign` if needed.
