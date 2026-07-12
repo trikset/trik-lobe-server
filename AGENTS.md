@@ -8,15 +8,17 @@ Entrypoint: `TRIKLobeServer.py`. Package: `lobe_server/`.
 ```bash
 uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
-uv run ruff check .          # lint
+uv run ruff check .          # lint (includes PLE/PLW/PT/T10/TRY/EM/RUF/NPY/RET)
 uv run ruff format .         # format
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
+uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest --cov=lobe_server --cov-fail-under=90  # tests + coverage
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ```
 
-**Required order:** `ruff → basedpyright → pylint → pytest` — run all before commit.
+**Required order:** `ruff → basedpyright → pylint → bandit → vulture → pytest` — run all before commit.
 Pre-commit hook runs `ruff check --fix` + `ruff-format` automatically.
 
 ## Python version
