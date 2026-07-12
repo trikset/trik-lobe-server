@@ -40,7 +40,7 @@ show_missing = true
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "W", "SIM"]
+select = ["E", "F", "I", "N", "UP", "B", "W", "SIM", "PLE", "PLW"]
 ignore = ["N802", "N803", "N806", "N815", "N816"]
 
 [tool.pylint.'MESSAGES CONTROL']
