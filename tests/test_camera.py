@@ -74,7 +74,7 @@ def test_webcam_camera() -> None:
     mock_capture.read.return_value = (True, frame)
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_cv2.COLOR_BGR2RGB = 4
-    mock_cv2.cvtColor = lambda img, code: img
+    mock_cv2.cvtColor = lambda img, _: img
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)

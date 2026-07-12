@@ -29,6 +29,10 @@ jobs:
         run: uv run basedpyright .
       - name: Lint with pylint
         run: uv run pylint lobe_server TRIKLobeServer.py tests
+      - name: Security scan with bandit
+        run: uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107
+      - name: Dead code check with vulture
+        run: uv run vulture lobe_server/ tests/ TRIKLobeServer.py
       - name: Test with pytest
         run: uv run pytest --cov=lobe_server --cov-fail-under=90
 

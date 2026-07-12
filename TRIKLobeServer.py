@@ -31,8 +31,8 @@ def main() -> None:
     logger.info("Starting program")
     try:
         settings = load_settings()
-    except FileNotFoundError as e:
-        logger.error(e)
+    except FileNotFoundError as _:
+        logger.exception("settings.ini not found")
         input("Press any key to close the window...")
         sys.exit(0)
 

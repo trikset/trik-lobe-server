@@ -23,6 +23,8 @@ dev = [
     "pyinstaller>=6.0,<7.0",
     "ruff>=0.15.0,<1.0.0",
     "mdformat>=1.0.0,<2.0.0",
+    "bandit>=1.8.0,<2.0.0",
+    "vulture>=2.14,<3.0",
 ]
 
 [tool.pytest.ini_options]
@@ -40,7 +42,7 @@ show_missing = true
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "W", "SIM", "PLE", "PLW"]
+select = ["E", "F", "I", "N", "UP", "B", "W", "SIM", "PLE", "PLW", "PT", "T10", "TRY", "EM", "RUF", "NPY", "RET"]
 ignore = ["N802", "N803", "N806", "N815", "N816"]
 
 [tool.pylint.'MESSAGES CONTROL']
@@ -71,3 +73,6 @@ reportUnknownLambdaType = "none"
 reportMissingTypeArgument = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
+
+[tool.vulture]
+ignore_names = ["return_value", "side_effect", "prediction", "im", "settings", "mock_model", "mock_camera"]
