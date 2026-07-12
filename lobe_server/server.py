@@ -112,7 +112,9 @@ class LobeServer:
             finally:
                 if sock is not None:
                     sock.close()
-                self._running = False
+            if self._running:
+                logger.info("Reconnecting in %s seconds...", self.RECONNECT_DELAY)
+                await asyncio.sleep(self.RECONNECT_DELAY)
 
     def shutdown(self) -> None:
         self._running = False

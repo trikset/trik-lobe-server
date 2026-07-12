@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -249,5 +250,10 @@ async def test_run_forever_connect_failure(settings: Settings, mock_model: Magic
         side_effect=ConnectionRefusedError,
     ):
         server = _make_server(settings, mock_model, mock_camera)
-        await server.run_forever()
+
+        async def stop_on_reconnect(*_: Any) -> None:
+            server.shutdown()
+
+        with patch("asyncio.sleep", stop_on_reconnect):
+            await server.run_forever()
     assert server._running is False
