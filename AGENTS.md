@@ -10,8 +10,9 @@ Entrypoint: `TRIKLobeServer.py`. Package: `lobe_server/`.
 ```bash
 uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
-uv run ruff check .          # lint (includes PLE/PLW/PT/T10/TRY/EM/RUF/NPY/RET)
+uv run ruff check .          # lint
 uv run ruff format .         # format
+uv run mdformat README.md MODERNIZATION.md AGENTS.md --check  # markdown (explicit list, no --exclude flag)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107  # security scan
@@ -20,8 +21,12 @@ uv run pytest --cov=lobe_server --cov-fail-under=90  # tests + coverage
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ```
 
-**Required order:** `ruff → basedpyright → pylint → bandit → vulture → pytest` — run all before commit.
-Pre-commit hook runs `ruff check --fix` + `ruff-format` automatically.
+**Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
+
+## Pre-commit hooks
+
+`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
+`mdformat` runs manually or via CI only (not in pre-commit).
 
 ## Python version
 
@@ -33,6 +38,7 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 - `lobe_server/model.py`: `ONNXImageModel` — inference via onnxruntime.
   TFLite models auto-convert to ONNX on first load via `tflite2onnx`.
 - `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
+  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
 - `lobe_server/camera.py`: three camera sources — `UrlCamera`, `RobotCamera`,
   `WebcamCamera`. cv2 is lazy-imported (50+ MB DLLs, only WebcamCamera needs it).
 - Import shortcut: `from lobe_server import LobeServer, load_model, Settings`
@@ -44,9 +50,9 @@ Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load -x`.
 
 ## basedpyright notes
 
-`reportMissingTypeStubs`, `reportUnknownMemberType`, etc. are set to `"none"`
-because numpy/onnxruntime/pytest have no stubs. This is intentional — 0 errors
-expected.
+`reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
+pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
+0 errors expected.
 
 ## CI quirks
 
