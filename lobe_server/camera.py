@@ -48,7 +48,7 @@ class RobotCamera(CameraSource):
 
 class WebcamCamera(CameraSource):
     def __init__(self, camera_number: int):
-        import cv2 as _cv2
+        import cv2 as _cv2  # lazy: 50+ MB native DLLs, only WebcamCamera needs it
 
         self._cv2 = _cv2
         self._camera = _cv2.VideoCapture(camera_number)

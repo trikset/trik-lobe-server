@@ -208,7 +208,40 @@ GitHub Actions runs on every push and PR:
 - uv run pyinstaller TRIKLobeServer.py --onefile  # build job only
 ```
 
-**Matrix:** ubuntu-latest / windows-latest / macos-latest × Python 3.10 / 3.11 / 3.12
+**Test matrix:** ubuntu-latest / windows-latest / macos-latest × Python 3.12
+**Build matrix:** ubuntu-22.04 / windows-2022 / macos-latest × Python 3.12
+
+______________________________________________________________________
+
+## 6. Runtime Platform Notes
+
+### Python version constraints (2026-07)
+
+Python 3.14 breaks `onnx` — no pre-built wheel, the C++ extension fails
+to compile on Windows. Pin to Python 3.12 for all production builds.
+
+CI test matrix was narrowed from 3.10/3.11/3.12 to 3.12 only (July 2026).
+
+### GitHub Actions runner availability (2026-07)
+
+- `windows-2019` and `macos-13` have been fully removed by GitHub.
+- `macos-15-large` / `macos-15-intel` are paid "larger runners" —
+  unavailable on free public repositories.
+- Standard macOS runner `macos-latest` is ARM64 (Apple Silicon), not Intel.
+- Build runners used: `ubuntu-22.04`, `windows-2022`, `macos-latest`.
+
+### PyInstaller notes
+
+- onnxruntime is auto-detected by `hook-onnxruntime.py` from
+  `pyinstaller-hooks-contrib` — no `--hidden-import` flags needed.
+- Warning `Hidden import 'protobuf' not found` is harmless — protobuf is
+  bundled transitively via the `onnx` dependency.
+
+### LSP / editor notes
+
+- LSP errors ("Cannot resolve imported module numpy") are false positives
+  when the editor's Python interpreter differs from the project venv.
+  For VS Code: set `python.defaultInterpreterPath` to `.venv/Scripts/python.exe`.
 
 ______________________________________________________________________
 
