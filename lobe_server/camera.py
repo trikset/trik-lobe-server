@@ -11,10 +11,12 @@ from lobe_server.config import Settings
 
 class CameraSource(ABC):
     @abstractmethod
-    def capture(self) -> Image.Image | None: ...
+    def capture(self) -> Image.Image | None:
+        raise NotImplementedError
 
     @abstractmethod
-    def release(self) -> None: ...
+    def release(self) -> None:
+        raise NotImplementedError
 
 
 class UrlCamera(CameraSource):
