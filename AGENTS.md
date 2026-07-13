@@ -35,20 +35,18 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 
 ## Architecture
 
-- `lobe_server/model.py`: `ONNXImageModel` — inference via onnxruntime.
-  TFLite models auto-convert to ONNX on first load via `tflite2onnx`.
+- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
+  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
+  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
+  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
+  `ai_edge_litert` is a mandatory dependency.
 - `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
   `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
-- `lobe_server/camera.py`: three camera sources — `UrlCamera`, `RobotCamera`,
-  `WebcamCamera`. cv2 is lazy-imported (50+ MB DLLs, only WebcamCamera needs it).
-- Import shortcut: `from lobe_server import LobeServer, load_model, Settings`
 
 ## Tests
 
-56 tests, 96% coverage. All mock-based — no real camera, network, or TFLite.
-Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load -x`.
-
-## basedpyright notes
+73 tests, 93% coverage. All mock-based — no real camera, network, or TFLite.
+Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
 
 `reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
 pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
