@@ -91,16 +91,15 @@ prediction = result.prediction        # top class label string
 
 That's it. No visualization, no Grad-CAM, no ONNX fallback, no batching.
 
-**Replacement:** `lobe_server/model.py` — `ONNXImageModel` class:
+**Replacement:** `lobe_server/model.py` — dual backend `ONNXImageModel` + `TFLiteImageModel`:
 
-1. Reads `signature.json` (the standard Lobe export metadata file)
-1. If the model is TFLite format, auto-converts to ONNX on first load via
-   `tflite2onnx` (caches `model.onnx` + updates `signature.json`)
-1. Loads the `.onnx` model via `onnxruntime` for inference
-1. Preprocesses images using the same algorithm Lobe used
+1. Auto-detects model format by scanning directory for `.tflite` or `.onnx` files
+1. Labels loaded from `labels.txt` (priority) or `signature.json` → `classes.Label`
+1. `signature.json` may optionally contain `filename` to specify model file explicitly
+1. Preprocesses images the same way Lobe did (resize + center crop + normalize)
 1. Returns a `ClassificationResult` with the same `.prediction` API
 
-The call site in `server.py` needed zero changes — the new class exposes the
+The call site in `server.py` needed zero changes — both model classes expose the
 same `predict()` → `.prediction` interface.
 
 **What this unblocks:**
@@ -109,29 +108,37 @@ same `predict()` → `.prediction` interface.
 - `Pillow` can be any modern version
 - Server works on Python 3.10-3.12
 - CI no longer needs to install `lobe` (which pulled in broken deps)
-- No C extension for TFLite runtime needed — `onnxruntime` has pre-built
-  wheels for all platforms (including Windows ARM64)
-- PyInstaller bundles cleanly: all dependencies are pure-Python or have
-  standard wheels
+- Both ONNX and TFLite are first-class citizens with no conversion step
 
 ### Added: `onnxruntime`
 
-The sole inference backend. Chosen because:
+Runs ONNX models. Chosen because:
 
 - Pre-built wheels on PyPI for Windows / Linux / macOS (x64 + ARM64)
 - Python 3.10-3.14 support with no compilation needed
 - Actively maintained by Microsoft
 - Bundles cleanly with PyInstaller (auto-detected)
 
-### Added: `tflite2onnx`
+### Added: `ai-edge-litert` (LiteRT)
 
-Pure-Python library (42 KB) to convert TFLite models to ONNX format.
-Used only for the one-time conversion of legacy Lobe TFLite models.
+Runs TFLite models natively. Replaces both the old `tflite-runtime` (abandoned,
+no PyPI wheels for Python 3.12+) and `tflite2onnx` (brittle conversion layer).
 
-- Zero C extensions — no compilation risk
-- PyInstaller bundles it trivially
-- Fallback: if missing, user gets a clear error message with manual
-  conversion instructions
+- Google-maintained successor to TensorFlow Lite runtime
+- Pre-built wheels on PyPI for Windows / Linux / macOS (all Python 3.10-3.14)
+- Fully backward compatible with all `.tflite` models (tested on 12 VOLK models)
+- Same API as `tflite_runtime.interpreter` — zero code changes needed
+- C extension, bundles with PyInstaller without special handling
+
+### Removed: `tflite2onnx`
+
+No longer needed. The conversion step introduced a fragile dependency and
+added latency on first load. TFLite models now run natively.
+
+### Removed: `tflite-runtime`
+
+Abandoned by Google (last release Oct 2023). Required a custom PyPI index,
+had no Python 3.12+ wheels. Replaced by `ai-edge-litert`.
 
 ### Removed: `matplotlib`
 
@@ -142,56 +149,59 @@ never called this method.
 
 Core runtime dependencies. Versions widened for cross-platform compatibility.
 
-### Removed: `tflite-runtime`
-
-No longer needed. Previous versions of this project used `tflite-runtime`
-directly, but it was:
-
-- Unavailable on PyPI (required Google Coral's custom index)
-- No pre-built wheel for Python 3.13+
-- C extension that can't bundle with PyInstaller without special handling
-- Replaced entirely by `tflite2onnx` + `onnxruntime`
-
 ______________________________________________________________________
 
-## 4. Lobe → ONNX: How It Works
+## 4. Dual Backend (ONNX + TFLite): How It Works
+
+### Model directory layout (three supported layouts):
 
 ```
-Lobe-exported model directory:
-  model_path/
-    signature.json          ← metadata: labels, input size, model filename
-    saved_model.tflite      ← original TFLite model (kept)
-    model.onnx              ← converted ONNX (written on first load)
-    signature.json.tflite-backup  ← backup of original signature.json
+A) labels.txt + model.onnx (рекомендуется):
+    model_path/
+        model.onnx              ← ONNX модель
+        labels.txt              ← одна строка на класс
+
+B) labels.txt + saved_model.tflite (рекомендуется для TFLite):
+    model_path/
+        saved_model.tflite      ← TFLite модель
+        labels.txt              ← одна строка на класс
+
+C) Microsoft Lobe legacy:
+    model_path/
+        signature.json          ← метаданные (читается только classes.Label + filename)
+        saved_model.tflite      ← TFLite модель
 ```
 
-`lobe_server/model.py` flow:
+### `lobe_server/model.py` flow:
+
+1. **`load_model(path)`**
+
+   - Reads `signature.json` if present → extracts optional `filename`
+   - If `filename` is set → uses that file
+   - Otherwise → auto-detects first `.tflite` or `.onnx` file
+   - Dispatches to `ONNXImageModel.load()` or `TFLiteImageModel.load()`
 
 1. **`ONNXImageModel.load(path)`**
 
-   - Reads `signature.json` → format, class labels, image size, model filename
-   - If format is `"tf_lite"` or `"tf"`:
-     - Checks if `model.onnx` exists (cached from previous conversion)
-     - If not cached: calls `tflite2onnx.convert(tflite_path, onnx_path)`
-     - Updates `signature.json`: `format = "onnx"`, `filename = "model.onnx"`
-     - Backs up original `signature.json` → `signature.json.tflite-backup`
-   - Loads `.onnx` via `onnxruntime.InferenceSession`
-   - Returns an `ONNXImageModel` instance
+   - Loads model via `onnxruntime.InferenceSession`
+   - Infers `input_name` and `input_size` from ONNX graph
+   - Reads labels from `_read_labels()` (labels.txt → signature.json)
+
+1. **`TFLiteImageModel.load(path)`**
+
+   - Loads model via `ai_edge_litert.interpreter.Interpreter`
+   - Reads input size from TFLite flatbuffer
+   - Reads labels from `_read_labels()` (labels.txt → signature.json)
 
 1. **`model.predict(pil_image)`**
 
-   - **Preprocess:** EXIF orientation correction → RGB conversion →
-     `resize_uniform_to_fill` (scale shortest side to target) →
+   - **Preprocess:** RGB conversion → `resize_uniform_to_fill` →
      `crop_center` → normalize `[0, 255]` uint8 → `[0, 1]` float32 →
      add batch dimension → shape `[1, H, W, 3]`
-   - **Inference:** `session.run(None, {input_name: processed})`
+   - **Inference:** backend-specific (onnxruntime `session.run` or TFLite
+     `set_tensor` + `invoke`)
    - **Postprocess:** zip softmax outputs with labels → sort by confidence →
      `ClassificationResult`
-
-1. **`result.prediction`** → top label string
-
-The preprocessing algorithm matches Lobe's `image_utils.py` (MIT licensed,
-publicly available at `github.com/lobe/lobe-python`).
 
 ______________________________________________________________________
 
@@ -245,7 +255,7 @@ CI test matrix was narrowed from 3.10/3.11/3.12 to 3.12 only (July 2026).
 
 ______________________________________________________________________
 
-## 6. Test Coverage Gaps
+## 7. Labels Priority (2026-07)
 
 | Lines missed | Module | Why not tested? |
 | --------------------- | --------------- | ------------------------------------------------ |
@@ -258,13 +268,38 @@ All gaps require real hardware (camera, network) or platform-specific packages.
 
 ______________________________________________________________________
 
-## 7. Branch Strategy
+## 8. labels.txt → Signature Priority (2026-07)
 
-All work was done on the `auto-mode-1` branch with atomic commits. The commit
-history is clean and each commit is a logical unit:
+### Problem
 
-```
-2594bab ci: migrate to uv, add ruff/pylint/basedpyright/pytest-cov
-442f70b feat: replace abandoned lobe SDK with onnxruntime + tflite2onnx
-01c770b chore: track uv.lock for deterministic CI installs
-```
+`signature.json` was a Lobe-ism. For non-Lobe models (Teachable Machine,
+Azure Custom Vision, Edge Impulse), users had to create a JSON file with
+`classes.Label`. Many platforms export `labels.txt` instead — one label
+per line, a simpler format.
+
+### Solution
+
+`_read_labels(model_path)` now has two paths, in priority order:
+
+1. **labels.txt exists** — read labels from file (one per line)
+   - UTF-8 BOM handling: `encoding="utf-8-sig"`
+   - Empty line filtering: blank lines are stripped
+1. **No labels.txt, signature.json exists** — extract `classes.Label`
+
+### What this unblocks
+
+- **Teachable Machine / Edge Impulse / Azure CV**: export labels.txt, drop
+  it next to the model, no signature.json needed
+- **Backward compatible**: every existing Lobe model still works via
+  signature.json → classes.Label
+
+### Test coverage gaps
+
+| Lines missed | Module | Why not tested? |
+| --------------------- | --------------- | ------------------------------------------------ |
+| `camera.py:56-63` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
+| `server.py:79-90` | `run_forever` success / \_handle_connection | Requires a real TCP server to connect to |
+| `model.py:78` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
+| `model.py:120,126-129` | `ONNXImageModel.load` shape branches | Rare ONNX shapes (2D, 0D, dynamic dims) |
+
+All gaps require real hardware (camera, network) or platform-specific packages.
