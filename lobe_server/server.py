@@ -71,7 +71,7 @@ class LobeServer:
             except (OSError, ConnectionResetError):
                 continue
             if data:
-                logger.info("Received: %s", data)
+                logger.debug("Received: %s", data)
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
