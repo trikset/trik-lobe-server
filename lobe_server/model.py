@@ -59,6 +59,9 @@ def load_model(path: str | Path) -> ImageModel:
 
     if filename:
         model_file = model_path / filename
+        if not model_file.exists():
+            msg = f"Model file specified in signature.json not found: {model_file}"
+            raise FileNotFoundError(msg)
         ext = model_file.suffix.lower()
         if ext == ".tflite":
             return TFLiteImageModel.load(model_path, filename)
@@ -167,7 +170,7 @@ class TFLiteImageModel:
         self._output_index = interpreter.get_output_details()[0]["index"]
 
     @classmethod
-    def load(cls, model_path: str | Path, filename: str = "saved_model.tflite") -> TFLiteImageModel:
+    def load(cls, model_path: str | Path, filename: str = "model.tflite") -> TFLiteImageModel:
         tflite_path = Path(model_path) / filename
         interpreter = tflite.Interpreter(model_path=str(tflite_path))
         interpreter.allocate_tensors()
