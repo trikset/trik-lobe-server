@@ -8,14 +8,10 @@ from pathlib import Path
 
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
-from lobe_server.model import load_model as load_model_fn
+from lobe_server.model import load_model
 from lobe_server.protocol import format_message, is_quit_command, make_command
 
 logger = logging.getLogger(__name__)
-
-
-def _load_model(model_path: Path):
-    return load_model_fn(str(model_path))
 
 
 class LobeServer:
@@ -27,7 +23,7 @@ class LobeServer:
 
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
-        self._model = _load_model(model_path)
+        self._model = load_model(str(model_path))
         self._camera: CameraSource = create_camera(settings, settings.server_ip)
         self._lock = asyncio.Lock()
         self._running = False
@@ -62,16 +58,16 @@ class LobeServer:
 
     async def _reader(self, sock: socket.socket) -> None:
         data = ""
-        loop = asyncio.get_event_loop()
         while self._running and not is_quit_command(data):
-            await asyncio.sleep(0.2)
             try:
-                raw = await loop.sock_recv(sock, self.BUFFER_SIZE)
+                raw = await asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE)
                 data = raw.decode("utf-8")
             except (OSError, ConnectionResetError):
+                await asyncio.sleep(0.1)
                 continue
             if data:
                 logger.debug("Received: %s", data)
+            await asyncio.sleep(0)
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
