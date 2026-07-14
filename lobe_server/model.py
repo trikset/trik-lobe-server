@@ -64,8 +64,10 @@ def load_model(path: str | Path) -> ImageModel:
             raise FileNotFoundError(msg)
         ext = model_file.suffix.lower()
         if ext == ".tflite":
+            logger.info("Loading model: %s", model_file)
             return TFLiteImageModel.load(model_path, filename)
         if ext == ".onnx":
+            logger.info("Loading model: %s", model_file)
             return ONNXImageModel.load(model_path, filename)
         msg = f"Unknown model format in signature.json filename: {ext}"
         raise ValueError(msg)
@@ -74,10 +76,13 @@ def load_model(path: str | Path) -> ImageModel:
     onnx_files = sorted(model_path.glob("*.onnx"))
 
     if tflite_files and not onnx_files:
+        logger.info("Loading model: %s", model_path / tflite_files[0].name)
         return TFLiteImageModel.load(model_path, tflite_files[0].name)
     if onnx_files:
+        logger.info("Loading model: %s", model_path / onnx_files[0].name)
         return ONNXImageModel.load(model_path, onnx_files[0].name)
     if tflite_files:
+        logger.info("Loading model: %s", model_path / tflite_files[0].name)
         return TFLiteImageModel.load(model_path, tflite_files[0].name)
 
     msg = f"No model found at {model_path}. Need a .tflite or .onnx file."
