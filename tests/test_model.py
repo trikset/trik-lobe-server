@@ -90,7 +90,7 @@ def _write_signature(tmp: str, labels: list[str], filename: str | None = None) -
 def _write_lobe_signature(tmp: str, labels: list[str] | None = None, filename: str | None = None) -> Path:
     sig = {
         "format": "tf_lite",
-        "filename": filename or "saved_model.tflite",
+        "filename": filename or "model.tflite",
         "inputs": {"Image": {"dtype": "float32", "shape": [None, 224, 224, 3], "name": "Image"}},
         "outputs": {"Confidences": {"dtype": "float32", "shape": [None, 3], "name": "uuid/dense_2/Softmax"}},
         "classes": {"Label": labels or ["cat", "dog", "bird"]},
@@ -263,7 +263,7 @@ def test_onnx_model_predict_ordering() -> None:
 def test_tflite_model_load_with_labels_txt() -> None:
     interpreter = _make_tflite_interpreter()
     with _tflite_patch(interpreter), tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         _write_labels_txt(tmp, ["cat", "dog", "bird"])
         model = TFLiteImageModel.load(tmp)
 
@@ -274,7 +274,7 @@ def test_tflite_model_load_with_labels_txt() -> None:
 def test_tflite_model_load_with_signature_json() -> None:
     interpreter = _make_tflite_interpreter()
     with _tflite_patch(interpreter), tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         _write_signature(tmp, ["x", "y", "z"])
         model = TFLiteImageModel.load(tmp)
 
@@ -285,7 +285,7 @@ def test_tflite_model_load_with_signature_json() -> None:
 def test_tflite_model_load_no_labels_raises() -> None:
     interpreter = _make_tflite_interpreter()
     with _tflite_patch(interpreter), tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         with pytest.raises(FileNotFoundError, match=r"No labels found"):
             TFLiteImageModel.load(tmp)
 
@@ -355,7 +355,7 @@ def test_load_model_without_signature_json_works() -> None:
 def test_load_model_detects_tflite() -> None:
     interpreter = _make_tflite_interpreter()
     with _tflite_patch(interpreter), tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         _write_labels_txt(tmp, ["a", "b", "c"])
         model = load_model(tmp)
 
@@ -372,7 +372,7 @@ def test_load_model_prefers_onnx_over_tflite() -> None:
         tempfile.TemporaryDirectory() as tmp,
     ):
         (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         _write_labels_txt(tmp, ["a", "b", "c"])
         model = load_model(tmp)
 
@@ -411,8 +411,23 @@ def test_load_model_with_explicit_onnx_filename() -> None:
 
 def test_load_model_with_explicit_filename_unknown_ext() -> None:
     with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.h5").write_bytes(b"")
         _write_signature(tmp, ["a"], filename="model.h5")
         with pytest.raises(ValueError, match=r"Unknown model format"):
+            load_model(tmp)
+
+
+def test_load_model_explicit_tflite_filename_missing() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_signature(tmp, ["a", "b", "c"], filename="missing.tflite")
+        with pytest.raises(FileNotFoundError, match=r"signature.json not found"):
+            load_model(tmp)
+
+
+def test_load_model_explicit_onnx_filename_missing() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_signature(tmp, ["a", "b", "c"], filename="missing.onnx")
+        with pytest.raises(FileNotFoundError, match=r"signature.json not found"):
             load_model(tmp)
 
 
@@ -422,7 +437,7 @@ def test_load_model_with_explicit_filename_unknown_ext() -> None:
 def test_load_lobe_tflite_legacy() -> None:
     interpreter = _make_tflite_interpreter()
     with _tflite_patch(interpreter), tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / "saved_model.tflite").write_bytes(b"fake tflite")
+        (Path(tmp) / "model.tflite").write_bytes(b"fake tflite")
         _write_lobe_signature(tmp, ["a", "b", "c"])
         model = load_model(tmp)
 

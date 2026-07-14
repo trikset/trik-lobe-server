@@ -161,15 +161,15 @@ A) labels.txt + model.onnx (рекомендуется):
         model.onnx              ← ONNX модель
         labels.txt              ← одна строка на класс
 
-B) labels.txt + saved_model.tflite (рекомендуется для TFLite):
+B) labels.txt + model.tflite (рекомендуется для TFLite):
     model_path/
-        saved_model.tflite      ← TFLite модель
+        model.tflite      ← TFLite модель
         labels.txt              ← одна строка на класс
 
 C) Microsoft Lobe legacy:
     model_path/
         signature.json          ← метаданные (читается только classes.Label + filename)
-        saved_model.tflite      ← TFLite модель
+        model.tflite      ← TFLite модель
 ```
 
 ### `lobe_server/model.py` flow:
