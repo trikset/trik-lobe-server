@@ -131,6 +131,13 @@ dmypy.json
 # IDEA
 .idea/
 
+.venv/
+.ruff_cache/
+*.pyi
+
+# Local development
+.local_development.db
+
 # Lobe model
 signature.json
 *.tflite

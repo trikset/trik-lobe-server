@@ -1,41 +1,66 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
 name: Python application
 
-on: [ workflow_dispatch, push, pull_request ]
+on: [workflow_dispatch, push, pull_request]
 
 jobs:
-  build:
+  test:
     strategy:
       fail-fast: false
-      matrix:        
+      matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.9']
+        python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
-    env:
-      SCRIPT_NAME: TRIKLobeServer      
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        run: pip install uv
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Lint with ruff
+        run: uv run ruff check .
+      - name: Check markdown formatting
+        run: uv run mdformat README.md MODERNIZATION.md AGENTS.md --check
+      - name: Type check with basedpyright
+        run: uv run basedpyright .
+      - name: Lint with pylint
+        run: uv run pylint lobe_server TRIKLobeServer.py tests
+      - name: Security scan with bandit
+        run: uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107
+      - name: Dead code check with vulture
+        run: uv run vulture lobe_server/ tests/ TRIKLobeServer.py
+      - name: Test with pytest
+        run: uv run pytest --cov=lobe_server --cov-fail-under=90
+
+  build:
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-latest]
+        python-version: ["3.12"]
+    runs-on: ${{ matrix.os }}
+    env:
+      SCRIPT_NAME: TRIKLobeServer
+
+    steps:
+      - uses: actions/checkout@v7
       - uses: benjlevesque/short-sha@v4.0
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python --version
-          python -m pip install --upgrade pip wheel
-          pip install flake8
-          pip install -r requirements.txt
-      - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+      - name: Install uv
+        run: pip install uv
+      - name: Sync dependencies
+        run: uv sync --frozen
       - name: Build single app for ${{ env.SCRIPT_NAME }}
-        run: pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
+        run: uv run pyinstaller ${{ env.SCRIPT_NAME }}.py --icon=trik-studio.ico --onefile
       - name: Archive artifact
         uses: actions/upload-artifact@v7
         with:
