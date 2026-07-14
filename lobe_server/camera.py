@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from io import BytesIO
 
@@ -8,15 +9,15 @@ from PIL import Image
 
 from lobe_server.config import Settings
 
+logger = logging.getLogger(__name__)
+
 
 class CameraSource(ABC):
     @abstractmethod
-    def capture(self) -> Image.Image | None:
-        raise NotImplementedError
+    def capture(self) -> Image.Image | None: ...
 
     @abstractmethod
-    def release(self) -> None:
-        raise NotImplementedError
+    def release(self) -> None: ...
 
 
 class UrlCamera(CameraSource):
@@ -54,10 +55,16 @@ class WebcamCamera(CameraSource):
 
         self._cv2 = _cv2
         self._camera = _cv2.VideoCapture(camera_number)
+        if not self._camera.isOpened():
+            logger.critical(
+                "Camera #%d not found or busy. Check CAMERA_NUMBER in settings.ini.",
+                camera_number,
+            )
 
     def capture(self) -> Image.Image | None:
         ret, frame = self._camera.read()
         if not ret:
+            logger.error("Failed to read frame from camera.")
             return None
         color_converted = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
         return Image.fromarray(color_converted)

@@ -1,35 +1,28 @@
 """
-ONNX image classification model with automatic TFLite conversion.
+Image classification model loader with dual ONNX/TFLite backend.
 
-Loads models exported from Microsoft Lobe or any ONNX image classifier.
-If the model is in TFLite format (Lobe default), it is automatically
-converted to ONNX on first load using tflite2onnx.
+Auto-detects format by scanning model directory for .tflite or .onnx files.
+Labels are loaded from labels.txt or signature.json (in that priority).
 
-Exported Lobe model directory layout:
-    model_path/
-        signature.json       # metadata: labels, input shape, model filename
-        saved_model.tflite   # original TFLite (kept, converted on first load)
-        model.onnx           # converted ONNX (written on first load, used thereafter)
+Labels source priority:
+  1. labels.txt (one label per line, index = class id)
+  2. signature.json -> classes.Label
 
-signature.json format:
-    {
-        "format": "tf_lite" | "onnx",
-        "filename": "saved_model.tflite" | "model.onnx",
-        "inputs":  {"Image": {"dtype": "float32", "shape": [null, 224, 224, 3], "name": "Image"}},
-        "outputs": {"Confidences": {"dtype": "float32", "shape": [null, N], "name": "..."}},
-        "classes": {"Label": ["cat", "dog", ...]},
-        "export_model_version": 1
-    }
+signature.json may also contain:
+  "filename" — optional, overrides auto-detect of model file
+
+Legacy Microsoft Lobe format is supported — only "classes.Label" and
+"filename" are read, everything else is ignored.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
+import ai_edge_litert.interpreter as tflite
 import numpy as np
 import onnxruntime as _ort
 from PIL import Image
@@ -50,35 +43,121 @@ class ClassificationResult:
         return self._labels
 
 
+class ImageModel(Protocol):
+    def predict(self, image: Image.Image) -> ClassificationResult: ...
+
+
+def load_model(path: str | Path) -> ImageModel:
+    model_path = Path(path)
+    sig_path = model_path / "signature.json"
+
+    filename: str | None = None
+    if sig_path.exists():
+        with open(sig_path, encoding="utf-8") as f:
+            sig = json.load(f)
+        filename = sig.get("filename")
+
+    if filename:
+        model_file = model_path / filename
+        if not model_file.exists():
+            msg = f"Model file specified in signature.json not found: {model_file}"
+            raise FileNotFoundError(msg)
+        ext = model_file.suffix.lower()
+        if ext == ".tflite":
+            logger.info("Loading model: %s", model_file)
+            return TFLiteImageModel.load(model_path, filename)
+        if ext == ".onnx":
+            logger.info("Loading model: %s", model_file)
+            return ONNXImageModel.load(model_path, filename)
+        msg = f"Unknown model format in signature.json filename: {ext}"
+        raise ValueError(msg)
+
+    tflite_files = sorted(model_path.glob("*.tflite"))
+    onnx_files = sorted(model_path.glob("*.onnx"))
+
+    if tflite_files and not onnx_files:
+        logger.info("Loading model: %s", model_path / tflite_files[0].name)
+        return TFLiteImageModel.load(model_path, tflite_files[0].name)
+    if onnx_files:
+        logger.info("Loading model: %s", model_path / onnx_files[0].name)
+        return ONNXImageModel.load(model_path, onnx_files[0].name)
+    if tflite_files:
+        logger.info("Loading model: %s", model_path / tflite_files[0].name)
+        return TFLiteImageModel.load(model_path, tflite_files[0].name)
+
+    msg = f"No model found at {model_path}. Need a .tflite or .onnx file."
+    raise FileNotFoundError(msg)
+
+
+def _read_labels(model_path: Path) -> list[str]:
+    labels_path = model_path / "labels.txt"
+    if labels_path.exists():
+        labels = labels_path.read_text(encoding="utf-8-sig").strip().splitlines()
+        labels = [ln for ln in labels if ln]
+        if not labels:
+            msg = f"labels.txt at {model_path} is empty."
+            raise ValueError(msg)
+        return labels
+
+    sig_path = model_path / "signature.json"
+    if sig_path.exists():
+        with open(sig_path, encoding="utf-8") as f:
+            sig = json.load(f)
+        if "classes" in sig and "Label" in sig["classes"]:
+            return sig["classes"]["Label"]
+        msg = f"signature.json at {model_path} is missing 'classes.Label'."
+        raise ValueError(msg)
+
+    msg = f"No labels found at {model_path}. Provide labels.txt or signature.json with classes.Label."
+    raise FileNotFoundError(msg)
+
+
 class ONNXImageModel:
     def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:
         self._session = session
         self._labels = labels
         self._input_name = input_name
         self._input_size = input_size
+        self._is_nchw = False
+        shape = session.get_inputs()[0].shape
+        if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
+            self._is_nchw = True
 
     @classmethod
-    def load(cls, model_path: str | Path) -> ONNXImageModel:
-        model_path = Path(model_path)
-        sig_path = model_path / "signature.json"
-        with open(sig_path, encoding="utf-8") as f:
-            sig = json.load(f)
+    def load(cls, model_path: str | Path, filename: str = "model.onnx") -> ONNXImageModel:
+        onnx_path = Path(model_path) / filename
+        session = _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
 
-        fmt: str = sig.get("format", "tf_lite")
-        onnx_path = _ensure_converted(model_path, sig) if fmt in ("tf_lite", "tf") else model_path / sig["filename"]
+        input_meta = session.get_inputs()[0]
+        input_name: str = input_meta.name
+        shape: list[int | str | None] = list(input_meta.shape)
+        dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
-        labels: list[str] = sig["classes"]["Label"]
-        input_shape: list[int] = sig["inputs"]["Image"]["shape"]
-        input_size = (input_shape[1], input_shape[2])
-        input_name: str = sig["inputs"]["Image"]["name"]
+        if len(dims) >= 4:
+            dims = dims[1:]
+        if len(dims) == 3:
+            if dims[0] in (1, 3):
+                _, h, w = dims
+            else:
+                h, w, _ = dims
+        elif len(dims) == 2:
+            h, w = dims
+        else:
+            h, w = 224, 224
+
+        input_size = (h, w)
+
         if input_name.endswith(":0"):
             input_name = input_name[:-2]
 
-        session = _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+        labels = _read_labels(Path(model_path))
+
         return cls(session, labels, input_name, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
         processed: np.ndarray = _preprocess(image, self._input_size)
+        if self._is_nchw:
+            processed = np.transpose(processed, (0, 3, 1, 2))
         output = self._session.run(None, {self._input_name: processed})
         raw = output[0]
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
@@ -87,77 +166,46 @@ class ONNXImageModel:
         return ClassificationResult(paired)
 
 
-def load_model(path: str | Path) -> ONNXImageModel:
-    return ONNXImageModel.load(path)
+class TFLiteImageModel:
+    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:
+        self._interpreter = interpreter
+        self._labels = labels
+        self._input_size = input_size
+        self._input_index = interpreter.get_input_details()[0]["index"]
+        self._output_index = interpreter.get_output_details()[0]["index"]
 
+    @classmethod
+    def load(cls, model_path: str | Path, filename: str = "model.tflite") -> TFLiteImageModel:
+        tflite_path = Path(model_path) / filename
+        interpreter = tflite.Interpreter(model_path=str(tflite_path))
+        interpreter.allocate_tensors()
 
-def _ensure_converted(model_path: Path, sig: dict[str, Any]) -> Path:
-    onnx_path = model_path / "model.onnx"
-    if onnx_path.exists():
-        return onnx_path
+        input_details = interpreter.get_input_details()[0]
+        shape: list[int] = list(input_details["shape"])  # type: ignore[arg-type]
+        _, h, w, _ = shape
+        input_size = (h, w)
 
-    tflite_name = sig.get("filename", "saved_model.tflite")
-    tflite_path = model_path / tflite_name
-    if not tflite_path.exists():
-        msg = f"TFLite model not found: {tflite_path}"
-        raise FileNotFoundError(msg)
+        labels = _read_labels(Path(model_path))
 
-    logger.info("TFLite model detected. Converting to ONNX (one-time)...")
-    try:
-        import tflite2onnx  # type: ignore[reportMissingImports]
-    except ImportError as exc:
-        msg = (
-            f"TFLite model at {tflite_path} needs conversion but tflite2onnx is not installed.\n"
-            f"  1. Install: pip install tflite2onnx\n"
-            f"  2. Convert:  tflite2onnx {tflite_path} {onnx_path}\n"
-            f"  3. Update {model_path / 'signature.json'}:\n"
-            f"       format = 'onnx', filename = 'model.onnx'"
-        )
-        raise ImportError(msg) from exc
+        return cls(interpreter, labels, input_size)
 
-    tflite2onnx.convert(str(tflite_path), str(onnx_path))
-
-    sig["format"] = "onnx"
-    sig["filename"] = "model.onnx"
-    sig_path = model_path / "signature.json"
-    backup_path = model_path / "signature.json.tflite-backup"
-    shutil.copy2(str(sig_path), str(backup_path))
-    with open(sig_path, "w", encoding="utf-8") as f:
-        json.dump(sig, f, indent=2)
-        f.write("\n")
-
-    logger.info("Conversion complete. Saved as %s", onnx_path)
-    return onnx_path
+    def predict(self, image: Image.Image) -> ClassificationResult:
+        processed: np.ndarray = _preprocess(image, self._input_size)
+        self._interpreter.set_tensor(self._input_index, processed)
+        self._interpreter.invoke()
+        raw = self._interpreter.get_tensor(self._output_index)
+        confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
+        paired = list(zip(self._labels, confidences, strict=False))
+        paired.sort(key=lambda x: x[1], reverse=True)
+        return ClassificationResult(paired)
 
 
 def _preprocess(image: Image.Image, target_size: tuple[int, int]) -> np.ndarray:
-    image = _update_orientation(image)
     image = image.convert("RGB")
     image = _resize_uniform_to_fill(image, target_size)
     image = _crop_center(image, target_size)
     arr = np.asarray(image, dtype=np.float32) / 255.0
     return np.expand_dims(arr, axis=0)
-
-
-def _update_orientation(image: Image.Image) -> Image.Image:
-    try:
-        exif = image.getexif()
-    except Exception:
-        exif = None
-    if exif is None:
-        return image
-
-    orientation = exif.get(0x0112, 1)
-    ops: list[Any] = []
-    if orientation >= 4:
-        ops.append(Image.Transpose.TRANSPOSE)
-    if orientation in (2, 3, 6, 7):
-        ops.append(Image.Transpose.FLIP_TOP_BOTTOM)
-    if orientation in (1, 2, 5, 6):
-        ops.append(Image.Transpose.FLIP_LEFT_RIGHT)
-    for op in ops:
-        image = image.transpose(op)
-    return image
 
 
 def _resize_uniform_to_fill(image: Image.Image, target: tuple[int, int]) -> Image.Image:

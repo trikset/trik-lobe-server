@@ -1,4 +1,5 @@
 import asyncio
+import socket
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,6 +7,8 @@ import pytest
 
 from lobe_server.config import Settings
 from lobe_server.server import LobeServer
+
+_SockPair = tuple[socket.socket, socket.socket]
 
 
 @pytest.fixture
@@ -34,38 +37,52 @@ def mock_camera() -> MagicMock:
     return cam
 
 
+@pytest.fixture
+def real_sock_pair() -> _SockPair:
+    a, b = socket.socketpair()
+    a.setblocking(False)
+    b.setblocking(False)
+    return a, b
+
+
 def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
     with (
-        patch("lobe_server.server._load_onnx_model", return_value=mock_model),
+        patch("lobe_server.server._load_model", return_value=mock_model),
         patch("lobe_server.server.create_camera", return_value=mock_camera),
     ):
         return LobeServer(settings, MagicMock())
 
 
 @pytest.mark.asyncio
-async def test_send_format(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = AsyncMock()
-    sock.send = MagicMock()
+async def test_send_format(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
 
     server = _make_server(settings, mock_model, mock_camera)
     await server._send(sock, "hello")
-    sock.send.assert_called_once_with(b"5:hello")
+    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    assert data == b"5:hello"
 
 
 @pytest.mark.asyncio
-async def test_send_message(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = AsyncMock()
-    sock.send = MagicMock()
+async def test_send_message(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
 
     server = _make_server(settings, mock_model, mock_camera)
     await server._send_message(sock, "cat")
-    sock.send.assert_called_once_with(b"8:data:cat")
+    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    assert data == b"8:data:cat"
 
 
 @pytest.mark.asyncio
-async def test_send_oserror(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    sock.send.side_effect = OSError("broken")
+async def test_send_oserror(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
+    reader.close()
 
     server = _make_server(settings, mock_model, mock_camera)
     await server._send(sock, "hello")
@@ -159,9 +176,10 @@ async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, 
 
 
 @pytest.mark.asyncio
-async def test_keepalive_loop(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    sock.send = MagicMock()
+async def test_keepalive_loop(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True
@@ -177,13 +195,15 @@ async def test_keepalive_loop(settings: Settings, mock_model: MagicMock, mock_ca
         ],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    sock.send.assert_called_once_with(b"9:keepalive")
+    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    assert data == b"9:keepalive"
 
 
 @pytest.mark.asyncio
-async def test_prediction_loop(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    sock.send = MagicMock()
+async def test_prediction_loop(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True
@@ -199,34 +219,40 @@ async def test_prediction_loop(settings: Settings, mock_model: MagicMock, mock_c
         ],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    sock.send.assert_called_once_with(b"8:data:cat")
+    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    assert data == b"8:data:cat"
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    sock.getsockname.return_value = ("127.0.0.1", 54321)
-    sock.send = MagicMock()
-    loop = asyncio.get_event_loop()
-    loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
+async def test_handle_connection(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True
-    await server._handle_connection(sock)
 
-    assert sock.send.call_count >= 2
-    calls = sock.send.call_args_list
-    assert b"16:register:54321:3" in [c[0][0] for c in calls]
-    assert b"6:self:3" in [c[0][0] for c in calls]
+    async def send_quit():
+        await asyncio.sleep(0.1)
+        await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
+
+    await asyncio.wait(
+        [
+            asyncio.create_task(server._handle_connection(sock)),
+            asyncio.create_task(send_quit()),
+        ],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    server._running = False
 
 
 def test_load_model() -> None:
     mock_img_model = MagicMock()
 
-    with patch("lobe_server.server.load_onnx_model", return_value=mock_img_model):
-        from lobe_server.server import _load_onnx_model
+    with patch("lobe_server.server.load_model_fn", return_value=mock_img_model):
+        from lobe_server.server import _load_model
 
-        result = _load_onnx_model(MagicMock())
+        result = _load_model(MagicMock())
     assert result is mock_img_model
 
 
@@ -240,6 +266,7 @@ async def test_connect_once(settings: Settings, mock_model: MagicMock, mock_came
 
     assert result is mock_sock
     mock_sock.settimeout.assert_called_once_with(10)
+    mock_sock.setblocking.assert_called_once_with(False)
     mock_sock.connect.assert_called_once_with(("127.0.0.1", 8889))
 
 

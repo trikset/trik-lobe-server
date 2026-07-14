@@ -8,14 +8,14 @@ from pathlib import Path
 
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
-from lobe_server.model import load_model as load_onnx_model
+from lobe_server.model import load_model as load_model_fn
 from lobe_server.protocol import format_message, is_quit_command, make_command
 
 logger = logging.getLogger(__name__)
 
 
-def _load_onnx_model(model_path: Path):
-    return load_onnx_model(str(model_path))
+def _load_model(model_path: Path):
+    return load_model_fn(str(model_path))
 
 
 class LobeServer:
@@ -27,7 +27,7 @@ class LobeServer:
 
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
-        self._model = _load_onnx_model(model_path)
+        self._model = _load_model(model_path)
         self._camera: CameraSource = create_camera(settings, settings.server_ip)
         self._lock = asyncio.Lock()
         self._running = False
@@ -35,9 +35,10 @@ class LobeServer:
     async def _send(self, sock: socket.socket, msg: str) -> None:
         data = format_message(msg)
         logger.debug("Send: %s", data)
+        loop = asyncio.get_running_loop()
         async with self._lock:
             with contextlib.suppress(OSError):
-                sock.send(data)
+                await loop.sock_sendall(sock, data)
 
     async def _send_message(self, sock: socket.socket, message: str) -> None:
         await self._send(sock, f"data:{message}")
@@ -70,7 +71,7 @@ class LobeServer:
             except (OSError, ConnectionResetError):
                 continue
             if data:
-                logger.info("Received: %s", data)
+                logger.debug("Received: %s", data)
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
@@ -91,7 +92,9 @@ class LobeServer:
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()
         sock.settimeout(self.SOCKET_TIMEOUT)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.connect((self._settings.server_ip, self._settings.server_port))
+        sock.setblocking(False)
         return sock
 
     async def run_forever(self) -> None:
