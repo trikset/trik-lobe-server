@@ -1,3 +1,4 @@
+import requests
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -136,6 +137,20 @@ def test_factory_webcam() -> None:
 def test_url_camera_no_auth() -> None:
     cam = UrlCamera("http://example.com")
     assert cam._auth is None
+
+
+@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
+def test_url_camera_network_error(mock_get: MagicMock) -> None:
+    cam = UrlCamera("http://example.com/snapshot")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
+def test_robot_camera_network_error(mock_get: MagicMock) -> None:
+    cam = RobotCamera("192.168.1.10")
+    im = cam.capture()
+    assert im is None
 
 
 def _minimal_png() -> bytes:
