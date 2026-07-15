@@ -1,8 +1,8 @@
-import requests
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+import requests
 
 from lobe_server.camera import (
     CameraSource,
