@@ -28,9 +28,13 @@ class UrlCamera(CameraSource):
             self._auth = (username, password)
 
     def capture(self) -> Image.Image | None:
-        resp = requests.get(self._url, stream=True, auth=self._auth, timeout=10)
-        resp.raise_for_status()
-        return Image.open(BytesIO(resp.content))
+        try:
+            resp = requests.get(self._url, stream=True, auth=self._auth, timeout=10)
+            resp.raise_for_status()
+            return Image.open(BytesIO(resp.content))
+        except requests.RequestException:
+            logger.exception("Failed to fetch image from URL camera: %s", self._url)
+            return None
 
     def release(self) -> None:
         pass
@@ -41,9 +45,13 @@ class RobotCamera(CameraSource):
         self._url = f"http://{server_ip}:8080/?action=snapshot"
 
     def capture(self) -> Image.Image | None:
-        resp = requests.get(self._url, stream=True, timeout=10)
-        resp.raise_for_status()
-        return Image.open(BytesIO(resp.content))
+        try:
+            resp = requests.get(self._url, stream=True, timeout=10)
+            resp.raise_for_status()
+            return Image.open(BytesIO(resp.content))
+        except requests.RequestException:
+            logger.exception("Failed to fetch image from robot camera: %s", self._url)
+            return None
 
     def release(self) -> None:
         pass

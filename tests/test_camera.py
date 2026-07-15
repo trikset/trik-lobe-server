@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+import requests
 
 from lobe_server.camera import (
     CameraSource,
@@ -136,6 +137,58 @@ def test_factory_webcam() -> None:
 def test_url_camera_no_auth() -> None:
     cam = UrlCamera("http://example.com")
     assert cam._auth is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_url_camera_connection_error(mock_get: MagicMock) -> None:
+    mock_get.side_effect = requests.ConnectionError("connection refused")
+    cam = UrlCamera("http://example.com/snapshot")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_url_camera_timeout(mock_get: MagicMock) -> None:
+    mock_get.side_effect = requests.Timeout("timed out")
+    cam = UrlCamera("http://example.com/snapshot")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_url_camera_http_error(mock_get: MagicMock) -> None:
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
+    mock_get.return_value = mock_response
+    cam = UrlCamera("http://example.com/snapshot")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_robot_camera_connection_error(mock_get: MagicMock) -> None:
+    mock_get.side_effect = requests.ConnectionError("connection refused")
+    cam = RobotCamera("192.168.1.10")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_robot_camera_timeout(mock_get: MagicMock) -> None:
+    mock_get.side_effect = requests.Timeout("timed out")
+    cam = RobotCamera("192.168.1.10")
+    im = cam.capture()
+    assert im is None
+
+
+@patch("lobe_server.camera.requests.get")
+def test_robot_camera_http_error(mock_get: MagicMock) -> None:
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
+    mock_get.return_value = mock_response
+    cam = RobotCamera("192.168.1.10")
+    im = cam.capture()
+    assert im is None
 
 
 def _minimal_png() -> bytes:
