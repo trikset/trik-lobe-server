@@ -47,7 +47,7 @@ def real_sock_pair() -> _SockPair:
 
 def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
     with (
-        patch("lobe_server.server._load_model", return_value=mock_model),
+        patch("lobe_server.server.load_model", return_value=mock_model),
         patch("lobe_server.server.create_camera", return_value=mock_camera),
     ):
         return LobeServer(settings, MagicMock())
@@ -258,14 +258,10 @@ async def test_handle_connection(
     server._running = False
 
 
-def test_load_model() -> None:
+def test_load_model(settings: Settings) -> None:
     mock_img_model = MagicMock()
-
-    with patch("lobe_server.server.load_model_fn", return_value=mock_img_model):
-        from lobe_server.server import _load_model
-
-        result = _load_model(MagicMock())
-    assert result is mock_img_model
+    server = _make_server(settings, mock_img_model, MagicMock())
+    assert server._model is mock_img_model
 
 
 @pytest.mark.asyncio
