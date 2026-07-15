@@ -74,7 +74,8 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 ## CI quirks
 
 - `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
-- Use `windows-2022`, `ubuntu-22.04`, `macos-latest` for builds.
+- Build runners use **oldest free** for widest binary compatibility: `ubuntu-22.04`, `windows-2022`, `macos-14`.
+- Test runners use **`-latest`** for newest OS coverage.
+- `macos-latest` is ARM64 (Apple Silicon). `macos-14` is also ARM64.
 - `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
-- `macos-latest` is ARM64 (Apple Silicon).
 - Build produces per-OS artifacts via PyInstaller `--onefile`.

@@ -219,7 +219,7 @@ GitHub Actions runs on every push and PR:
 ```
 
 **Test matrix:** ubuntu-latest / windows-latest / macos-latest × Python 3.12
-**Build matrix:** ubuntu-22.04 / windows-2022 / macos-latest × Python 3.12
+**Build matrix:** ubuntu-22.04 / windows-2022 / macos-14 × Python 3.12
 
 ______________________________________________________________________
 
@@ -237,8 +237,11 @@ CI test matrix was narrowed from 3.10/3.11/3.12 to 3.12 only (July 2026).
 - `windows-2019` and `macos-13` have been fully removed by GitHub.
 - `macos-15-large` / `macos-15-intel` are paid "larger runners" —
   unavailable on free public repositories.
-- Standard macOS runner `macos-latest` is ARM64 (Apple Silicon), not Intel.
-- Build runners used: `ubuntu-22.04`, `windows-2022`, `macos-latest`.
+- Standard macOS runner `macos-latest` is ARM64 (Apple Silicon), now
+  points to `macos-15`. `macos-14` is the oldest free ARM64 runner.
+- Build runners use oldest free for widest binary compat: `ubuntu-22.04`,
+  `windows-2022`, `macos-14`.
+- Test runners use `-latest` for newest OS coverage.
 
 ### PyInstaller notes
 
@@ -401,3 +404,80 @@ dependencies, full coverage of the method body.
    when testing methods that create internal tasks.
 1. **Verify coverage** with `--cov-report=term-missing` after adding
    tests. Passing tests ≠ covered lines.
+
+______________________________________________________________________
+
+## 12. Why These Decisions
+
+Concise rationale for non-obvious choices. If an agent questions a
+setting, the answer is probably here.
+
+### 12.1 Why `--skip B107` in bandit
+
+B107 = "hardcoded password default". `Settings` has default values for
+`server_ip`, `server_port`, `my_hull_number` — these are sensible
+defaults for TRIK hardware. An agent should not "fix" these as security
+issues.
+
+### 12.2 Why mock-based tests instead of integration tests
+
+The server runs on desktop, connecting to TRIK robots over TCP. No
+camera hardware, no TRIK network, no TFLite runtime available in CI.
+The codebase is small enough (354 stmts) to mock everything and still
+reach 100% coverage. Integration tests would require real hardware and
+would be untestable in CI.
+
+### 12.3 Why `reportPrivateUsage = "none"` + `W0212` disabled
+
+Tests access private attributes (`server._running`, `server._handle_connection`,
+`model._labels`, etc.). Strict type checking and pylint would flag every
+internal access. These are false positives for tests — the code itself
+respects encapsulation.
+
+### 12.4 Why `W0718` (broad-exception-caught) disabled
+
+`run_forever()` catches `Exception` to retry on any connection failure.
+This is intentional — the server must stay alive through transient
+network errors. Narrowing to `OSError` would miss unexpected failures
+and crash the server.
+
+### 12.5 Why build runners = oldest, test runners = `-latest`
+
+**Build:** Oldest free runners = oldest glibc, oldest MSVC runtime,
+oldest macOS SDK. Binaries built here run on newer systems. Build
+artifacts have widest binary compatibility.
+
+**Test:** `-latest` = newest OS. Catches OS-level regressions and
+compatibility issues with latest system libraries.
+
+### 12.6 Why `mdformat` takes explicit file list
+
+`mdformat` has no `--exclude` flag. Running `mdformat .` would
+reformat every `.md` file in the repo, including third-party or
+generated docs. We only format the 3 files we maintain.
+
+### 12.7 Why `asyncio_mode = "auto"` in pytest
+
+Without it, every async test needs `@pytest.mark.asyncio` decorator.
+Auto mode allows async tests to be discovered without explicit markers,
+reducing boilerplate across 92 tests.
+
+### 12.8 Why `--frozen` in CI
+
+`uv sync --frozen` uses the committed `uv.lock` file. Without it,
+dependency resolution could differ between local dev and CI, causing
+"works on my machine" failures. The lockfile is the single source of
+truth for dependency versions.
+
+### 12.9 Why `min-similarity-lines = 4` for pylint R0801
+
+`_SockPair` type alias, fixture patterns, and mock helpers repeat
+across test files. Without this setting, pylint would flag every
+test file's shared patterns as code duplication. Setting to 4 allows
+small shared patterns (3-4 lines) while catching real duplication.
+
+### 12.10 Why `testiq` not in CI
+
+`testiq` requires per-test coverage data collection, which adds
+significant overhead. It's a periodic audit tool — run manually when
+test count grows by 5+ from the last audit, not on every commit.
