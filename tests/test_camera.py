@@ -144,6 +144,12 @@ def test_url_camera_network_error(mock_get: MagicMock) -> None:
     cam = UrlCamera("http://example.com/snapshot")
     im = cam.capture()
     assert im is None
+    mock_get.assert_called_once_with(
+        "http://example.com/snapshot",
+        stream=True,
+        auth=None,
+        timeout=10,
+    )
 
 
 @patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
@@ -151,6 +157,11 @@ def test_robot_camera_network_error(mock_get: MagicMock) -> None:
     cam = RobotCamera("192.168.1.10")
     im = cam.capture()
     assert im is None
+    mock_get.assert_called_once_with(
+        "http://192.168.1.10:8080/?action=snapshot",
+        stream=True,
+        timeout=10,
+    )
 
 
 def _minimal_png() -> bytes:
