@@ -17,7 +17,7 @@ uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
-uv run pytest --cov=lobe_server --cov-fail-under=90  # tests + coverage
+uv run pytest --cov=lobe_server --cov-fail-under=100  # tests + coverage
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ```
 
@@ -37,7 +37,7 @@ and test failures must be caught before push.
 Run this single command before every push:
 
 ```bash
-uv run ruff check . && uv run mdformat README.md MODERNIZATION.md AGENTS.md --check && uv run basedpyright . && uv run pylint lobe_server TRIKLobeServer.py tests && uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107 && uv run vulture lobe_server/ tests/ TRIKLobeServer.py && uv run pytest --cov=lobe_server --cov-fail-under=90
+uv run ruff check . && uv run mdformat README.md MODERNIZATION.md AGENTS.md --check && uv run basedpyright . && uv run pylint lobe_server TRIKLobeServer.py tests && uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107 && uv run vulture lobe_server/ tests/ TRIKLobeServer.py && uv run pytest --cov=lobe_server --cov-fail-under=100
 ```
 
 ## Python version
@@ -57,7 +57,7 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 
 ## Tests
 
-90 tests, 97% coverage. All mock-based — no real camera, network, or TFLite.
+92 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
 Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
 
 Check current count: `uv run pytest --co -q 2>&1 | tail -1`. Run testiq

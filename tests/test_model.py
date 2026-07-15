@@ -522,3 +522,13 @@ def test_onnx_model_load_hw_shape() -> None:
         model = ONNXImageModel.load(tmp)
 
     assert model._input_size == (224, 224)
+
+
+def test_onnx_model_load_single_dim_shape() -> None:
+    session = _make_onnx_session(3, input_shape=[None, 224])
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(tmp, ["a", "b", "c"])
+        model = ONNXImageModel.load(tmp)
+
+    assert model._input_size == (224, 224)

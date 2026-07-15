@@ -57,8 +57,8 @@ ______________________________________________________________________
 
 ### Testing
 
-- **pytest** + **pytest-cov** with `--cov-fail-under=90`
-- 90 tests covering: config loading, camera sources (including error paths), protocol, server
+- **pytest** + **pytest-cov** with `--cov-fail-under=100`
+- 92 tests covering: config loading, camera sources (including error paths), protocol, server
   lifecycle, ONNX model loading (all shape variants), TFLite auto-conversion, inference
 - Mock-based: no real camera, no real network, no real TFLite runtime needed
 - Coverage report shows exactly what isn't tested and why
@@ -214,7 +214,7 @@ GitHub Actions runs on every push and PR:
 - uv run ruff check .
 - uv run basedpyright .
 - uv run pylint lobe_server TRIKLobeServer.py tests
-- uv run pytest --cov=lobe_server --cov-fail-under=90
+- uv run pytest --cov=lobe_server --cov-fail-under=100
 - uv run pyinstaller TRIKLobeServer.py --onefile  # build job only
 ```
 

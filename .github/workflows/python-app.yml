@@ -37,7 +37,7 @@ jobs:
       - name: Dead code check with vulture
         run: uv run vulture lobe_server/ tests/ TRIKLobeServer.py
       - name: Test with pytest
-        run: uv run pytest --cov=lobe_server --cov-fail-under=90
+        run: uv run pytest --cov=lobe_server --cov-fail-under=100
 
   build:
     needs: test

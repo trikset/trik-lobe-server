@@ -200,26 +200,18 @@ async def test_prediction_loop(
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
-) -> None:
-    sock, reader = real_sock_pair
+async def test_handle_connection(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+    mock_sock = MagicMock()
+    mock_sock.getsockname.return_value = ("127.0.0.1", 9999)
+
+    loop = asyncio.get_event_loop()
+    loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
+    loop.sock_sendall = AsyncMock()
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True
-
-    async def send_quit():
-        await asyncio.sleep(0.1)
-        await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._handle_connection(sock)),
-            asyncio.create_task(send_quit()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    server._running = False
+    await server._handle_connection(mock_sock)
+    assert server._running is False
 
 
 def test_load_model(settings: Settings) -> None:
@@ -256,3 +248,28 @@ async def test_run_forever_connect_failure(settings: Settings, mock_model: Magic
         with patch("asyncio.sleep", stop_on_reconnect):
             await server.run_forever()
     assert server._running is False
+
+
+@pytest.mark.asyncio
+async def test_run_forever_success(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+    mock_sock = MagicMock()
+
+    async def fake_connect() -> MagicMock:
+        return mock_sock
+
+    with (
+        patch("lobe_server.server.LobeServer._connect_once", side_effect=fake_connect),
+        patch("lobe_server.server.LobeServer._handle_connection") as mock_handle,
+    ):
+        server = _make_server(settings, mock_model, mock_camera)
+
+        async def handle_then_stop(*_: Any) -> None:
+            server.shutdown()
+
+        mock_handle.side_effect = handle_then_stop
+
+        with patch("asyncio.sleep"):
+            await server.run_forever()
+
+    assert server._running is False
+    mock_sock.close.assert_called_once()
