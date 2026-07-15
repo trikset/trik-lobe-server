@@ -292,3 +292,57 @@ ______________________________________________________________________
 | `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
 
 All gaps require real hardware (camera, network) or platform-specific packages.
+
+______________________________________________________________________
+
+## 9. CI / Pre-commit Architecture
+
+### What runs where
+
+| Check | Pre-commit (every commit) | CI (every push/PR) |
+|---|---|---|
+| `ruff check --fix` | Yes | Yes |
+| `ruff format` | Yes | Yes |
+| `mdformat --check` | Yes | Yes |
+| `basedpyright` | No — too slow | Yes |
+| `pylint` | No — too slow | Yes |
+| `bandit` | No — needs full context | Yes |
+| `vulture` | No — needs full context | Yes |
+| `pytest --cov` | No — too slow | Yes |
+
+**Philosophy:** Pre-commit hooks must be fast (< 2s). Type checkers,
+linters, security scanners, and tests run in CI only. The one mandatory
+local check before push is the full CI simulation command in AGENTS.md.
+
+### Duplicate detection
+
+- **pylint R0801** (duplicate-code): active with `min-similarity-lines = 4`.
+  Catches cross-file code duplication. Runs in CI via pylint step.
+- **testiq**: installed as dev dependency. Run manually when test count
+  grows by 5+ from the last audit. Not in CI (requires per-test coverage
+  data collection, too slow for routine runs).
+
+______________________________________________________________________
+
+## 10. PR Review Patterns (Lessons Learned)
+
+### Common bugs found in review
+
+1. **Empty-data busy loop in asyncio readers.** When `sock_recv` returns
+   `b""` (clean TCP close), a reader loop without `if not raw: break`
+   spins at full CPU. The old `sleep(0.2)` accidentally masked this.
+   Always check for empty data from `sock_recv`.
+
+1. **Missing error-path tests.** Adding `try/except` to production code
+   without tests for the error path gives false confidence. Every new
+   `except` clause needs a test that triggers it.
+
+1. **Redundant patches in tests.** When `_make_server` already patches
+   `load_model`, a test that also patches `load_model` in an outer
+   `with` block creates confusion. One patch per target.
+
+1. **Dead code.** Unreachable branches (e.g., `if X:` after `if X and Y:`)
+   waste coverage budget. Remove them — they can't be tested.
+
+1. **Stale documentation.** Line numbers in coverage tables drift as code
+   changes. Update them when refactoring.

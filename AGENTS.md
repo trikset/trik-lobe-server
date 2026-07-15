@@ -25,8 +25,20 @@ uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 
 ## Pre-commit hooks
 
-`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
-`mdformat` runs manually or via CI only (not in pre-commit).
+`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` + `mdformat`
+automatically on every commit. This catches formatting issues early.
+
+## Before push / PR — MANDATORY
+
+**Never push without running the full CI suite locally first.** Pre-commit
+hooks only cover formatting. Type errors, lint violations, security issues,
+and test failures must be caught before push.
+
+Run this single command before every push:
+
+```bash
+uv run ruff check . && uv run mdformat README.md MODERNIZATION.md AGENTS.md --check && uv run basedpyright . && uv run pylint lobe_server TRIKLobeServer.py tests && uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107 && uv run vulture lobe_server/ tests/ TRIKLobeServer.py && uv run pytest --cov=lobe_server --cov-fail-under=90
+```
 
 ## Python version
 
@@ -47,6 +59,9 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 
 90 tests, 97% coverage. All mock-based — no real camera, network, or TFLite.
 Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
+
+Check current count: `uv run pytest --co -q 2>&1 | tail -1`. Run testiq
+overlap audit when count grows by 5+ from last audit.
 
 `reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
 pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
