@@ -1,5 +1,4 @@
 import asyncio
-import socket
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,42 +6,7 @@ import pytest
 
 from lobe_server.config import Settings
 from lobe_server.server import LobeServer
-
-_SockPair = tuple[socket.socket, socket.socket]
-
-
-@pytest.fixture
-def settings() -> Settings:
-    return Settings(
-        server_ip="127.0.0.1",
-        my_hull_number=3,
-        server_port=8889,
-    )
-
-
-@pytest.fixture
-def mock_model() -> MagicMock:
-    model = MagicMock()
-    prediction = MagicMock()
-    prediction.prediction = "cat"
-    model.predict.return_value = prediction
-    return model
-
-
-@pytest.fixture
-def mock_camera() -> MagicMock:
-    cam = MagicMock()
-    im = MagicMock()
-    cam.capture.return_value = im
-    return cam
-
-
-@pytest.fixture
-def real_sock_pair() -> _SockPair:
-    a, b = socket.socketpair()
-    a.setblocking(False)
-    b.setblocking(False)
-    return a, b
+from tests.conftest import _SockPair
 
 
 def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
