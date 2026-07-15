@@ -286,7 +286,7 @@ ______________________________________________________________________
 
 | Lines missed | Module | Why not tested? |
 |---|---|---|
-| `camera.py:61-70` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
+| `camera.py:62-67` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
 | `server.py:106-112` | `run_forever` success branch | Requires a real TCP server to connect to |
 | `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
 | `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
