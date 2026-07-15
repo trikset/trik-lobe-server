@@ -45,7 +45,7 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 
 ## Tests
 
-73 tests, 93% coverage. All mock-based — no real camera, network, or TFLite.
+82 tests, 93% coverage. All mock-based — no real camera, network, or TFLite.
 Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
 
 `reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in

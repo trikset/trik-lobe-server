@@ -58,7 +58,7 @@ ______________________________________________________________________
 ### Testing
 
 - **pytest** + **pytest-cov** with `--cov-fail-under=90`
-- 56 tests covering: config loading, camera sources, protocol, server
+- 82 tests covering: config loading, camera sources (including error paths), protocol, server
   lifecycle, ONNX model loading, TFLite auto-conversion, inference
 - Mock-based: no real camera, no real network, no real TFLite runtime needed
 - Coverage report shows exactly what isn't tested and why
