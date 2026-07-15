@@ -454,3 +454,71 @@ def test_load_lobe_onnx_legacy() -> None:
 
     assert isinstance(model, ONNXImageModel)
     assert model._labels == ["x", "y", "z"]
+
+
+# ── Edge cases for coverage ──────────────────────────────────────
+
+
+def test_read_labels_empty_labels_txt() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "labels.txt").write_text("\n\n\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"empty"):
+            _read_labels(Path(tmp))
+
+
+def test_onnx_model_load_4d_shape() -> None:
+    session = _make_onnx_session(3, input_shape=[1, 3, 224, 224])
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(tmp, ["a", "b", "c"])
+        model = ONNXImageModel.load(tmp)
+
+    assert model._input_size == (224, 224)
+
+
+def test_onnx_model_load_2d_shape() -> None:
+    session = _make_onnx_session(3, input_shape=[224, 224])
+    session.get_inputs.return_value = [_make_input_meta(shape=[224, 224])]
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(tmp, ["a", "b", "c"])
+        model = ONNXImageModel.load(tmp)
+
+    assert model._input_size == (224, 224)
+
+
+def test_onnx_model_load_colon_zero_name() -> None:
+    session = MagicMock()
+    meta = MagicMock()
+    meta.name = "serving_default_input:0"
+    meta.shape = [None, 224, 224, 3]
+    session.get_inputs.return_value = [meta]
+    output = np.array([[1.0 / 3] * 3], dtype=np.float32)
+    output[0][0] = 0.8
+    session.run.return_value = [output]
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(tmp, ["a", "b", "c"])
+        model = ONNXImageModel.load(tmp)
+
+    assert model._input_name == "serving_default_input"
+
+
+def test_onnx_model_predict_nchw() -> None:
+    session = _make_onnx_session(2, input_shape=[None, 3, 224, 224])
+    model = ONNXImageModel(session, ["dog", "cat"], "Image", (224, 224))
+    assert model._is_nchw is True
+    im = Image.new("RGB", (10, 10))
+    result = model.predict(im)
+    assert result.prediction == "dog"
+    session.run.assert_called_once()
+
+
+def test_onnx_model_load_hw_shape() -> None:
+    session = _make_onnx_session(3, input_shape=[None, 224, 224, 3])
+    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(tmp, ["a", "b", "c"])
+        model = ONNXImageModel.load(tmp)
+
+    assert model._input_size == (224, 224)

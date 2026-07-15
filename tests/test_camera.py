@@ -104,6 +104,31 @@ def test_webcam_camera_fail() -> None:
         assert cam.capture() is None
 
 
+def test_webcam_camera_init() -> None:
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    mock_cv2.VideoCapture.return_value = mock_capture
+    mock_capture.isOpened.return_value = True
+
+    with patch.dict("sys.modules", {"cv2": mock_cv2}):
+        cam = WebcamCamera(0)
+
+    assert cam._camera is mock_capture
+    mock_cv2.VideoCapture.assert_called_once_with(0)
+
+
+def test_webcam_camera_init_not_opened() -> None:
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    mock_cv2.VideoCapture.return_value = mock_capture
+    mock_capture.isOpened.return_value = False
+
+    with patch.dict("sys.modules", {"cv2": mock_cv2}):
+        cam = WebcamCamera(0)
+
+    assert cam._camera is mock_capture
+
+
 def test_factory_url() -> None:
     settings = Settings(
         photo_url="http://example.com/snapshot",
