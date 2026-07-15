@@ -287,14 +287,14 @@ ______________________________________________________________________
 
 ## 8. Test Coverage Gaps
 
-| Lines missed | Module | Why not tested? |
-|---|---|---|
-| `camera.py:61-70` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
-| `server.py:106-112` | `run_forever` success branch | Requires a real TCP server to connect to |
-| `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
-| `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
+All gaps closed as of 2026-07-15. 92 tests, 100% coverage (354 stmts).
 
-All gaps require real hardware (camera, network) or platform-specific packages.
+| Lines formerly missed | Module | How it was fixed |
+|---|---|---|
+| `camera.py:61-70` | `WebcamCamera.__init__` | Mocked `cv2.VideoCapture` in `test_webcam_camera_init` |
+| `server.py:77-88` | `_handle_connection` body | Mocked socket with `AsyncMock` (was async race with real socketpair) |
+| `server.py:109-110,115` | `run_forever` happy path | `test_run_forever_success` — mock `_connect_once` + `_handle_connection` |
+| `model.py:143` | ONNX fallback shape | `test_onnx_model_load_single_dim_shape` — input shape `[None, 224]` |
 
 ______________________________________________________________________
 

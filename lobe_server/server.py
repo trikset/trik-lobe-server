@@ -33,7 +33,7 @@ class LobeServer:
         logger.debug("Send: %s", data)
         loop = asyncio.get_running_loop()
         async with self._lock:
-            with contextlib.suppress(OSError):
+            with contextlib.suppress(OSError):  # send fails on disconnect — reader detects it
                 await loop.sock_sendall(sock, data)
 
     async def _send_message(self, sock: socket.socket, message: str) -> None:
@@ -108,7 +108,7 @@ class LobeServer:
                 sock = await self._connect_once()
                 logger.info("Connected")
                 await self._handle_connection(sock)
-            except Exception:
+            except Exception:  # intentional: stay alive through any failure
                 logger.exception("Connection error")
             finally:
                 if sock is not None:

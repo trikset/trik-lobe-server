@@ -89,7 +89,7 @@ def load_model(path: str | Path) -> ImageModel:
 def _read_labels(model_path: Path) -> list[str]:
     labels_path = model_path / "labels.txt"
     if labels_path.exists():
-        labels = labels_path.read_text(encoding="utf-8-sig").strip().splitlines()
+        labels = labels_path.read_text(encoding="utf-8-sig").strip().splitlines()  # handles UTF-8 BOM
         labels = [ln for ln in labels if ln]
         if not labels:
             msg = f"labels.txt at {model_path} is empty."
@@ -140,7 +140,7 @@ class ONNXImageModel:
         elif len(dims) == 2:
             h, w = dims
         else:
-            h, w = 224, 224
+            h, w = 224, 224  # fallback for rare shapes with <2 dims
 
         input_size = (h, w)
 

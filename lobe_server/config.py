@@ -6,6 +6,7 @@ from pathlib import Path
 
 @dataclass
 class Settings:
+    # Defaults are intentional for TRIK hardware — not security issues (bandit B107)
     server_ip: str = "127.0.0.1"
     my_hull_number: int = 2
     server_port: int = 8889

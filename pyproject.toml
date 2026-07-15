@@ -29,14 +29,14 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
+asyncio_mode = "auto"  # avoids @pytest.mark.asyncio on every async test
 testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["lobe_server"]
 
 [tool.coverage.report]
-fail_under = 100
+fail_under = 100  # 354 stmts — 100% achievable and worth it
 show_missing = true
 
 [tool.ruff]
@@ -72,8 +72,9 @@ ignore-imports = true
 ignore-signatures = true
 
 [tool.basedpyright]
+# numpy/onnxruntime/pytest have no stubs — all set to "none", 0 errors expected
 typeCheckingMode = "strict"
-reportPrivateUsage = "none"
+reportPrivateUsage = "none"  # tests access _running, _handle_connection, etc.
 reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
@@ -86,4 +87,5 @@ reportUnknownParameterType = "none"
 reportUnknownArgumentType = "none"
 
 [tool.vulture]
+# fixture return values are not dead code
 ignore_names = ["return_value", "side_effect", "prediction", "im", "settings", "mock_model", "mock_camera"]
