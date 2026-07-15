@@ -62,16 +62,18 @@ class LobeServer:
 
     async def _reader(self, sock: socket.socket) -> None:
         data = ""
-        loop = asyncio.get_event_loop()
         while self._running and not is_quit_command(data):
-            await asyncio.sleep(0.2)
             try:
-                raw = await loop.sock_recv(sock, self.BUFFER_SIZE)
-                data = raw.decode("utf-8")
+                raw = await asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE)
             except (OSError, ConnectionResetError):
+                await asyncio.sleep(0.1)
                 continue
+            if not raw:
+                break
+            data = raw.decode("utf-8")
             if data:
                 logger.debug("Received: %s", data)
+            await asyncio.sleep(0)
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:

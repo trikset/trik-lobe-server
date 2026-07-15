@@ -176,6 +176,18 @@ async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, 
 
 
 @pytest.mark.asyncio
+async def test_reader_empty_data_exits(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+    sock = MagicMock()
+    loop = asyncio.get_event_loop()
+    loop.sock_recv = AsyncMock(return_value=b"")
+
+    server = _make_server(settings, mock_model, mock_camera)
+    server._running = True
+    await server._reader(sock)
+    assert server._running is False
+
+
+@pytest.mark.asyncio
 async def test_keepalive_loop(
     settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
 ) -> None:
