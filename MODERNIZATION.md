@@ -346,3 +346,58 @@ ______________________________________________________________________
 
 1. **Stale documentation.** Line numbers in coverage tables drift as code
    changes. Update them when refactoring.
+
+______________________________________________________________________
+
+## 11. Async Test Pitfalls
+
+### Race condition with `asyncio.wait(FIRST_COMPLETED)`
+
+The most common async testing mistake: using `asyncio.wait(FIRST_COMPLETED)`
+with real sockets to test a method that creates subtasks.
+
+```python
+# WRONG — race condition
+async def test_handle_connection(real_sock_pair):
+    sock, reader = real_sock_pair
+    async def send_quit():
+        await asyncio.sleep(0.1)
+        await loop.sock_sendall(reader, b"9:data:quit")
+
+    await asyncio.wait(
+        [create_task(server._handle_connection(sock)),
+         create_task(send_quit())],
+        return_when=FIRST_COMPLETED,  # send_quit wins the race
+    )
+```
+
+`send_quit` completes before `_handle_connection` reaches its body.
+The test's `asyncio.wait` returns on `send_quit`, leaving
+`_handle_connection` as a pending (untracked) task. **Tests pass
+but coverage lines remain uncovered.**
+
+### The fix: use mock sockets
+
+```python
+# CORRECT — deterministic
+async def test_handle_connection():
+    mock_sock = MagicMock()
+    loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
+    loop.sock_sendall = AsyncMock()
+
+    await server._handle_connection(mock_sock)
+    assert server._running is False
+```
+
+`sock_recv` returns the quit message immediately. No race, no timing
+dependencies, full coverage of the method body.
+
+### Rules
+
+1. **Never** test a method that creates subtasks using `real_sock_pair`
+   - `asyncio.wait(FIRST_COMPLETED)`. The test can complete before
+     the method runs.
+1. **Always** use `AsyncMock` for `loop.sock_recv` / `loop.sock_sendall`
+   when testing methods that create internal tasks.
+1. **Verify coverage** with `--cov-report=term-missing` after adding
+   tests. Passing tests ≠ covered lines.

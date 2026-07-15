@@ -60,6 +60,10 @@ Already pinned in `.python-version`. CI and local dev both use 3.12.
 92 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
 Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
 
+After adding tests, always verify with `--cov-report=term-missing` that
+the specific lines you intended to cover actually are. Passing tests do
+not guarantee coverage — async race conditions can silently skip lines.
+
 Check current count: `uv run pytest --co -q 2>&1 | tail -1`. Run testiq
 overlap audit when count grows by 5+ from last audit.
 
