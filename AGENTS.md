@@ -43,7 +43,7 @@ uv run ruff check . && uv run mdformat README.md MODERNIZATION.md AGENTS.md --ch
 ## Python version
 
 **Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
-Already pinned in `.python-version`. CI and local dev both use 3.12.
+Pinned in `.python-version`. CI and local dev both read from this file.
 
 ## Architecture
 

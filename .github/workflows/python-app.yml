@@ -11,15 +11,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version-file: '.python-version'
       - name: Install uv
         run: pip install uv
       - name: Sync dependencies
@@ -46,7 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-latest]
-        python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
     env:
       SCRIPT_NAME: TRIKLobeServer
@@ -54,10 +52,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: benjlevesque/short-sha@v4.0
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version-file: '.python-version'
       - name: Install uv
         run: pip install uv
       - name: Sync dependencies
