@@ -40,6 +40,19 @@ Run this single command before every push:
 uv run ruff check . && uv run mdformat README.md MODERNIZATION.md AGENTS.md --check && uv run basedpyright . && uv run pylint lobe_server TRIKLobeServer.py tests && uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107 && uv run vulture lobe_server/ tests/ TRIKLobeServer.py && uv run pytest --cov=lobe_server --cov-fail-under=100
 ```
 
+## Documenting Decisions
+
+When you make a non-obvious choice, document it at the right level:
+
+1. **Inline comment** in the file (CI, code, config) — immediate context
+   for anyone reading that file. Example: `# oldest free runners = widest binary compatibility`
+1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
+1. **MODERNIZATION.md §12** — full "why" explanation with rationale and
+   tradeoffs.
+
+Rule: if an agent would question it, document it. Start with inline
+comments — they're read first.
+
 ## Python version
 
 **Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).

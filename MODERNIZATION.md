@@ -410,7 +410,9 @@ ______________________________________________________________________
 ## 12. Why These Decisions
 
 Concise rationale for non-obvious choices. If an agent questions a
-setting, the answer is probably here.
+setting, the answer is probably here. Decisions are also documented
+inline in source files and AGENTS.md (short form) — see
+"Documenting Decisions" in AGENTS.md for the hierarchy.
 
 ### 12.1 Why `--skip B107` in bandit
 
