@@ -10,6 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # -latest = newest OS for test coverage
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
@@ -44,6 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # oldest free runners = widest binary compatibility (glibc, MSVC, SDK)
         os: [ubuntu-22.04, windows-2022, macos-14]
     runs-on: ${{ matrix.os }}
     env:
