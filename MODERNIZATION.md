@@ -255,20 +255,7 @@ CI test matrix was narrowed from 3.10/3.11/3.12 to 3.12 only (July 2026).
 
 ______________________________________________________________________
 
-## 7. Labels Priority (2026-07)
-
-| Lines missed | Module | Why not tested? |
-| --------------------- | --------------- | ------------------------------------------------ |
-| `camera.py:51-54` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
-| `server.py:108-114` | `run_forever` success | Requires a real TCP server to connect to |
-| `model.py:78` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
-| `model.py:148-158` | `_ensure_converted` exception branches | `json.dump` / `shutil.copy2` edge cases |
-
-All gaps require real hardware (camera, network) or platform-specific packages.
-
-______________________________________________________________________
-
-## 8. labels.txt → Signature Priority (2026-07)
+## 7. labels.txt → Signature Priority (2026-07)
 
 ### Problem
 
@@ -293,13 +280,15 @@ per line, a simpler format.
 - **Backward compatible**: every existing Lobe model still works via
   signature.json → classes.Label
 
-### Test coverage gaps
+______________________________________________________________________
+
+## 8. Test Coverage Gaps
 
 | Lines missed | Module | Why not tested? |
-| --------------------- | --------------- | ------------------------------------------------ |
-| `camera.py:56-63` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
-| `server.py:79-90` | `run_forever` success / \_handle_connection | Requires a real TCP server to connect to |
-| `model.py:78` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
-| `model.py:120,126-129` | `ONNXImageModel.load` shape branches | Rare ONNX shapes (2D, 0D, dynamic dims) |
+|---|---|---|
+| `camera.py:62-67` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
+| `server.py:106-112` | `run_forever` success branch | Requires a real TCP server to connect to |
+| `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
+| `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
 
 All gaps require real hardware (camera, network) or platform-specific packages.
