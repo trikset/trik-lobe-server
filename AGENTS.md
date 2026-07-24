@@ -57,6 +57,7 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 ### CI setup
 
 `astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
+
 - `setup-uv` installs uv with built-in caching on GitHub-hosted runners
 - Python version is read from `.python-version` — never hardcoded in YAML
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
