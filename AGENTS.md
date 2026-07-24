@@ -31,7 +31,7 @@ uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ## Python version
 
 **Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
-Already pinned in `.python-version`. CI and local dev both use 3.12.
+Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
 
 ## Architecture
 
@@ -54,8 +54,26 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 
 ## CI quirks
 
+### CI setup
+
+`astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
+- `setup-uv` installs uv with built-in caching on GitHub-hosted runners
+- Python version is read from `.python-version` — never hardcoded in YAML
+- `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
+
+### Runner notes
+
 - `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
 - Use `windows-2022`, `ubuntu-22.04`, `macos-latest` for builds.
 - `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
 - `macos-latest` is ARM64 (Apple Silicon).
 - Build produces per-OS artifacts via PyInstaller `--onefile`.
+
+## Guardrails
+
+### Docs before PR
+
+This session context is ephemeral — all state is lost when the conversation ends.
+**AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
+to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
+architecture, or conventions, document it in AGENTS.md first.
