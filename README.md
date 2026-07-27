@@ -1,7 +1,7 @@
 # TRIK Lobe Server
 
 [![CI](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml/badge.svg)](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml)
-![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+![Python](https://img.shields.io/badge/python-3.12-blue)
 
 Сервер для выполнения инференса ML-моделей (ONNX / TFLite) на ПК и отправки результатов
 на робота TRIK или в TRIK Studio по TCP.
