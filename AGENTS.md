@@ -65,6 +65,13 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 - `_handle_connection` cancel loop (pending task cancellation) requires a
   blocking prediction so tasks are still pending when reader finishes.
   Use `threading.Event` to block `camera.capture()` in `asyncio.to_thread`.
+- C-level builtins (e.g. `socket.getsockname`) can't be patched on
+  instances — `patch.object` raises "read-only attribute". Patch the
+  class instead: `patch.object(socket.socket, "getsockname", ...)`.
+- `asyncio.wait(FIRST_COMPLETED)` silently swallows task exceptions:
+  if task A raises but B completes first, the exception is lost and
+  tests appear to pass. When you need to verify a task succeeds,
+  `await` it directly instead of wrapping in `asyncio.wait`.
 
 ## CI quirks
 
@@ -99,3 +106,12 @@ PR descriptions document **results and non-obvious decisions**, not a
 file-by-file changelog (recoverable from git diff). State the main outcome,
 then explain *why* decisions were made when the reasoning isn't obvious from
 the code.
+
+### Cross-platform
+
+This project runs on Windows, macOS, and Linux. CI tests on all three.
+When writing code or tests that touch OS-level APIs (sockets, files,
+processes), always consider platform differences. `socket.socketpair()`
+returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
+`getsockname()` behavior. Local tests on one OS are not proof the
+code works on others.
