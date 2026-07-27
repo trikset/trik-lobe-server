@@ -95,6 +95,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### After merge
 
+- Squash merge the PR: `gh pr merge <N> --squash --subject "<subject>" --body "<body>"`
+- Check main branch CI status: `gh run list --branch main --limit 3`
+- **If main CI fails**: treat as highest priority — fix immediately, don't move on
 - Update local main: `git switch main && git pull`
 - Delete merged feature branch: `git branch --delete branch-name`
 
@@ -142,7 +145,8 @@ architecture, or conventions, document it in AGENTS.md first.
 
 ### Merge discipline
 
-- Keep history clean for main branch with squash-merge if merging PRs
+- Keep history clean with squash-merge: `gh pr merge <N> --squash --subject "<title>" --body "<body>"`
+- Never push a merge commit to main — always merge via GitHub API
 - Merge to main only by direct explicit command by user
 - Otherwise — no merge to main
 
