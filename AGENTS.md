@@ -33,6 +33,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - No need to run pre-commit hooks (installed to git, runs automatically)
 - If docs changed: run `uv run mdformat AGENTS.md README.md MODERNIZATION.md --check`
 - If adding new tool/config: update this Hooks section
+- If reorganizing docs: run `git diff --stat` and verify nothing was accidentally deleted
 - Check if `uv.lock` should be committed (dependency changes)
 - Check if `pyproject.toml` should be committed (config changes)
 
@@ -76,6 +77,14 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Check if failure is platform-specific (Windows/macOS/Linux)
 - Check if failure is flaky (retry once)
 - Check pytest coverage output
+
+### PR finalization (after CI green)
+
+- Review PR description for mojibake, encoding, or broken links
+- If description was passed via CLI, verify with `gh pr view --json body`
+- Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
+- Push signed commit
+- Mark PR as ready for review
 
 ### After push (retrospective)
 
@@ -232,6 +241,16 @@ code works on others.
 - Retrospective after push: analyze decisions, suggest improvements
 - Document lessons learned in this section
 - Update Hooks section when new patterns emerge
+
+### Root cause analysis
+
+When something goes wrong, trace past the surface error to one of:
+
+- **Missing hook**: No trigger or checklist exists for this action — add one
+- **Missing in docs**: The knowledge wasn't recorded — write it down
+- **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
+
+Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search gap will repeat.
 
 ## Rationale
 
