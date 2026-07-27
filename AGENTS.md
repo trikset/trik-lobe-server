@@ -58,6 +58,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
   or `git pull --rebase origin main`
 - Re-validate: `uv run ruff check . && uv run pytest`
+- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md and/or AGENTS.md
 - Ensure AGENTS.md updated with any new decisions/patterns
 - Check if PR title follows Conventional Commits format
 - Check if PR description has "Out of scope" section
