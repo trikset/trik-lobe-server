@@ -15,7 +15,7 @@ uv run ruff format .         # format
 uv run mdformat README.md MODERNIZATION.md AGENTS.md --check  # markdown (explicit list, no --exclude flag)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
@@ -74,7 +74,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### Before branch
 
-- Create feature branch from main: `git checkout main && git pull && git checkout -b feat/name`
+- Create feature branch from main: `git switch main && git pull && git switch --create feat/name`
 - Branch naming: `feat/description`, `fix/description`, `docs/description`
 - Keep feature branches focused (one idea per branch)
 
@@ -85,15 +85,15 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Ensure AGENTS.md updated with any new decisions/patterns
 - Check if PR title follows Conventional Commits format
 - Check if PR description has "Out of scope" section
-- Run `git log --oneline -5` to review commits
-- Sign commits (no `--no-sign` for PRs)
+- Run `git log --oneline --max-count=5` to review commits
+- Sign commits (no `--no-gpg-sign` for PRs)
 - Commit hypothesis in feature-branches for temporary knowledge storage
 
 ### Before test
 
 - Ensure dependencies synced: `uv sync`
 - Run full suite: `uv run pytest`
-- Or single test: `uv run pytest tests/test_model.py::test_name -x`
+- Or single test: `uv run pytest tests/test_model.py::test_name --exitfirst`
 
 ### After CI failure
 
@@ -116,8 +116,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### After merge
 
-- Update local main: `git checkout main && git pull`
-- Delete merged feature branch: `git branch -d branch-name`
+- Update local main: `git switch main && git pull`
+- Delete merged feature branch: `git branch --delete branch-name`
 
 ## Python version
 
@@ -137,7 +137,7 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 ## Tests
 
 87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
-Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
+Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --exitfirst`.
 
 `reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
 pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
@@ -194,16 +194,16 @@ architecture, or conventions, document it in AGENTS.md first.
 ### Push discipline
 
 - **Feature branches**: unsigned push allowed (`git push` without signing)
-- **PRs**: never use `--no-sign` (signing required for merge approval)
+- **PRs**: never use `--no-gpg-sign` (signing required for merge approval)
 - **main branch**: never push directly — only merge via PR
 - Push unsigned for CI runs on feature branches
 - Always ask if doubt, always ask if unsure
 
 ### Commit signing
 
-- **Feature branches**: may use `--no-sign` to prevent GPG lock
+- **Feature branches**: may use `--no-gpg-sign` to prevent GPG lock
 - **Push unsigned**: allowed for CI runs (feature branches)
-- **PRs**: never use `--no-sign` (signing required for merge)
+- **PRs**: never use `--no-gpg-sign` (signing required for merge)
 - **main branch**: never push directly
 
 ### Merge discipline
@@ -219,6 +219,13 @@ architecture, or conventions, document it in AGENTS.md first.
 - Retrospective after push: analyze decisions, suggest improvements
 - Document lessons learned in this section
 - Update Hooks section when new patterns emerge
+
+### Tool options
+
+- Use standard, long options for all tools to avoid bias
+- Verify which options are documented before adding to commands
+- Git modern commands: prefer `git switch` over `git checkout`
+- Reference: `git --help`, `pytest --help`, `bandit --help`
 
 ### PR titles
 
