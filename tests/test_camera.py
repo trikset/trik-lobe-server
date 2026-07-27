@@ -134,6 +134,32 @@ def test_factory_webcam() -> None:
     assert isinstance(cam, WebcamCamera)
 
 
+def test_webcam_camera_init() -> None:
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    mock_cv2.VideoCapture.return_value = mock_capture
+    mock_capture.isOpened.return_value = True
+
+    with patch.dict("sys.modules", {"cv2": mock_cv2}):
+        cam = WebcamCamera(0)
+
+    mock_cv2.VideoCapture.assert_called_once_with(0)
+    assert cam._cv2 is mock_cv2
+    assert cam._camera is mock_capture
+
+
+def test_webcam_camera_init_not_opened() -> None:
+    mock_cv2 = MagicMock()
+    mock_capture = MagicMock()
+    mock_cv2.VideoCapture.return_value = mock_capture
+    mock_capture.isOpened.return_value = False
+
+    with patch.dict("sys.modules", {"cv2": mock_cv2}):
+        WebcamCamera(5)
+
+    mock_cv2.VideoCapture.assert_called_once_with(5)
+
+
 def test_url_camera_no_auth() -> None:
     cam = UrlCamera("http://example.com")
     assert cam._auth is None
