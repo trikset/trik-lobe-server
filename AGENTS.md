@@ -38,15 +38,11 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### Before push
 
-- Check for useless files: `git status` — review all staged/unstaged changes
-- Check for secrets: `git diff --cached` — ensure no API keys, tokens, passwords
-- Check if `uv.lock` changed (dependency updates)
-- Check if `pyproject.toml` changed (tool config updates)
-- Run `git diff --stat` to understand scope of changes
-- Run full pre-push analysis: `uv run ruff check . && uv run pytest`
-- **What I have learned:** Review lessons learned, suggest improvements
-- Squash merge if mistake (ignored files, secrets): `git reset --soft HEAD~1 && git commit`
-- Feature branches: unsigned push allowed for CI
+- Check for useless files and secrets: `git status && git diff --cached`
+- Check if config files changed: `git diff --stat`
+- Run pre-push analysis: `uv run ruff check . && uv run pytest`
+- Review lessons learned, suggest improvements
+- Squash merge if mistake: `git reset --soft HEAD~1 && git commit`
 - Never push to main directly
 
 ### Before branch
@@ -76,22 +72,17 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### After CI failure
 
-- Check ruff (lint), basedpyright (types), pylint (quality)
-- Check bandit (security), vulture (dead code)
-- Check pytest (tests + coverage)
-- Runner-specific: check platform differences (Windows/macOS/Linux)
+- Check each tool: ruff, basedpyright, pylint, bandit, vulture, pytest
 - Check if failure is platform-specific (Windows/macOS/Linux)
 - Check if failure is flaky (retry once)
+- Check pytest coverage output
 
 ### After push (retrospective)
 
-- Analyze what decisions were wrong or unexpected
-- What tests were hard to write? Suggest improvements
-- What code was hard to understand? Suggest comments
-- What decisions were made that should be documented?
-- What patterns emerged that should be added to AGENTS.md?
-- Small code comments are fine to prevent bias
-- Improve yourself with retrospective and hooks
+- Analyze decisions, suggest improvements
+- Suggest comments for unclear code
+- Suggest docs updates for non-obvious patterns
+- Update AGENTS.md with new patterns
 
 ### After merge
 
@@ -145,7 +136,6 @@ architecture, or conventions, document it in AGENTS.md first.
 - Keep history clean for main branch with squash-merge if merging PRs
 - Merge to main only by direct explicit command by user
 - Otherwise — no merge to main
-- Always ask if doubt, always ask if unsure
 
 ### PR titles
 
@@ -214,6 +204,13 @@ code works on others.
 - Verify commands work before documenting them
 - Check `--help` output for standard options
 - Use long options to avoid bias and ensure portability
+
+### Progressive disclosure
+
+- Show only what's needed at the moment
+- Let agent read more when needed
+- Don't overwhelm with all information upfront
+- Keep context small and focused
 
 ### Continuous improvement
 
