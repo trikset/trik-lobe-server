@@ -282,3 +282,47 @@ async def test_run_forever_connect_failure(settings: Settings, mock_model: Magic
         with patch("asyncio.sleep", stop_on_reconnect):
             await server.run_forever()
     assert server._running is False
+
+
+@pytest.mark.asyncio
+async def test_run_forever_success(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+    mock_sock = MagicMock()
+    server = _make_server(settings, mock_model, mock_camera)
+
+    async def handle_and_stop(_sock: socket.socket) -> None:
+        server._running = False
+
+    with (
+        patch.object(server, "_connect_once", return_value=mock_sock),
+        patch.object(server, "_handle_connection", side_effect=handle_and_stop),
+    ):
+        await server.run_forever()
+
+    mock_sock.close.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_connection_cancels_pending(
+    settings: Settings, mock_model: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    import threading
+
+    sock, reader = real_sock_pair
+
+    block = threading.Event()
+    mock_camera = MagicMock()
+    mock_camera.capture.side_effect = lambda: (block.wait(10), None)[1]
+
+    server = _make_server(settings, mock_model, mock_camera)
+    server._running = True
+
+    async def send_quit() -> None:
+        await asyncio.sleep(0.1)
+        await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
+
+    asyncio.create_task(send_quit())  # noqa: RUF006
+    with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):
+        await server._handle_connection(sock)
+
+    server._running = False
+    block.set()

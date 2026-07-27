@@ -17,7 +17,7 @@ uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit -r lobe_server/ TRIKLobeServer.py --skip B107  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
-uv run pytest --cov=lobe_server --cov-fail-under=90  # tests + coverage
+uv run pytest                         # tests + coverage (config in pyproject.toml)
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ```
 
@@ -45,12 +45,33 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 
 ## Tests
 
-73 tests, 93% coverage. All mock-based — no real camera, network, or TFLite.
+87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
 Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json -x`.
 
 `reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
 pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 0 errors expected.
+
+### Test coverage notes
+
+- Coverage config is single-sourced in `pyproject.toml`: `addopts = "--cov"`,
+  `source = ["lobe_server"]`, `fail_under = 100`. CI runs bare `uv run pytest`.
+  To skip coverage locally: `uv run pytest --no-cov`.
+- WebcamCamera.__init__ requires cv2 (native C extension) — tests bypass it
+  with `patch.object(WebcamCamera, "__init__", return_value=None)`.
+  To reach 100%, use `@patch.dict("sys.modules", {"cv2": mock_cv2})`.
+- `load_model` had dead code (TFLite fallback unreachable after ONNX early
+  return). Removed, not tested.
+- `_handle_connection` cancel loop (pending task cancellation) requires a
+  blocking prediction so tasks are still pending when reader finishes.
+  Use `threading.Event` to block `camera.capture()` in `asyncio.to_thread`.
+- C-level builtins (e.g. `socket.getsockname`) can't be patched on
+  instances — `patch.object` raises "read-only attribute". Patch the
+  class instead: `patch.object(socket.socket, "getsockname", ...)`.
+- `asyncio.wait(FIRST_COMPLETED)` silently swallows task exceptions:
+  if task A raises but B completes first, the exception is lost and
+  tests appear to pass. When you need to verify a task succeeds,
+  `await` it directly instead of wrapping in `asyncio.wait`.
 
 ## CI quirks
 
@@ -78,3 +99,19 @@ This session context is ephemeral — all state is lost when the conversation en
 **AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
 to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
 architecture, or conventions, document it in AGENTS.md first.
+
+### PR descriptions
+
+PR descriptions document **results and non-obvious decisions**, not a
+file-by-file changelog (recoverable from git diff). State the main outcome,
+then explain *why* decisions were made when the reasoning isn't obvious from
+the code.
+
+### Cross-platform
+
+This project runs on Windows, macOS, and Linux. CI tests on all three.
+When writing code or tests that touch OS-level APIs (sockets, files,
+processes), always consider platform differences. `socket.socketpair()`
+returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
+`getsockname()` behavior. Local tests on one OS are not proof the
+code works on others.

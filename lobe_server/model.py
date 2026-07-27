@@ -81,9 +81,6 @@ def load_model(path: str | Path) -> ImageModel:
     if onnx_files:
         logger.info("Loading model: %s", model_path / onnx_files[0].name)
         return ONNXImageModel.load(model_path, onnx_files[0].name)
-    if tflite_files:
-        logger.info("Loading model: %s", model_path / tflite_files[0].name)
-        return TFLiteImageModel.load(model_path, tflite_files[0].name)
 
     msg = f"No model found at {model_path}. Need a .tflite or .onnx file."
     raise FileNotFoundError(msg)
