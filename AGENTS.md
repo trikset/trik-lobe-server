@@ -100,12 +100,41 @@ This session context is ephemeral — all state is lost when the conversation en
 to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
 architecture, or conventions, document it in AGENTS.md first.
 
+### PR titles
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
+`<type>: <description>` or `<type>(<scope>): <description>`.
+
+Use imperative mood ("add" not "added"). Keep under 50 characters.
+
+Types: `feat`, `fix`, `refactor`, `ci`, `docs`, `test`, `chore`, `perf`.
+Scope is optional — use when the change is confined to one area of the codebase
+(e.g. `model`, `server`, `camera`, `deps`). Let the project's structure
+dictate scope names, not a fixed list.
+
+Link issues in the PR body with `Closes #N` or `Fixes <full-url>`.
+
 ### PR descriptions
 
 PR descriptions document **results and non-obvious decisions**, not a
 file-by-file changelog (recoverable from git diff). State the main outcome,
 then explain *why* decisions were made when the reasoning isn't obvious from
 the code.
+
+Add "How to test" steps only for unobvious changes (complex logic,
+multi-step reproduction). Not needed for simple fixes or small
+improvements already covered by tests.
+
+Include an "Out of scope" section when you explicitly decided *not* to
+do something in this PR — documenting intentional boundaries prevents
+scope creep in review.
+
+### PR size and focus
+
+Aim for one idea per PR. Don't mix refactors with behavior changes. Keep
+diffs under 400 lines when possible — large PRs get rubber-stamped or
+delayed. If a change is big, split into stacked PRs (prerequisite first,
+then follow-ups).
 
 ### Cross-platform
 
