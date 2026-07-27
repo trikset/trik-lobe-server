@@ -61,7 +61,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Check if PR title follows Conventional Commits format
 - Check if PR description has "Out of scope" section
 - Run `git log --oneline --max-count=5` to review commits
-- Sign commits (no `--no-gpg-sign` for PRs)
+- Sign commits (always sign for PRs — `--no-gpg-sign` is for feature branches only)
 - Commit hypothesis in feature-branches for temporary knowledge storage
 
 ### Before test
@@ -182,6 +182,12 @@ returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
 `getsockname()` behavior. Local tests on one OS are not proof the
 code works on others.
 
+### Tooling assumptions
+
+- Never assume tooling behaves intuitively — verify
+- Shell escaping is a common trap: test with `echo` before passing to real command
+- When in doubt, route through files: write to temp file, pipe to command
+
 ## Agent memory
 
 ### Tool options
@@ -192,6 +198,14 @@ code works on others.
 - Reference: `git --help`, `pytest --help`, `bandit --help`
 - **When asking questions**: answer 1 must be suggested preferred solution
 - **Format questions** so user can answer "yes to all, go" — save their time
+
+### Shell escaping
+
+- Each shell has different escape rules — never assume PowerShell behaves like bash
+- PowerShell double-quoted strings: `\b` = backspace (0x08), `\n` = newline, `\r` = CR, `` ` `` = backtick escape
+- When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
+- For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
+- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a file rather than inlining
 
 ### Three solutions
 
@@ -313,6 +327,24 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
   if task A raises but B completes first, the exception is lost and
   tests appear to pass. When you need to verify a task succeeds,
   `await` it directly instead of wrapping in `asyncio.wait`.
+
+## CI quirks
+
+### CI setup
+
+`astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
+
+- `setup-uv` installs uv with built-in caching on GitHub-hosted runners
+- Python version is read from `.python-version` — never hardcoded in YAML
+- `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
+
+### Runner notes
+
+- `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
+- Use `windows-2022`, `ubuntu-22.04`, `macos-latest` for builds.
+- `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
+- `macos-latest` is ARM64 (Apple Silicon).
+- Build produces per-OS artifacts via PyInstaller `--onefile`.
 
 ## Python version
 
