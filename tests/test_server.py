@@ -320,9 +320,9 @@ async def test_handle_connection_cancels_pending(
         await asyncio.sleep(0.1)
         await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
 
-    quit_task = asyncio.create_task(send_quit())
-    await server._handle_connection(sock)
-    await quit_task
+    asyncio.create_task(send_quit())  # noqa: RUF006
+    with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):
+        await server._handle_connection(sock)
 
     server._running = False
     block.set()
