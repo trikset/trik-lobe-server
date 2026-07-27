@@ -92,3 +92,10 @@ This session context is ephemeral — all state is lost when the conversation en
 **AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
 to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
 architecture, or conventions, document it in AGENTS.md first.
+
+### PR descriptions
+
+PR descriptions document **results and non-obvious decisions**, not a
+file-by-file changelog (recoverable from git diff). State the main outcome,
+then explain *why* decisions were made when the reasoning isn't obvious from
+the code.
