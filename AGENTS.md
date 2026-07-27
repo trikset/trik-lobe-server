@@ -1,28 +1,5 @@
 # AGENTS.md — trik-lobe-server
 
-## Project
-
-Desktop TCP server that runs ML inference (ONNX/TFLite) and sends results to TRIK robots.
-Entrypoint: `TRIKLobeServer.py`. Package: `lobe_server/`.
-
-## Commands
-
-```bash
-uv sync                      # install everything (Python 3.12 required)
-uv sync --frozen             # CI: use locked versions
-uv run ruff check .          # lint
-uv run ruff format .         # format
-uv run mdformat README.md MODERNIZATION.md AGENTS.md --check  # markdown (explicit list, no --exclude flag)
-uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
-uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
-uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
-uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
-```
-
-**Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
-
 ## Hooks
 
 Action triggers for AI agents. Before/when/after each action, follow the
@@ -81,6 +58,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before PR
 
 - Read PR discipline: PR titles, PR descriptions, PR size and focus
+- Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
+  or `git pull --rebase origin main`
 - Re-validate: `uv run ruff check . && uv run pytest`
 - Ensure AGENTS.md updated with any new decisions/patterns
 - Check if PR title follows Conventional Commits format
@@ -118,51 +97,6 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 - Update local main: `git switch main && git pull`
 - Delete merged feature branch: `git branch --delete branch-name`
-
-## Python version
-
-**Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
-Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
-
-## Architecture
-
-- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
-  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
-  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
-  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
-  `ai_edge_litert` is a mandatory dependency.
-- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
-  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
-
-## Tests
-
-87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
-Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --exitfirst`.
-
-`reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
-pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
-0 errors expected.
-
-### Test coverage notes
-
-- Coverage config is single-sourced in `pyproject.toml`: `addopts = "--cov"`,
-  `source = ["lobe_server"]`, `fail_under = 100`. CI runs bare `uv run pytest`.
-  To skip coverage locally: `uv run pytest --no-cov`.
-- WebcamCamera.__init__ requires cv2 (native C extension) — tests bypass it
-  with `patch.object(WebcamCamera, "__init__", return_value=None)`.
-  To reach 100%, use `@patch.dict("sys.modules", {"cv2": mock_cv2})`.
-- `load_model` had dead code (TFLite fallback unreachable after ONNX early
-  return). Removed, not tested.
-- `_handle_connection` cancel loop (pending task cancellation) requires a
-  blocking prediction so tasks are still pending when reader finishes.
-  Use `threading.Event` to block `camera.capture()` in `asyncio.to_thread`.
-- C-level builtins (e.g. `socket.getsockname`) can't be patched on
-  instances — `patch.object` raises "read-only attribute". Patch the
-  class instead: `patch.object(socket.socket, "getsockname", ...)`.
-- `asyncio.wait(FIRST_COMPLETED)` silently swallows task exceptions:
-  if task A raises but B completes first, the exception is lost and
-  tests appear to pass. When you need to verify a task succeeds,
-  `await` it directly instead of wrapping in `asyncio.wait`.
 
 ## Guardrails
 
@@ -213,20 +147,6 @@ architecture, or conventions, document it in AGENTS.md first.
 - Otherwise — no merge to main
 - Always ask if doubt, always ask if unsure
 
-### Continuous improvement
-
-- **Always learn, always improve**
-- Retrospective after push: analyze decisions, suggest improvements
-- Document lessons learned in this section
-- Update Hooks section when new patterns emerge
-
-### Tool options
-
-- Use standard, long options for all tools to avoid bias
-- Verify which options are documented before adding to commands
-- Git modern commands: prefer `git switch` over `git checkout`
-- Reference: `git --help`, `pytest --help`, `bandit --help`
-
 ### PR titles
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
@@ -271,3 +191,132 @@ processes), always consider platform differences. `socket.socketpair()`
 returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
 `getsockname()` behavior. Local tests on one OS are not proof the
 code works on others.
+
+## Agent memory
+
+### Tool options
+
+- Use standard, long options for all tools to avoid bias
+- Verify which options are documented before adding to commands
+- Git modern commands: prefer `git switch` over `git checkout`
+- Reference: `git --help`, `pytest --help`, `bandit --help`
+- **When asking questions**: answer 1 must be suggested preferred solution
+
+### Three solutions
+
+- Always think of three solutions: small effort, best practice, unobvious
+- Present all three to user, let them choose
+- Answer 1 is always the preferred solution based on analysis
+
+### Verification
+
+- Verify commands work before documenting them
+- Check `--help` output for standard options
+- Use long options to avoid bias and ensure portability
+
+### Continuous improvement
+
+- **Always learn, always improve**
+- Retrospective after push: analyze decisions, suggest improvements
+- Document lessons learned in this section
+- Update Hooks section when new patterns emerge
+
+## Rationale
+
+### Why agent-centric structure
+
+- Agents read files sequentially, so important info should be at the top
+- Action-oriented instructions are more useful than passive documentation
+- Clear hierarchy helps agents find what they need quickly
+
+### Why single file
+
+- Maintains context, avoids navigation overhead
+- Agents can read once and have all information
+- Avoids splitting related information across files
+
+### Why long options
+
+- Avoids bias (short options may not be documented everywhere)
+- More portable across different systems and versions
+- Clearer for humans reading the documentation
+
+### Why verify before documenting
+
+- Prevents adding broken commands to documentation
+- Ensures documented commands actually work
+- Builds trust in the documentation
+
+### Why three solutions
+
+- Gives user choice based on their preferences
+- Considers different approaches (quick vs thorough)
+- Avoids tunnel vision on single solution
+
+## Project
+
+Desktop TCP server that runs ML inference (ONNX/TFLite) and sends results to TRIK robots.
+Entrypoint: `TRIKLobeServer.py`. Package: `lobe_server/`.
+
+## Commands
+
+```bash
+uv sync                      # install everything (Python 3.12 required)
+uv sync --frozen             # CI: use locked versions
+uv run ruff check .          # lint
+uv run ruff format .         # format
+uv run mdformat README.md MODERNIZATION.md AGENTS.md --check  # markdown (explicit list, no --exclude flag)
+uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
+uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
+uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
+uv run pytest                         # tests + coverage (config in pyproject.toml)
+uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
+```
+
+**Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
+
+## Architecture
+
+- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
+  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
+  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
+  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
+  `ai_edge_litert` is a mandatory dependency.
+- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
+  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
+
+## Tests
+
+87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
+Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --exitfirst`.
+
+`reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
+pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
+0 errors expected.
+
+### Test coverage notes
+
+- Coverage config is single-sourced in `pyproject.toml`: `addopts = "--cov"`,
+  `source = ["lobe_server"]`, `fail_under = 100`. CI runs bare `uv run pytest`.
+  To skip coverage locally: `uv run pytest --no-cov`.
+- WebcamCamera.__init__ requires cv2 (native C extension) — tests bypass it
+  with `patch.object(WebcamCamera, "__init__", return_value=None)`.
+  To reach 100%, use `@patch.dict("sys.modules", {"cv2": mock_cv2})`.
+- `load_model` had dead code (TFLite fallback unreachable after ONNX early
+  return). Removed, not tested.
+- `_handle_connection` cancel loop (pending task cancellation) requires a
+  blocking prediction so tasks are still pending when reader finishes.
+  Use `threading.Event` to block `camera.capture()` in `asyncio.to_thread`.
+- C-level builtins (e.g. `socket.getsockname`) can't be patched on
+  instances — `patch.object` raises "read-only attribute". Patch the
+  class instead: `patch.object(socket.socket, "getsockname", ...)`.
+- `asyncio.wait(FIRST_COMPLETED)` silently swallows task exceptions:
+  if task A raises but B completes first, the exception is lost and
+  tests appear to pass. When you need to verify a task succeeds,
+  `await` it directly instead of wrapping in `asyncio.wait`.
+
+## Python version
+
+**Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
+Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
