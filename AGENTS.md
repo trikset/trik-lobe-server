@@ -201,6 +201,7 @@ code works on others.
 - Git modern commands: prefer `git switch` over `git checkout`
 - Reference: `git --help`, `pytest --help`, `bandit --help`
 - **When asking questions**: answer 1 must be suggested preferred solution
+- **Format questions** so user can answer "yes to all, go" — save their time
 
 ### Three solutions
 
