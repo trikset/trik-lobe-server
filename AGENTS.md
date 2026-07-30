@@ -265,8 +265,12 @@ code works on others.
   `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
   fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
   `ai_edge_litert` is a mandatory dependency.
-- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
-  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
+- `lobe_server/server.py`: `LobeServer` — TCP client connecting to robot's mailbox
+  server. Sends `register`, `self`, `keepalive`, `data:<prediction>`. Receives
+  `keepalive` every 3s from robot (hardcoded in trikRuntime, not negotiated).
+  `_reader` is the sole health monitor: breaks on empty recv or `RECV_TIMEOUT`.
+  `_keepalive_loop`/`_prediction_loop` are outbound-only — death detection is
+  the reader's job via heartbeat timeout.
 
 ## Commands
 

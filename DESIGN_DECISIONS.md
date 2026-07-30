@@ -186,4 +186,79 @@ C) Microsoft Lobe legacy:
     model_path/
         signature.json
         model.tflite
+
+## [2026-07-30] Connection protocol architecture
+
+**Context:** The lobe server is a TCP client that connects to the robot's mailbox
+server. Understanding the robot's protocol is essential for correct connection
+health management.
+
+**What the lobe server sends (outbound):**
+- `register:<port>:<hull>` — on connect, registers with the robot
+- `self:<hull>` — identifies itself
+- `keepalive` — every `KEEPALIVE_INTERVAL=5s`
+- `data:<prediction>` — every `PREDICTION_INTERVAL=0.2s`
+
+**What the robot sends (inbound):**
+- `self:<hull>` — during handshake, identifies itself
+- `connection:<ip>:<port>:<hull>` — during handshake, informs about other robots
+- `data:quit` — explicit shutdown command
+- `keepalive` — every **3000ms** (hardcoded in `trikNetwork/src/connection.cpp`,
+  never negotiated on the wire)
+
+**Heartbeat on the robot side:**
+- Robot kills the TCP connection if **no data received for 5000ms**
+  (`heartbeatTime` in `connection.cpp`)
+- The robot's keepalive timer resets on every outbound message, so under
+  normal operation the 5s timeout never fires (lobe server sends keepalive
+  every 5s and predictions every 0.2s)
+
+## [2026-07-30] Connection health detection strategy
+
+**Context:** The `_reader` task is the sole connection health monitor.
+`_keepalive_loop` and `_prediction_loop` are strictly outbound — they never
+detect a dead peer. `contextlib.suppress(OSError)` in `_send` is intentional:
+send errors are transient glitches; death detection is the reader's job.
+
+**Decision:**
+- **Primary: `RECV_TIMEOUT`** — `asyncio.wait_for(sock_recv, timeout=10)` in
+  `_reader`. The robot sends `keepalive` every 3s, so under normal operation
+  the timeout never fires. After 10s of silence (3 missed keepalives + margin),
+  the reader breaks and triggers reconnection.
+- **Not used: TCP keepalive (`SO_KEEPALIVE`)** — requiring platform-specific API
+  (`SIO_KEEPALIVE_VALS` on Windows, `TCP_KEEPIDLE` on Linux, `TCP_KEEPALIVE` on
+  macOS) adds complexity without benefit since the application-level keepalive
+  already provides a faster, platform-agnostic signal.
+
+**Rationale:**
+- `asyncio.wait_for` is stdlib, works identically on all three platforms
+- No new dependencies
+- 10s timeout gives ~3s margin over the 3s keepalive interval
+
+## [2026-07-30] Cross-platform audit findings
+
+**Context:** A comprehensive cross-platform audit was performed after the
+heartbeat timeout feature was implemented. Key findings and resolutions:
+
+| Issue | Fix | Rationale |
+|-------|-----|-----------|
+| CI mdformat step fails on `windows-latest` | Added `shell: bash` | PowerShell doesn't expand `*.md` globs |
+| PyInstaller `--icon=.ico` breaks on macOS | Made icon platform-conditional | `.ico` is Windows-only; macOS expects `.icns` |
+| Hardcoded OS paths in tests | Replaced with `TemporaryDirectory` | Tests failed on non-matching platforms |
+| `NamedTemporaryFile` locking on Windows | Replaced with `TemporaryDirectory` | Windows prevents reopening the file handle |
+| `asyncio.get_event_loop()` deprecated | Migrated to `get_running_loop()` | Deprecated since 3.10, emits warnings in 3.12 |
+| `TCP_NODELAY` before `connect()` | Moved after `connect()` | Implementation-defined on some platforms |
+| `requires-python` mismatch | Bumped to `>=3.12` | Match `.python-version` and project convention |
+| mdformat command in AGENTS.md | Changed to Python glob | Cross-platform: `*.md` not expanded by PowerShell |
+
+**Known gaps (accepted, not fixed):**
+- **`asyncio.wait_for` + `sock_recv` on Windows IOCP** — cancelling an in-flight
+  `sock_recv` via `wait_for` may leave the socket in an indeterminate state on
+  Windows. This is a known CPython issue. Not fixed because (a) it passes CI on
+  `windows-latest`, (b) the alternative (`asyncio.open_connection` with a stream
+  reader) adds complexity without measurable benefit, and (c) on timeout the
+  socket is about to be closed and reconnected anyway.
+- **`ai-edge-litert` missing Intel Mac wheel** — the package has no macOS x86_64
+  wheel. `macos-latest` CI runner is ARM64 (Apple Silicon), so CI is unaffected.
+  Intel Mac users would need to compile from source or use Docker.
 ```

@@ -64,6 +64,17 @@ if task A raises but B completes first, the exception is lost and
 tests appear to pass. When you need to verify a task succeeds,
 `await` it directly instead of wrapping in `asyncio.wait`.
 
+### Windows-specific test patterns
+
+- **`socket.socketpair()` returns `AF_INET` on Windows** but `AF_UNIX` on
+  macOS/Linux. This affects `getsockname()` return values. Tests that need
+  `getsockname()` should patch it on the class, not the instance.
+- **`tempfile.NamedTemporaryFile(delete=False)`** can fail on Windows because
+  the OS prevents reopening a file still held by the creating handle.
+  Use `TemporaryDirectory` + `Path.write_text()` instead.
+- **`asyncio.get_event_loop()`** is deprecated. Use `get_running_loop()`.
+  Pytest-asyncio always provides a running loop, so the replacement is safe.
+
 ### Coverage verification
 
 After adding tests, verify with `--cov-report=term-missing` that
