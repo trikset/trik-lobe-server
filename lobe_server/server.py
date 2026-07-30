@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class LobeServer:
-    KEEPALIVE_INTERVAL = 5  # robot sends keepalive every 3s; 5s is adequate since predictions also reset heartbeat timer
+    KEEPALIVE_INTERVAL = 5  # robot sends every 3s; predictions also reset heartbeat timer
     PREDICTION_INTERVAL = 0.2
     RECONNECT_DELAY = 3
     BUFFER_SIZE = 255
