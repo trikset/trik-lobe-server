@@ -102,9 +102,16 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 - Review PR description for mojibake, encoding, or broken links
 - If description was passed via CLI, verify with `gh pr view --json body`
+- If this PR is stacked on another PR (base != main), add "Depends on #N" to the description
 - Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
 - Push signed commit
 - Mark PR as ready for review
+
+### After push to existing PR
+
+- If new commits were pushed after the PR was created, update the PR body:
+  `gh pr edit <N> --body-file .tmp/pr-body.md`
+- Stale PR bodies are misleading — the description must reflect all commits
 
 ### After push (retrospective)
 
@@ -137,12 +144,17 @@ architecture, or conventions, document it in AGENTS.md first.
 
 PR description must cover:
 
-- **Root cause** — what problem does this solve?
+- **Root cause** — what problem does this solve? (not: "various X accumulated" —
+  trace to the actual reason: missing check, missing doc, wrong assumption)
 - **Profit** — measurable benefit (numbers if possible)
 - **Trade-offs** — alternatives considered and rejected
 - **Verification** — proof not visible in diff or CI checks
 
 Do NOT list changed files (visible in diff) or CI status (visible in checks).
+Do NOT list commit hashes (fragile, visible in PR commit tab).
+
+Before writing the body, check: is the base `main`? If not, add
+"Depends on #N" referencing the base PR.
 
 ### Pattern recurrence escalation
 
