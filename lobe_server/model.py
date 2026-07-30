@@ -117,8 +117,12 @@ class ONNXImageModel:
         self._input_size = input_size
         self._is_nchw = False
         shape = session.get_inputs()[0].shape
-        # Heuristic: NHWC by default. Detect NCHW when channel dim is 1 or 3
-        # and the last dim is neither. Covers all common image classification.
+        # Heuristic: detect NCHW vs NHWC layout for 4D tensors.
+        # NCHW: channels in dim 1 (e.g., [1, 3, 224, 224])
+        # NHWC: channels in dim 3 (e.g., [1, 224, 224, 3])
+        # When both dims 1 and 3 are plausible channel counts (1 or 3),
+        # fall back to NHWC (common for TF-exported ONNX models). This
+        # mis-detects NCHW with 1x1 spatial dims like [1, 3, 1, 1].
         if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
             self._is_nchw = True
 
@@ -160,7 +164,10 @@ class ONNXImageModel:
         output = self._session.run(None, {self._input_name: processed})
         raw = output[0]
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
-        paired = list(zip(self._labels, confidences, strict=False))
+        if len(self._labels) != len(confidences):
+            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            raise ValueError(msg)
+        paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
         return ClassificationResult(paired)
 
@@ -194,7 +201,10 @@ class TFLiteImageModel:
         self._interpreter.invoke()
         raw = self._interpreter.get_tensor(self._output_index)
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
-        paired = list(zip(self._labels, confidences, strict=False))
+        if len(self._labels) != len(confidences):
+            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            raise ValueError(msg)
+        paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
         return ClassificationResult(paired)
 
