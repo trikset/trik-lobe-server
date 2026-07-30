@@ -34,11 +34,9 @@ def minimal_ini() -> str:
 
 
 def test_load_settings_full(sample_ini: str) -> None:
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
-        f.write(sample_ini)
-        tmp = Path(f.name)
-
-    try:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text(sample_ini, encoding="utf-8")
         s = load_settings(tmp)
         assert s.server_ip == "192.168.1.10"
         assert s.my_hull_number == 5
@@ -49,22 +47,16 @@ def test_load_settings_full(sample_ini: str) -> None:
         assert s.camera_number == 1
         assert s.username == "user"
         assert s.password == "pass"
-    finally:
-        tmp.unlink()
 
 
 def test_load_settings_minimal(minimal_ini: str) -> None:
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
-        f.write(minimal_ini)
-        tmp = Path(f.name)
-
-    try:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text(minimal_ini, encoding="utf-8")
         s = load_settings(tmp)
         assert s.server_ip == "127.0.0.1"
         assert s.my_hull_number == 2
         assert s.server_port == 8889
-    finally:
-        tmp.unlink()
 
 
 def test_load_settings_not_found() -> None:
@@ -81,10 +73,11 @@ def test_load_settings_default_path() -> None:
 
 
 def test_resolve_model_path_custom() -> None:
-    settings = MagicMock()
-    settings.model_path = "/custom/path"
-    result = resolve_model_path(settings)
-    assert result == Path("/custom/path").resolve()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        settings = MagicMock()
+        settings.model_path = tmpdir
+        result = resolve_model_path(settings)
+        assert result == Path(tmpdir).resolve()
 
 
 def test_resolve_model_path_default() -> None:
@@ -96,11 +89,13 @@ def test_resolve_model_path_default() -> None:
 
 
 def test_resolve_model_path_frozen() -> None:
-    settings = MagicMock()
-    settings.model_path = ""
-    with (
-        patch.object(sys, "frozen", True, create=True),
-        patch.object(sys, "executable", "/usr/local/bin/server.exe"),
-    ):
-        result = resolve_model_path(settings)
-    assert result == Path("/usr/local/bin").resolve()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        settings = MagicMock()
+        settings.model_path = ""
+        fake_exe = str(Path(tmpdir) / "server.exe")
+        with (
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "executable", fake_exe),
+        ):
+            result = resolve_model_path(settings)
+        assert result == Path(tmpdir).resolve()
