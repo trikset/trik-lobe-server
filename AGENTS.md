@@ -356,6 +356,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 - When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
 - For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
 - Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a `.tmp/<file>` rather than inlining
+- **Commit messages with special chars** — PowerShell interprets `-1`,
+  backticks, and quotes in `git commit -m` as command syntax. Always use
+  `git commit --file .tmp/msg.txt` for non-trivial messages.
 
 ### Three solutions
 
