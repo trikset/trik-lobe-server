@@ -88,6 +88,15 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Run full suite: `uv run pytest`
 - Or single test: `uv run pytest tests/test_model.py::test_name --exitfirst`
 
+### On tool error during execution
+
+- When a command outputs `fatal:`, `error:`, or exits non-zero: **stop immediately**
+- Do not proceed to the next command until root cause is identified
+- If the error was a script/command bug (not a real failure), add a guardrail
+  or hook to prevent recurrence
+- Example: `git commit -m` with `-1` in message → PowerShell interprets as flag
+  → fix: use `--file .tmp/msg.txt` → add to Shell escaping section
+
 ### After CI failure
 
 - Check each tool: ruff, basedpyright, pylint, bandit, vulture, pytest
@@ -393,8 +402,9 @@ When something goes wrong, trace past the surface error to one of:
 - **Missing hook**: No trigger or checklist exists for this action — add one
 - **Missing in docs**: The knowledge wasn't recorded — write it down
 - **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
+- **Ignored error signal**: The tool produced `fatal:` or non-zero exit but execution continued — add an "On tool error" hook
 
-Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search gap will repeat.
+Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search/error gap will repeat.
 
 ### Safe updates
 
