@@ -41,7 +41,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before commit
 
 - No need to run pre-commit hooks (installed to git, runs automatically)
-- If docs changed: run `uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check`
+- If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
   (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
@@ -275,7 +275,7 @@ uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
 uv run ruff check .          # lint
 uv run ruff format .         # format
-uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check  # markdown
+uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"  # markdown (root-level docs)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
