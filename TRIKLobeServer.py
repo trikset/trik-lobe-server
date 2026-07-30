@@ -34,7 +34,7 @@ def main() -> None:
     except FileNotFoundError as _:
         logger.exception("settings.ini not found")
         input("Press any key to close the window...")
-        sys.exit(0)
+        sys.exit(1)
 
     model_path = resolve_model_path(settings)
     logger.info("Model path: %s", model_path)
