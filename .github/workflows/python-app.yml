@@ -21,7 +21,8 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check .
       - name: Check markdown formatting
-        run: uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check
+        shell: bash
+        run: uv run mdformat *.md --check
       - name: Type check with basedpyright
         run: uv run basedpyright .
       - name: Lint with pylint
