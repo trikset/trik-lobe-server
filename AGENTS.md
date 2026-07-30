@@ -88,14 +88,22 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Run full suite: `uv run pytest`
 - Or single test: `uv run pytest tests/test_model.py::test_name --exitfirst`
 
+### Before running a command
+
+- If this command type has known pitfalls (Shell escaping, temp files,
+  gh PR bodies), re-read the relevant guardrail section before constructing it
+- When in doubt, route through `.tmp/<file>` rather than inline arguments
+
 ### On tool error during execution
 
 - When a command outputs `fatal:`, `error:`, or exits non-zero: **stop immediately**
 - Do not proceed to the next command until root cause is identified
-- If the error was a script/command bug (not a real failure), add a guardrail
-  or hook to prevent recurrence
-- Example: `git commit -m` with `-1` in message → PowerShell interprets as flag
-  → fix: use `--file .tmp/msg.txt` → add to Shell escaping section
+- If the error was a script/command bug (not a real failure):
+  1. Fix the immediate issue
+  2. **Update AGENTS.md now** — add a guardrail, hook, or Shell escaping bullet
+  3. Verify the fix by re-running the failed command
+  4. Only then continue with the next task
+- If the root cause category is new, add it to the Root cause analysis section
 
 ### After CI failure
 
@@ -390,10 +398,12 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 
 ### Continuous improvement
 
-- **Always learn, always improve**
-- Retrospective after push: analyze decisions, suggest improvements
-- Document lessons learned in this section
-- Update Hooks section when new patterns emerge
+- **Every error must leave a trace**: before moving on from any unexpected
+  error, ensure the lesson is captured in AGENTS.md
+- **Check if this has happened before**: grep AGENTS.md for the error type
+  before crafting a fix — the solution may already be documented
+- **Keep patterns general**: phrase new bullets to catch similar future
+  cases, not just the exact one-time scenario
 
 ### Root cause analysis
 
@@ -404,7 +414,11 @@ When something goes wrong, trace past the surface error to one of:
 - **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
 - **Ignored error signal**: The tool produced `fatal:` or non-zero exit but execution continued — add an "On tool error" hook
 
-Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search/error gap will repeat.
+Fix the root cause, not just the symptom. A surface fix without addressing the
+hook/doc/search/error gap will repeat.
+
+After fixing the root cause, re-run the failed command to verify.
+Only then proceed to the next task.
 
 ### Safe updates
 
