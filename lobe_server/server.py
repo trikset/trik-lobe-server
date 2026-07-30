@@ -110,8 +110,8 @@ class LobeServer:
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()
         sock.settimeout(self.SOCKET_TIMEOUT)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.connect((self._settings.server_ip, self._settings.server_port))
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.setblocking(False)
         return sock
 
