@@ -75,9 +75,9 @@ do not guarantee coverage — async race conditions can silently skip lines.
 Every test batch must consider and test:
 
 - Empty/null inputs
-- Boundary values (0, max length, edge years)
+- Boundary values (0, max length)
 - Corrupt or malformed data
-- Failure modes (DB down, file missing, permission denied)
+- Failure modes (file missing, corrupt model, permission denied)
 
 Where edge cases emerge during testing, improve process documentation:
 what was missed and how to catch it next time.
