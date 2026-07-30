@@ -116,6 +116,13 @@ PR description must cover:
 
 Do NOT list changed files (visible in diff) or CI status (visible in checks).
 
+### Temp files
+
+Use `.tmp/` in the repository root for all temporary files (PR bodies,
+scratch data, hypothesis notes). This directory is gitignored.
+Never write temp files to `/tmp/` or outside the workspace — the `.tmp/`
+folder survives local development and is visible to future sessions.
+
 ### Git config
 
 - **Never touch git config** — no `git config` commands, no modifying `.git/config`
@@ -205,7 +212,7 @@ code works on others.
 
 - Never assume tooling behaves intuitively — verify
 - Shell escaping is a common trap: test with `echo` before passing to real command
-- When in doubt, route through files: write to temp file, pipe to command
+- When in doubt, route through files: write to `.tmp/<file>`, pipe to command
 
 ## Agent memory
 
@@ -224,7 +231,7 @@ code works on others.
 - PowerShell double-quoted strings: `\b` = backspace (0x08), `\n` = newline, `\r` = CR, `` ` `` = backtick escape
 - When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
 - For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
-- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a file rather than inlining
+- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a `.tmp/<file>` rather than inlining
 
 ### Three solutions
 
