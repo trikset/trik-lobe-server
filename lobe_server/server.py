@@ -9,7 +9,7 @@ from pathlib import Path
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
 from lobe_server.model import load_model
-from lobe_server.protocol import format_message, is_quit_command, make_command
+from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +57,27 @@ class LobeServer:
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
     async def _reader(self, sock: socket.socket) -> None:
-        data = ""
-        while self._running and not is_quit_command(data):
+        buf = ""
+        while self._running:
             try:
                 raw = await asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE)
-                data = raw.decode("utf-8")
+                if not raw:
+                    logger.info("Peer closed connection")
+                    break
+                buf += raw.decode("utf-8", errors="replace")
             except (OSError, ConnectionResetError):
                 await asyncio.sleep(0.1)
                 continue
-            if data:
-                logger.debug("Received: %s", data)
+            while self._running:
+                ok, msg, rest = try_parse_message(buf)
+                if not ok:
+                    break
+                buf = rest
+                if is_quit_command(msg):
+                    self._running = False
+                    return
+                if msg:
+                    logger.debug("Received: %s", msg)
             await asyncio.sleep(0)
         self._running = False
 
