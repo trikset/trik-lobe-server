@@ -108,7 +108,7 @@ def test_factory_url() -> None:
     settings = Settings(
         photo_url="http://example.com/snapshot",
         username="u",
-        password="p",
+        password="p",  # noqa: S106
     )
     cam = create_camera(settings, "127.0.0.1")
     assert isinstance(cam, UrlCamera)

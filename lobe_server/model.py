@@ -20,13 +20,15 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import ai_edge_litert.interpreter as tflite
 import numpy as np
 import numpy.typing as npt
 import onnxruntime as _ort
-from PIL import Image
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ def load_model(path: str | Path) -> ImageModel:
 
     filename: str | None = None
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8-sig") as f:
+        with sig_path.open(encoding="utf-8-sig") as f:
             sig = json.load(f)
         filename = sig.get("filename")
 
@@ -99,7 +101,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
     sig_path = model_path / "signature.json"
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8-sig") as f:
+        with sig_path.open(encoding="utf-8-sig") as f:
             sig = json.load(f)
         if "classes" in sig and "Label" in sig["classes"]:
             return sig["classes"]["Label"]
@@ -151,8 +153,7 @@ class ONNXImageModel:
 
         input_size = (h, w)
 
-        if input_name.endswith(":0"):  # type: ignore[reportUnknownMemberType]
-            input_name = input_name[:-2]  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
+        input_name = input_name.removesuffix(":0")  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
 
         labels = _read_labels(Path(model_path))
 

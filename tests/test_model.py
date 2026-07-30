@@ -54,7 +54,7 @@ def _make_tflite_interpreter(
 ) -> MagicMock:
     interp = MagicMock()
     interp.get_input_details.return_value = [
-        {"index": 0, "shape": input_shape or [1, 224, 224, 3], "dtype": np.float32}
+        {"index": 0, "shape": input_shape or [1, 224, 224, 3], "dtype": np.float32},
     ]
     interp.get_output_details.return_value = [{"index": 1, "shape": [1, num_classes], "dtype": np.float32}]
     if num_classes > 0:
@@ -67,7 +67,7 @@ def _make_tflite_interpreter(
 
 
 def _tflite_patch(interpreter: MagicMock) -> Any:
-    import lobe_server.model as model_mod
+    import lobe_server.model as model_mod  # noqa: PLC0415
 
     tflite_mock = MagicMock()
     tflite_mock.Interpreter.return_value = interpreter

@@ -46,7 +46,7 @@ def test_load_settings_full(sample_ini: str) -> None:
         assert s.get_images_from_robot is False
         assert s.camera_number == 1
         assert s.username == "user"
-        assert s.password == "pass"
+        assert s.password == "pass"  # noqa: S105
 
 
 def test_load_settings_minimal(minimal_ini: str) -> None:
@@ -94,7 +94,7 @@ def test_resolve_model_path_frozen() -> None:
         settings.model_path = ""
         fake_exe = str(Path(tmpdir) / "server.exe")
         with (
-            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "frozen", new=True, create=True),
             patch.object(sys, "executable", fake_exe),
         ):
             result = resolve_model_path(settings)

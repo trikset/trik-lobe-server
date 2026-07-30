@@ -4,12 +4,16 @@ import asyncio
 import contextlib
 import logging
 import socket
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lobe_server.camera import CameraSource, create_camera
-from lobe_server.config import Settings
 from lobe_server.model import load_model
 from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from lobe_server.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,7 @@ class LobeServer:
     RECV_TIMEOUT = 10  # robot sends keepalive every 3s; 10s = 3 missed + margin
     CONNECTION_RETRY_DELAY = 0.1
 
-    def __init__(self, settings: Settings, model_path: Path):
+    def __init__(self, settings: Settings, model_path: Path) -> None:
         self._settings = settings
         self._model = load_model(str(model_path))
         self._camera: CameraSource = create_camera(settings, settings.server_ip)
@@ -108,7 +112,7 @@ class LobeServer:
 
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()
-        sock.setblocking(False)
+        sock.setblocking(False)  # noqa: FBT003
         loop = asyncio.get_running_loop()
         await loop.sock_connect(sock, (self._settings.server_ip, self._settings.server_port))
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
