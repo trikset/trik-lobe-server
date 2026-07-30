@@ -1,0 +1,189 @@
+# Design Decisions
+
+<!-- encoding: utf-8 -->
+
+Scope: Technology and implementation choices made during development.
+Aim: Explain *why* things are the way they are, not just *what* changed.
+Structure: Dated entries, each with context → decision → rationale → consequences.
+Cross-reference: Testing strategy → `TESTING.md`, CI setup → `AGENTS.md`.
+
+## [2025-07-10] pip → uv
+
+**Context:** The project used `pip` + `requirements.txt` with no lockfile,
+no deterministic installs, and slow resolution.
+
+**Decision:** Migrate to `uv` for all development workflows.
+
+**Rationale:**
+
+- 10-100× faster dependency resolution
+- Built-in lockfile (`uv.lock`) for reproducible environments
+- Single binary, no Python dependency to install itself
+- Handles platform-specific markers and custom indexes natively
+
+**Consequences:**
+
+- `pyproject.toml` replaces `requirements.txt` + `dev-requirements.txt`
+- `uv sync` for deterministic, fast installs
+- `uv run` for all Python commands
+- `uv.lock` committed for reproducible environments
+
+## [2026-07-14] Remove lobe SDK
+
+**Context:** The `lobe` SDK (Microsoft Lobe) was last released Feb 2022;
+the entire Lobe product has been discontinued. Old pins (`pillow~=9.0.1`,
+`matplotlib~=3.5.1`) blocked installation on Python ≥3.12.
+
+**Decision:** Remove the `lobe` dependency entirely. Replace with a custom
+dual-backend model loader.
+
+**What the server actually used from `lobe`:**
+
+```python
+from lobe import ImageModel
+model = ImageModel.load(path)        # read signature.json + load TFLite
+result = model.predict(pil_image)    # preprocess + inference
+prediction = result.prediction        # top class label string
+```
+
+**Replacement:** `lobe_server/model.py` — dual backend `ONNXImageModel` +
+`TFLiteImageModel`:
+
+1. Auto-detects model format by scanning directory for `.tflite` or `.onnx` files
+1. Labels loaded from `labels.txt` (priority) or `signature.json` → `classes.Label`
+1. `signature.json` may optionally contain `filename` to specify model file explicitly
+1. Preprocesses images the same way Lobe did (resize + center crop + normalize)
+1. Returns a `ClassificationResult` with the same `.prediction` API
+
+The call site in `server.py` needed zero changes — both model classes expose
+the same `predict()` → `.prediction` interface.
+
+**Consequences:**
+
+- No more `matplotlib` dependency
+- `Pillow` can be any modern version
+- Server works on Python 3.10-3.12
+- CI no longer needs to install `lobe`
+- Both ONNX and TFLite are first-class citizens
+
+## [2026-07-14] Add ONNX runtime
+
+**Context:** Needed a reliable ONNX inference backend for the new model loader.
+
+**Decision:** Add `onnxruntime`.
+
+**Rationale:**
+
+- Pre-built wheels on PyPI for all platforms (x64 + ARM64)
+- Python 3.10-3.14 support with no compilation needed
+- Actively maintained by Microsoft
+- Bundles cleanly with PyInstaller (auto-detected)
+
+## [2026-07-14] Add ai-edge-litert (LiteRT)
+
+**Context:** Needed native TFLite inference. The old stack used `tflite-runtime`
+(abandoned, no Python 3.12+ wheels) or `tflite2onnx` (brittle conversion).
+
+**Decision:** Add `ai-edge-litert`, Google's successor to TensorFlow Lite runtime.
+
+**Rationale:**
+
+- Pre-built wheels on PyPI for all platforms (Python 3.10-3.14)
+- Fully backward compatible with all `.tflite` models
+- Same API as `tflite_runtime.interpreter` — zero code changes
+- C extension, bundles with PyInstaller without special handling
+
+**Consequences:**
+
+- `tflite-runtime` removed (abandoned, no wheels for 3.12+)
+- `tflite2onnx` removed (fragile conversion step no longer needed)
+
+## [2026-07-14] Remove matplotlib
+
+**Context:** Only used by Lobe's `model.visualize()` (Grad-CAM heatmaps).
+The server never called this method.
+
+**Decision:** Remove `matplotlib`.
+
+## [2026-07-14] Add labels.txt → signature.json priority
+
+**Context:** `signature.json` was a Lobe-ism. Non-Lobe models (Teachable Machine,
+Azure Custom Vision, Edge Impulse) export `labels.txt` — one label per line.
+
+**Decision:** `_read_labels(model_path)` now has two paths, in priority order:
+
+1. **labels.txt exists** — read labels from file (one per line)
+   - UTF-8 BOM handling: `encoding="utf-8-sig"`
+   - Empty line filtering: blank lines stripped
+1. **No labels.txt, signature.json exists** — extract `classes.Label`
+
+**Consequences:**
+
+- Teachable Machine / Edge Impulse / Azure CV: export labels.txt, drop
+  it next to the model, no signature.json needed
+- Backward compatible: every existing Lobe model still works via
+  signature.json → classes.Label
+
+## [2026-07-14] Toolchain: ruff, pylint, basedpyright, mdformat
+
+**Context:** The project used `flake8` + `isort` + `black` with no type checking
+and no markdown formatting.
+
+**Decision:**
+| Tool | Replaces | Why |
+|------|----------|-----|
+| `ruff` | `flake8` + `isort` + `black` | Single tool, 100× faster, same rules |
+| `pylint` | — | Strict mode for deeper code quality analysis |
+| `basedpyright` | — | Strict type checking (stricter than mypy) |
+| `mdformat` | — | Consistent markdown formatting |
+
+**Configuration philosophy:**
+
+- `ruff` handles surface-level issues (formatting, imports, simple bugs)
+- `pylint` handles deeper quality (unused vars, exceptions, complexity)
+- `basedpyright` handles type safety
+
+## [2026-07-14] Testing with pytest
+
+**Context:** Zero test coverage, zero confidence for changes.
+
+**Decision:** Add `pytest` + `pytest-cov` with `--cov-fail-under=100`.
+
+**Coverage history:**
+
+- Initial: 56 tests, 96% coverage
+- Current: 87 tests, 100% coverage
+- Mock-based: no real camera, no real network, no real TFLite runtime needed
+- See `TESTING.md` for full details and known gaps.
+
+## [2026-07-14] PyInstaller notes
+
+- `onnxruntime` is auto-detected by `hook-onnxruntime.py` from
+  `pyinstaller-hooks-contrib` — no `--hidden-import` flags needed.
+- Warning `Hidden import 'protobuf' not found` is harmless — protobuf is
+  bundled transitively via the `onnx` dependency.
+
+## [2026-07-14] LSP / editor notes
+
+- LSP errors ("Cannot resolve imported module numpy") are false positives
+  when the editor's Python interpreter differs from the project venv.
+  For VS Code: set `python.defaultInterpreterPath` to `.venv/Scripts/python.exe`.
+
+## Model directory layout (three supported layouts)
+
+```
+A) labels.txt + model.onnx (recommended for ONNX):
+    model_path/
+        model.onnx
+        labels.txt
+
+B) labels.txt + model.tflite (recommended for TFLite):
+    model_path/
+        model.tflite
+        labels.txt
+
+C) Microsoft Lobe legacy:
+    model_path/
+        signature.json
+        model.tflite
+```
