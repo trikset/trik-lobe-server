@@ -362,15 +362,19 @@ def test_load_model(settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_connect_once(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     mock_sock = MagicMock()
+    mock_loop = MagicMock()
+    mock_loop.sock_connect = AsyncMock()
 
-    with patch("lobe_server.server.socket.socket", return_value=mock_sock):
+    with (
+        patch("lobe_server.server.socket.socket", return_value=mock_sock),
+        patch("lobe_server.server.asyncio.get_running_loop", return_value=mock_loop),
+    ):
         server = _make_server(settings, mock_model, mock_camera)
         result = await server._connect_once()
 
     assert result is mock_sock
-    mock_sock.settimeout.assert_called_once_with(10)
     mock_sock.setblocking.assert_called_once_with(False)
-    mock_sock.connect.assert_called_once_with(("127.0.0.1", 8889))
+    mock_loop.sock_connect.assert_called_once_with(mock_sock, ("127.0.0.1", 8889))
 
 
 @pytest.mark.asyncio
