@@ -144,6 +144,42 @@ async def test_reader_empty_recv(settings: Settings, mock_model: MagicMock, mock
 
 
 @pytest.mark.asyncio
+async def test_reader_heartbeat_timeout(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+    sock = MagicMock()
+    loop = asyncio.get_event_loop()
+    loop.sock_recv = AsyncMock(side_effect=asyncio.TimeoutError)
+
+    server = _make_server(settings, mock_model, mock_camera)
+    server._running = True
+    await server._reader(sock)
+    assert server._running is False
+
+
+@pytest.mark.asyncio
+async def test_reader_keepalive_preserves_connection(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
+) -> None:
+    sock = MagicMock()
+    loop = asyncio.get_event_loop()
+    loop.sock_recv = AsyncMock(return_value=b"9:keepalive")
+
+    server = _make_server(settings, mock_model, mock_camera)
+    server._running = True
+
+    async def stop_after():
+        await asyncio.sleep(0.5)
+        server._running = False
+
+    await asyncio.wait(
+        [
+            asyncio.create_task(server._reader(sock)),
+            asyncio.create_task(stop_after()),
+        ],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+
+@pytest.mark.asyncio
 async def test_reader_connection_reset(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     loop = asyncio.get_event_loop()

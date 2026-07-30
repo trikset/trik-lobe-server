@@ -20,6 +20,8 @@ class LobeServer:
     RECONNECT_DELAY = 3
     SOCKET_TIMEOUT = 10
     BUFFER_SIZE = 255
+    RECV_TIMEOUT = 10
+    CONNECTION_RETRY_DELAY = 0.1
 
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
@@ -60,13 +62,22 @@ class LobeServer:
         buf = ""
         while self._running:
             try:
-                raw = await asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE)
+                raw = await asyncio.wait_for(
+                    asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE),
+                    timeout=self.RECV_TIMEOUT,
+                )
                 if not raw:
                     logger.info("Peer closed connection")
                     break
                 buf += raw.decode("utf-8", errors="replace")
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "No data from peer in %ss, reconnecting...",
+                    self.RECV_TIMEOUT,
+                )
+                break
             except (OSError, ConnectionResetError):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(self.CONNECTION_RETRY_DELAY)
                 continue
             while self._running:
                 ok, msg, rest = try_parse_message(buf)

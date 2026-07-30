@@ -94,5 +94,7 @@ what was missed and how to catch it next time.
 All gaps require real hardware (camera, network) or platform-specific packages.
 
 Previously untested: empty-recv is now covered (`test_reader_empty_recv`),
-partial message framing (`test_reader_partial_then_complete`), and
-multi-message buffers (`test_reader_multi_then_quit`, `test_reader_parsed_message`).
+partial message framing (`test_reader_partial_then_complete`),
+multi-message buffers (`test_reader_multi_then_quit`, `test_reader_parsed_message`),
+heartbeat timeout (`test_reader_heartbeat_timeout`), and keepalive preservation
+(`test_reader_keepalive_preserves_connection`).
