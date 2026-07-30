@@ -33,7 +33,11 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - No need to run pre-commit hooks (installed to git, runs automatically)
 - If docs changed: run `uv run mdformat AGENTS.md README.md MODERNIZATION.md --check`
 - If adding new tool/config: update this Hooks section
-- If reorganizing docs: run `git diff --stat` and verify nothing was accidentally deleted
+- If editing or reorganizing AGENTS.md: diff against the original
+  (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
+  and confirm each deletion was intentional — not an accidental drop
+- When replacing a section, check if parts of the old content should
+  be merged into the new rather than deleted outright
 - Check if `uv.lock` should be committed (dependency changes)
 - Check if `pyproject.toml` should be committed (config changes)
 
@@ -103,9 +107,19 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Update local main: `git switch main && git pull`
 - Delete merged feature branch: `git branch --delete branch-name`
 
+## Pre-commit hooks
+
+`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
+`mdformat` runs manually or via CI only (not in pre-commit).
+
 ## Guardrails
 
 ### PR description
+
+This session context is ephemeral — all state is lost when the conversation ends.
+**AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
+to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
+architecture, or conventions, document it in AGENTS.md first.
 
 PR description must cover:
 
@@ -115,6 +129,13 @@ PR description must cover:
 - **Verification** — proof not visible in diff or CI checks
 
 Do NOT list changed files (visible in diff) or CI status (visible in checks).
+
+### Temp files
+
+Use `.tmp/` in the repository root for all temporary files (PR bodies,
+scratch data, hypothesis notes). This directory is gitignored.
+Never write temp files to `/tmp/` or outside the workspace — the `.tmp/`
+folder survives local development and is visible to future sessions.
 
 ### Git config
 
@@ -192,6 +213,15 @@ diffs under 400 lines when possible — large PRs get rubber-stamped or
 delayed. If a change is big, split into stacked PRs (prerequisite first,
 then follow-ups).
 
+### Documenting decisions
+
+When you make a non-obvious choice, document it at the right level:
+
+1. **Inline comment** in the file (CI, code, config) — immediate context
+   for anyone reading that file.
+1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
+1. **MODERNIZATION.md** — full "why" explanation with rationale and trade-offs.
+
 ### Cross-platform
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
@@ -205,7 +235,7 @@ code works on others.
 
 - Never assume tooling behaves intuitively — verify
 - Shell escaping is a common trap: test with `echo` before passing to real command
-- When in doubt, route through files: write to temp file, pipe to command
+- When in doubt, route through files: write to `.tmp/<file>`, pipe to command
 
 ## Agent memory
 
@@ -224,7 +254,7 @@ code works on others.
 - PowerShell double-quoted strings: `\b` = backspace (0x08), `\n` = newline, `\r` = CR, `` ` `` = backtick escape
 - When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
 - For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
-- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a file rather than inlining
+- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a `.tmp/<file>` rather than inlining
 
 ### Three solutions
 
@@ -356,6 +386,9 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
   if task A raises but B completes first, the exception is lost and
   tests appear to pass. When you need to verify a task succeeds,
   `await` it directly instead of wrapping in `asyncio.wait`.
+- After adding tests, verify with `--cov-report=term-missing` that
+  the specific lines you intended to cover actually are. Passing tests
+  do not guarantee coverage — async race conditions can silently skip lines.
 
 ## CI quirks
 
@@ -370,7 +403,10 @@ pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
 ### Runner notes
 
 - `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
-- Use `windows-2022`, `ubuntu-22.04`, `macos-latest` for builds.
+- Build runners use **oldest free** for widest binary compatibility:
+  `ubuntu-22.04`, `windows-2022`, `macos-latest`.
+- Test runners use **`-latest`** for newest OS coverage:
+  `ubuntu-latest`, `windows-latest`, `macos-latest`.
 - `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
 - `macos-latest` is ARM64 (Apple Silicon).
 - Build produces per-OS artifacts via PyInstaller `--onefile`.
