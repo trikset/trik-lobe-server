@@ -152,7 +152,7 @@ class ONNXImageModel:
         input_size = (h, w)
 
         if input_name.endswith(":0"):  # type: ignore[reportUnknownMemberType]
-            input_name = input_name[:-2]  # strip TF SavedModel :0 suffix; type: ignore[reportUnknownVariableType]
+            input_name = input_name[:-2]  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
 
         labels = _read_labels(Path(model_path))
 
