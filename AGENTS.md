@@ -33,7 +33,11 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - No need to run pre-commit hooks (installed to git, runs automatically)
 - If docs changed: run `uv run mdformat AGENTS.md README.md MODERNIZATION.md --check`
 - If adding new tool/config: update this Hooks section
-- If reorganizing docs: run `git diff --stat` and verify nothing was accidentally deleted
+- If editing or reorganizing AGENTS.md: diff against the original
+  (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
+  and confirm each deletion was intentional — not an accidental drop
+- When replacing a section, check if parts of the old content should
+  be merged into the new rather than deleted outright
 - Check if `uv.lock` should be committed (dependency changes)
 - Check if `pyproject.toml` should be committed (config changes)
 
@@ -103,9 +107,19 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Update local main: `git switch main && git pull`
 - Delete merged feature branch: `git branch --delete branch-name`
 
+## Pre-commit hooks
+
+`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
+`mdformat` runs manually or via CI only (not in pre-commit).
+
 ## Guardrails
 
 ### PR description
+
+This session context is ephemeral — all state is lost when the conversation ends.
+**AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
+to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
+architecture, or conventions, document it in AGENTS.md first.
 
 PR description must cover:
 
