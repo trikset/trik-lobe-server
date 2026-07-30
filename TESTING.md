@@ -20,6 +20,14 @@ uv run pytest --no-cov                # skip coverage (faster locally)
 uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --exitfirst  # single test
 ```
 
+### Diagnostic discipline
+
+- **`--tb=long` during development**, `-q` only for final green check
+- **Batch before re-run**: found one failure? grep for siblings and fix
+  all before re-running — each re-run costs the full suite
+- **Baseline first**: unexpected errors? stash changes, run same command.
+  If errors persist → pre-existing (5-min timebox)
+
 Coverage config is single-sourced in `pyproject.toml`:
 `addopts = "--cov"`, `source = ["lobe_server"]`, `fail_under = 100`.
 CI runs bare `uv run pytest`.
@@ -61,6 +69,18 @@ tests appear to pass. When you need to verify a task succeeds,
 After adding tests, verify with `--cov-report=term-missing` that
 the specific lines you intended to cover actually are. Passing tests
 do not guarantee coverage — async race conditions can silently skip lines.
+
+### Edge case audit
+
+Every test batch must consider and test:
+
+- Empty/null inputs
+- Boundary values (0, max length, edge years)
+- Corrupt or malformed data
+- Failure modes (DB down, file missing, permission denied)
+
+Where edge cases emerge during testing, improve process documentation:
+what was missed and how to catch it next time.
 
 ## Coverage gaps
 

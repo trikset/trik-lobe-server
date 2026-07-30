@@ -7,6 +7,8 @@ Aim: Every session starts knowing what to do and how to behave.
 Structure: Hooks (action triggers) → Guardrails (rules) → Reference (commands,
 architecture, CI, Python version) → Agent memory (tooling patterns).
 
+Every line must answer: "Would an agent likely miss this without help?" If not, cut it.
+
 ## Hooks
 
 Action triggers for AI agents. Before/when/after each action, follow the
@@ -90,6 +92,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Check if failure is platform-specific (Windows/macOS/Linux)
 - Check if failure is flaky (retry once)
 - Check pytest coverage output
+- **Error triage**: after any unexpected error, ask "Was this expected?
+  Would I have been surprised if it succeeded?" If unexpected, stop and
+  investigate — root cause first, fix second, skip third.
 
 ### PR finalization (after CI green)
 
@@ -279,6 +284,16 @@ uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 ```
 
 **Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
+
+## Live metrics
+
+Always query live, never hardcode:
+
+| Metric | Command | Duration |
+|--------|---------|----------|
+| Test count | `uv run pytest --tb=no -q` | ~10s |
+| Coverage | `uv run pytest --cov-report=term-missing` | ~15s |
+| CI status (main) | `gh run list --branch main --limit 1 --json conclusion` | ~2s |
 
 ## CI quirks
 
