@@ -163,7 +163,7 @@ class ONNXImageModel:
 
         labels = _read_labels(Path(model_path))
 
-        return cls(session, labels, input_name, input_size)
+        return cls(session, labels, input_name, input_size)  # type: ignore[reportUnknownArgumentType]
 
     def predict(self, image: Image.Image) -> ClassificationResult:
         processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)

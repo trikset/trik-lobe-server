@@ -147,8 +147,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ## Pre-commit hooks
 
-`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
-CI runs `mdformat --check` on explicit file list.
+`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
+plus `trailing-whitespace`, `end-of-file-fixer`, and `check-yaml`. CI runs
+`mdformat --check` on all root-level `*.md` (via glob).
 
 ## Guardrails
 
