@@ -24,6 +24,7 @@ from typing import Any, Protocol
 
 import ai_edge_litert.interpreter as tflite
 import numpy as np
+import numpy.typing as npt
 import onnxruntime as _ort
 from PIL import Image
 
@@ -131,9 +132,9 @@ class ONNXImageModel:
         onnx_path = Path(model_path) / filename
         session = _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
 
-        input_meta = session.get_inputs()[0]
-        input_name: str = input_meta.name
-        shape: list[int | str | None] = list(input_meta.shape)
+        input_meta = session.get_inputs()[0]  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        input_name: str = input_meta.name  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        shape: list[int | str | None] = list(input_meta.shape)  # type: ignore[reportUnknownMemberType]
         dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
         if len(dims) >= 4:
@@ -150,15 +151,15 @@ class ONNXImageModel:
 
         input_size = (h, w)
 
-        if input_name.endswith(":0"):
-            input_name = input_name[:-2]
+        if input_name.endswith(":0"):  # type: ignore[reportUnknownMemberType]
+            input_name = input_name[:-2]  # type: ignore[reportUnknownVariableType]
 
         labels = _read_labels(Path(model_path))
 
         return cls(session, labels, input_name, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
-        processed: np.ndarray = _preprocess(image, self._input_size)
+        processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
         if self._is_nchw:
             processed = np.transpose(processed, (0, 3, 1, 2))
         output = self._session.run(None, {self._input_name: processed})
@@ -186,7 +187,7 @@ class TFLiteImageModel:
         interpreter = tflite.Interpreter(model_path=str(tflite_path))
         interpreter.allocate_tensors()
 
-        input_details = interpreter.get_input_details()[0]
+        input_details = interpreter.get_input_details()[0]  # type: ignore[reportUnknownVariableType]
         shape: list[int] = list(input_details["shape"])  # type: ignore[arg-type]
         _, h, w, _ = shape
         input_size = (h, w)
@@ -196,7 +197,7 @@ class TFLiteImageModel:
         return cls(interpreter, labels, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
-        processed: np.ndarray = _preprocess(image, self._input_size)
+        processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
         self._interpreter.set_tensor(self._input_index, processed)
         self._interpreter.invoke()
         raw = self._interpreter.get_tensor(self._output_index)
@@ -209,7 +210,7 @@ class TFLiteImageModel:
         return ClassificationResult(paired)
 
 
-def _preprocess(image: Image.Image, target_size: tuple[int, int]) -> np.ndarray:
+def _preprocess(image: Image.Image, target_size: tuple[int, int]) -> npt.NDArray[np.float32]:
     image = image.convert("RGB")
     image = _resize_uniform_to_fill(image, target_size)
     image = _crop_center(image, target_size)
