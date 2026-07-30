@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class LobeServer:
-    KEEPALIVE_INTERVAL = 5
+    KEEPALIVE_INTERVAL = 5  # robot sends keepalive every 3s; 5s is adequate since predictions also reset heartbeat timer
     PREDICTION_INTERVAL = 0.2
     RECONNECT_DELAY = 3
     BUFFER_SIZE = 255
@@ -92,7 +92,7 @@ class LobeServer:
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
-        _ip, port = sock.getsockname()
+        port = sock.getsockname()[1]
         hull = self._settings.my_hull_number
         await self._send(sock, make_command("register", port, hull))
         await self._send(sock, make_command("self", hull))
