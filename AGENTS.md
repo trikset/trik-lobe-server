@@ -8,6 +8,7 @@ Structure: Hooks (action triggers) → Guardrails (rules) → Reference (command
 architecture, CI, Python version) → Agent memory (tooling patterns).
 
 Every line must answer: "Would an agent likely miss this without help?" If not, cut it.
+Removing a documented rule changes agent behavior — only delete if provably incorrect.
 
 ## Hooks
 
@@ -122,7 +123,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
-`mdformat` runs manually or via CI only (not in pre-commit).
+CI runs `mdformat --check` on explicit file list.
 
 ## Guardrails
 
@@ -289,11 +290,11 @@ uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
 
 Always query live, never hardcode:
 
-| Metric | Command | Duration |
-|--------|---------|----------|
-| Test count | `uv run pytest --tb=no -q` | ~10s |
-| Coverage | `uv run pytest --cov-report=term-missing` | ~15s |
-| CI status (main) | `gh run list --branch main --limit 1 --json conclusion` | ~2s |
+| Metric | Command |
+|--------|---------|
+| Test count | `uv run pytest --tb=no -q` |
+| Coverage | `uv run pytest --cov-report=term-missing` |
+| CI status (main) | `gh run list --branch main --limit 1 --json conclusion` |
 
 ## CI quirks
 
@@ -375,3 +376,13 @@ When something goes wrong, trace past the surface error to one of:
 - **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
 
 Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search gap will repeat.
+
+### Safe updates
+
+When evaluating whether to keep or remove existing content, apply the mirror of
+root cause analysis:
+
+- **Would removing this change agent behavior?** If yes, keep it — the rule
+  exists because it was needed.
+- **Is the claim provably wrong?** Only then delete or correct — verify against
+  executable sources (config, workflow, code) before removing.
