@@ -67,7 +67,7 @@ jobs:
       - name: Archive artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}-${{ github.sha[0:7] }}
+          name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}-${{ github.sha }}
           path: |
             dist
             settings.ini
