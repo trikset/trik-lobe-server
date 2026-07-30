@@ -147,7 +147,7 @@ async def test_reader_empty_recv(settings: Settings, mock_model: MagicMock, mock
 async def test_reader_heartbeat_timeout(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
     loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(side_effect=asyncio.TimeoutError)
+    loop.sock_recv = AsyncMock(side_effect=TimeoutError)
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True

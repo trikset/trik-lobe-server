@@ -63,6 +63,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before branch
 
 - Create feature branch from main: `git switch main && git pull && git switch --create feat/name`
+- If the PR depends on another unmerged PR, branch from that PR's branch instead of main
 - Branch naming: `feat/description`, `fix/description`, `docs/description`
 - Keep feature branches focused (one idea per branch)
 

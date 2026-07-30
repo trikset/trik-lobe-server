@@ -235,6 +235,11 @@ send errors are transient glitches; death detection is the reader's job.
 - No new dependencies
 - 10s timeout gives ~3s margin over the 3s keepalive interval
 
+**Guardrail:** Do not remove `contextlib.suppress(OSError)` from `_send`.
+Transient send errors are normal; death detection belongs exclusively in
+the `_reader`. Removing the suppress would cause reconnect storms on
+momentary network glitches.
+
 ## [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the
