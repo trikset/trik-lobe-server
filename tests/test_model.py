@@ -328,6 +328,29 @@ def test_tflite_model_predict_ordering() -> None:
     assert result.labels[2] == ("c", pytest.approx(0.1))
 
 
+def test_onnx_model_predict_label_mismatch() -> None:
+    session = MagicMock()
+    session.run.return_value = [np.array([[0.3, 0.6, 0.1]], dtype=np.float32)]
+    session.get_inputs.return_value = [_make_input_meta()]
+
+    model = ONNXImageModel(session, ["a", "b"], "Image", (224, 224))
+    im = Image.new("RGB", (10, 10))
+    with pytest.raises(ValueError, match=r"labels have 2"):
+        model.predict(im)
+
+
+def test_tflite_model_predict_label_mismatch() -> None:
+    interpreter = MagicMock()
+    interpreter.get_input_details.return_value = [{"index": 0, "shape": [1, 224, 224, 3], "dtype": np.float32}]
+    interpreter.get_output_details.return_value = [{"index": 1, "shape": [1, 3], "dtype": np.float32}]
+    interpreter.get_tensor.return_value = np.array([[0.3, 0.6, 0.1]], dtype=np.float32)
+
+    model = TFLiteImageModel(interpreter, ["a", "b"], (224, 224))
+    im = Image.new("RGB", (10, 10))
+    with pytest.raises(ValueError, match=r"labels have 2"):
+        model.predict(im)
+
+
 # ── load_model auto-detect ──────────────────────────────────────
 
 
