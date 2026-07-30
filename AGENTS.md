@@ -248,10 +248,9 @@ When you make a non-obvious choice, document it at the right level:
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
 When writing code or tests that touch OS-level APIs (sockets, files,
-processes), always consider platform differences. `socket.socketpair()`
-returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
-`getsockname()` behavior. Local tests on one OS are not proof the
-code works on others.
+processes), always consider platform differences. See TESTING.md for
+platform-specific test patterns (socketpair, temp files, deprecations).
+Local tests on one OS are not proof the code works on others.
 
 ### Tooling assumptions
 
