@@ -87,8 +87,12 @@ what was missed and how to catch it next time.
 | Lines missed | Module | Why not tested? |
 |---|---|---|
 | `camera.py:62-67` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
-| `server.py:106-112` | `run_forever` success branch | Requires a real TCP server to connect to |
+| `server.py:114-120` | `run_forever` success branch | Requires a real TCP server to connect to |
 | `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
 | `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
 
 All gaps require real hardware (camera, network) or platform-specific packages.
+
+Previously untested: empty-recv is now covered (`test_reader_empty_recv`),
+partial message framing (`test_reader_partial_then_complete`), and
+multi-message buffers (`test_reader_multi_then_quit`, `test_reader_parsed_message`).
