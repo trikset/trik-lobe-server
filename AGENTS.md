@@ -61,6 +61,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md and/or AGENTS.md
 - Ensure AGENTS.md updated with any new decisions/patterns
 - Check if PR title follows Conventional Commits format
+- Check if PR description covers root cause, profit, trade-offs, and verification
 - Check if PR description has "Out of scope" section
 - Run `git log --oneline --max-count=5` to review commits
 - Sign commits (always sign for PRs — `--no-gpg-sign` is for feature branches only)
@@ -104,12 +105,16 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ## Guardrails
 
-### Docs before PR
+### PR description
 
-This session context is ephemeral — all state is lost when the conversation ends.
-**AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
-to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
-architecture, or conventions, document it in AGENTS.md first.
+PR description must cover:
+
+- **Root cause** — what problem does this solve?
+- **Profit** — measurable benefit (numbers if possible)
+- **Trade-offs** — alternatives considered and rejected
+- **Verification** — proof not visible in diff or CI checks
+
+Do NOT list changed files (visible in diff) or CI status (visible in checks).
 
 ### Git config
 
