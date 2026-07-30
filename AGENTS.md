@@ -1,5 +1,15 @@
 # AGENTS.md — trik-lobe-server
 
+<!-- encoding: utf-8 -->
+
+Scope: Action triggers, guardrails, commands, and quirks for AI agents.
+Aim: Every session starts knowing what to do and how to behave.
+Structure: Hooks (action triggers) → Guardrails (rules) → Reference (commands,
+architecture, CI, Python version) → Agent memory (tooling patterns).
+
+Every line must answer: "Would an agent likely miss this without help?" If not, cut it.
+Removing a documented rule changes agent behavior — only delete if provably incorrect.
+
 ## Hooks
 
 Action triggers for AI agents. Before/when/after each action, follow the
@@ -31,7 +41,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before commit
 
 - No need to run pre-commit hooks (installed to git, runs automatically)
-- If docs changed: run `uv run mdformat AGENTS.md README.md MODERNIZATION.md --check`
+- If docs changed: run `uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
   (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
@@ -83,6 +93,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Check if failure is platform-specific (Windows/macOS/Linux)
 - Check if failure is flaky (retry once)
 - Check pytest coverage output
+- **Error triage**: after any unexpected error, ask "Was this expected?
+  Would I have been surprised if it succeeded?" If unexpected, stop and
+  investigate — root cause first, fix second, skip third.
 
 ### PR finalization (after CI green)
 
@@ -110,7 +123,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically.
-`mdformat` runs manually or via CI only (not in pre-commit).
+CI runs `mdformat --check` on explicit file list.
 
 ## Guardrails
 
@@ -129,6 +142,14 @@ PR description must cover:
 - **Verification** — proof not visible in diff or CI checks
 
 Do NOT list changed files (visible in diff) or CI status (visible in checks).
+
+### Pattern recurrence escalation
+
+When a gap appears in consecutive PRs or sessions, the fix must escalate:
+
+- 1st occurrence — **document** (update canonical doc)
+- 2nd occurrence — **automate** (add CI check or pre-commit hook)
+- 3rd+ occurrence — **tool config** (linter rule, structural guard)
 
 ### Temp files
 
@@ -220,7 +241,7 @@ When you make a non-obvious choice, document it at the right level:
 1. **Inline comment** in the file (CI, code, config) — immediate context
    for anyone reading that file.
 1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
-1. **MODERNIZATION.md** — full "why" explanation with rationale and trade-offs.
+1. **DESIGN_DECISIONS.md** — full "why" explanation with rationale and trade-offs.
 
 ### Cross-platform
 
@@ -236,6 +257,70 @@ code works on others.
 - Never assume tooling behaves intuitively — verify
 - Shell escaping is a common trap: test with `echo` before passing to real command
 - When in doubt, route through files: write to `.tmp/<file>`, pipe to command
+
+## Architecture
+
+- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
+  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
+  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
+  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
+  `ai_edge_litert` is a mandatory dependency.
+- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
+  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
+
+## Commands
+
+```bash
+uv sync                      # install everything (Python 3.12 required)
+uv sync --frozen             # CI: use locked versions
+uv run ruff check .          # lint
+uv run ruff format .         # format
+uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check  # markdown
+uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
+uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
+uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
+uv run pytest                         # tests + coverage (config in pyproject.toml)
+uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
+```
+
+**Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
+
+## Live metrics
+
+Always query live, never hardcode:
+
+| Metric | Command |
+|--------|---------|
+| Test count | `uv run pytest --tb=no -q` |
+| Coverage | `uv run pytest --cov-report=term-missing` |
+| CI status (main) | `gh run list --branch main --limit 1 --json conclusion` |
+
+## CI quirks
+
+### CI setup
+
+`astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
+
+- `setup-uv` installs uv with built-in caching on GitHub-hosted runners
+- Python version is read from `.python-version` — never hardcoded in YAML
+- `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
+
+### Runner notes
+
+- `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
+- Build runners use **oldest free** for widest binary compatibility:
+  `ubuntu-22.04`, `windows-2022`, `macos-latest`.
+- Test runners use **`-latest`** for newest OS coverage:
+  `ubuntu-latest`, `windows-latest`, `macos-latest`.
+- `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
+- `macos-latest` is ARM64 (Apple Silicon).
+- Build produces per-OS artifacts via PyInstaller `--onefile`.
+
+## Python version
+
+**Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
+Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
 
 ## Agent memory
 
@@ -292,126 +377,12 @@ When something goes wrong, trace past the surface error to one of:
 
 Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search gap will repeat.
 
-## Rationale
+### Safe updates
 
-### Why agent-centric structure
+When evaluating whether to keep or remove existing content, apply the mirror of
+root cause analysis:
 
-- Agents read files sequentially, so important info should be at the top
-- Action-oriented instructions are more useful than passive documentation
-- Clear hierarchy helps agents find what they need quickly
-
-### Why single file
-
-- Maintains context, avoids navigation overhead
-- Agents can read once and have all information
-- Avoids splitting related information across files
-
-### Why long options
-
-- Avoids bias (short options may not be documented everywhere)
-- More portable across different systems and versions
-- Clearer for humans reading the documentation
-
-### Why verify before documenting
-
-- Prevents adding broken commands to documentation
-- Ensures documented commands actually work
-- Builds trust in the documentation
-
-### Why three solutions
-
-- Gives user choice based on their preferences
-- Considers different approaches (quick vs thorough)
-- Avoids tunnel vision on single solution
-
-## Project
-
-Desktop TCP server that runs ML inference (ONNX/TFLite) and sends results to TRIK robots.
-Entrypoint: `TRIKLobeServer.py`. Package: `lobe_server/`.
-
-## Commands
-
-```bash
-uv sync                      # install everything (Python 3.12 required)
-uv sync --frozen             # CI: use locked versions
-uv run ruff check .          # lint
-uv run ruff format .         # format
-uv run mdformat README.md MODERNIZATION.md AGENTS.md --check  # markdown (explicit list, no --exclude flag)
-uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
-uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
-uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
-uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
-```
-
-**Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
-
-## Architecture
-
-- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
-  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
-  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
-  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
-  `ai_edge_litert` is a mandatory dependency.
-- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
-  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
-
-## Tests
-
-87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite.
-Run single test: `uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --exitfirst`.
-
-`reportMissingTypeStubs`, `reportUnknownMemberType`, etc. set to `"none"` in
-pyproject.toml because numpy/onnxruntime/pytest have no stubs — intentional,
-0 errors expected.
-
-### Test coverage notes
-
-- Coverage config is single-sourced in `pyproject.toml`: `addopts = "--cov"`,
-  `source = ["lobe_server"]`, `fail_under = 100`. CI runs bare `uv run pytest`.
-  To skip coverage locally: `uv run pytest --no-cov`.
-- WebcamCamera.__init__ requires cv2 (native C extension) — tests bypass it
-  with `patch.object(WebcamCamera, "__init__", return_value=None)`.
-  To reach 100%, use `@patch.dict("sys.modules", {"cv2": mock_cv2})`.
-- `load_model` had dead code (TFLite fallback unreachable after ONNX early
-  return). Removed, not tested.
-- `_handle_connection` cancel loop (pending task cancellation) requires a
-  blocking prediction so tasks are still pending when reader finishes.
-  Use `threading.Event` to block `camera.capture()` in `asyncio.to_thread`.
-- C-level builtins (e.g. `socket.getsockname`) can't be patched on
-  instances — `patch.object` raises "read-only attribute". Patch the
-  class instead: `patch.object(socket.socket, "getsockname", ...)`.
-- `asyncio.wait(FIRST_COMPLETED)` silently swallows task exceptions:
-  if task A raises but B completes first, the exception is lost and
-  tests appear to pass. When you need to verify a task succeeds,
-  `await` it directly instead of wrapping in `asyncio.wait`.
-- After adding tests, verify with `--cov-report=term-missing` that
-  the specific lines you intended to cover actually are. Passing tests
-  do not guarantee coverage — async race conditions can silently skip lines.
-
-## CI quirks
-
-### CI setup
-
-`astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
-
-- `setup-uv` installs uv with built-in caching on GitHub-hosted runners
-- Python version is read from `.python-version` — never hardcoded in YAML
-- `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
-
-### Runner notes
-
-- `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
-- Build runners use **oldest free** for widest binary compatibility:
-  `ubuntu-22.04`, `windows-2022`, `macos-latest`.
-- Test runners use **`-latest`** for newest OS coverage:
-  `ubuntu-latest`, `windows-latest`, `macos-latest`.
-- `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
-- `macos-latest` is ARM64 (Apple Silicon).
-- Build produces per-OS artifacts via PyInstaller `--onefile`.
-
-## Python version
-
-**Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
-Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
+- **Would removing this change agent behavior?** If yes, keep it — the rule
+  exists because it was needed.
+- **Is the claim provably wrong?** Only then delete or correct — verify against
+  executable sources (config, workflow, code) before removing.
