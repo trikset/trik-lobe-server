@@ -32,6 +32,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_NCHW_CHANNEL_DIM = 1
+_NHWC_CHANNEL_DIM = 3
+_TENSOR_4D = 4
+_TENSOR_3D = 3
+_TENSOR_2D = 2
+
 
 class ClassificationResult:
     def __init__(self, labels: list[tuple[str, float]]) -> None:
@@ -113,7 +119,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
 
 class ONNXImageModel:
-    def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:
+    def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:  # noqa: ANN401
         self._session = session
         self._labels = labels
         self._input_name = input_name
@@ -126,7 +132,7 @@ class ONNXImageModel:
         # When both dims 1 and 3 are plausible channel counts (1 or 3),
         # fall back to NHWC (common for TF-exported ONNX models). This
         # mis-detects NCHW with 1x1 spatial dims like [1, 3, 1, 1].
-        if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
+        if len(shape) == _TENSOR_4D and shape[_NCHW_CHANNEL_DIM] in (1, 3) and shape[_NHWC_CHANNEL_DIM] not in (1, 3):
             self._is_nchw = True
 
     @classmethod
@@ -139,14 +145,14 @@ class ONNXImageModel:
         shape: list[int | str | None] = list(input_meta.shape)  # type: ignore[reportUnknownMemberType]
         dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
-        if len(dims) >= 4:
+        if len(dims) >= _TENSOR_4D:
             dims = dims[1:]
-        if len(dims) == 3:
+        if len(dims) == _TENSOR_3D:
             if dims[0] in (1, 3):
                 _, h, w = dims
             else:
                 h, w, _ = dims
-        elif len(dims) == 2:
+        elif len(dims) == _TENSOR_2D:
             h, w = dims
         else:
             h, w = 224, 224
@@ -175,7 +181,7 @@ class ONNXImageModel:
 
 
 class TFLiteImageModel:
-    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:
+    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:  # noqa: ANN401
         self._interpreter = interpreter
         self._labels = labels
         self._input_size = input_size
