@@ -100,9 +100,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Do not proceed to the next command until root cause is identified
 - If the error was a script/command bug (not a real failure):
   1. Fix the immediate issue
-  2. **Update AGENTS.md now** — add a guardrail, hook, or Shell escaping bullet
-  3. Verify the fix by re-running the failed command
-  4. Only then continue with the next task
+  1. **Update AGENTS.md now** — add a guardrail, hook, or Shell escaping bullet
+  1. Verify the fix by re-running the failed command
+  1. Only then continue with the next task
 - If the root cause category is new, add it to the Root cause analysis section
 
 ### After CI failure
