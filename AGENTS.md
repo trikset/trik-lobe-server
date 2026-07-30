@@ -297,7 +297,7 @@ uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expecte
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
+uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
 ```
 
 **Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.

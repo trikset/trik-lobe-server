@@ -59,7 +59,7 @@ class LobeServer:
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
     async def _reader(self, sock: socket.socket) -> None:
-        buf = ""  # accumulates across recv (TCP is a stream, messages split at any byte)
+        buf = b""  # accumulates across recv (TCP is a stream, messages split at any byte)
         while self._running:
             try:
                 raw = await asyncio.wait_for(
@@ -69,7 +69,7 @@ class LobeServer:
                 if not raw:
                     logger.info("Peer closed connection")
                     break
-                buf += raw.decode("utf-8", errors="replace")
+                buf += raw
             except TimeoutError:
                 logger.warning(
                     "No data from peer in %ss, reconnecting...",

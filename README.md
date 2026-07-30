@@ -9,7 +9,7 @@
 ## Установка
 
 1. Скачайте `.zip` с последней версией сервера
-   [здесь](https://github.com/khodand/trik-lobe-server/releases/latest).
+   [здесь](https://github.com/trikset/trik-lobe-server/releases/latest).
 1. Распакуйте архив.
 1. Отредактируйте `settings.ini` (см. ниже).
 
@@ -110,7 +110,7 @@ def main():
 
 ```bash
 uv sync
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
+uv run pyinstaller TRIKLobeServer.py --onefile  # add --icon=trik-studio.ico on Windows
 ```
 
-Готовый .exe появится в `dist/`.
+Готовый исполняемый файл появится в `dist/`.

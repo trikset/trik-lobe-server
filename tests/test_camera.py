@@ -154,10 +154,8 @@ def test_webcam_camera_init_not_opened() -> None:
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_capture.isOpened.return_value = False
 
-    with patch.dict("sys.modules", {"cv2": mock_cv2}):
+    with patch.dict("sys.modules", {"cv2": mock_cv2}), pytest.raises(RuntimeError, match=r"Camera #5"):
         WebcamCamera(5)
-
-    mock_cv2.VideoCapture.assert_called_once_with(5)
 
 
 def test_url_camera_no_auth() -> None:
