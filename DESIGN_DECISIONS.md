@@ -62,7 +62,7 @@ the same `predict()` → `.prediction` interface.
 
 - No more `matplotlib` dependency
 - `Pillow` can be any modern version
-- Server works on Python 3.10-3.12
+- Server works on Python 3.12
 - CI no longer needs to install `lobe`
 - Both ONNX and TFLite are first-class citizens
 
@@ -169,7 +169,7 @@ and no markdown formatting.
   when the editor's Python interpreter differs from the project venv.
   For VS Code: set `python.defaultInterpreterPath` to `.venv/Scripts/python.exe`.
 
-## Model directory layout (three supported layouts)
+## [2026-07-14] Model directory layout (three supported layouts)
 
 ```
 A) labels.txt + model.onnx (recommended for ONNX):
