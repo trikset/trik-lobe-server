@@ -228,6 +228,30 @@ folder survives local development and is visible to future sessions.
 - Never push a merge commit to main — always merge via GitHub API
 - Merge to main only by direct explicit command by user
 - Otherwise — no merge to main
+- **Never use `--admin` without direct explicit unbiased user prompt** — it
+  bypasses required reviews. Only apply when the user independently confirms.
+- Squash-merge subject uses Conventional Commits format (\<50 chars); all useful
+  info from the PR description goes into the squash body (root cause, profit,
+  trade-offs, verification, out of scope), not just a file changelog.
+
+### Stacked PRs (squash merge)
+
+When merging a chain of stacked PRs (A → B → C → main):
+
+- **Merge bottom-up**: the PR targeting `main` first, then each next PR.
+- **After each merge, `--delete-branch` deletes the base branch → GitHub
+  auto-closes the next stacked PR** (base branch gone). Recovery:
+  1. Recreate the deleted base branch from `main` (`git branch <name> main; git push origin <name>`)
+  1. `gh pr reopen <N>` then `gh pr edit <N> --base main`
+  1. Delete the temp base branch
+  1. Rebuild the head branch onto main: `git reset --hard origin/main` then
+     `git cherry-pick <first-commit>^..<last-commit>` (its own commits only)
+  1. `git push --force-with-lease`
+- **Gate on CI**: after each merge, verify main CI is green before merging the
+  next PR (`gh run list --branch main --limit 3`).
+- Conflicts during rebuild are expected (main has squash content the branch
+  pre-dates) — resolve by taking the intended final state, or skip commits
+  already upstream (`git cherry-pick --skip`).
 
 ### PR titles
 
