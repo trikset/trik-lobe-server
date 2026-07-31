@@ -20,15 +20,23 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import ai_edge_litert.interpreter as tflite
 import numpy as np
 import numpy.typing as npt
 import onnxruntime as _ort
-from PIL import Image
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+_NCHW_CHANNEL_DIM = 1
+_NHWC_CHANNEL_DIM = 3
+_TENSOR_4D = 4
+_TENSOR_3D = 3
+_TENSOR_2D = 2
 
 
 class ClassificationResult:
@@ -54,7 +62,7 @@ def load_model(path: str | Path) -> ImageModel:
 
     filename: str | None = None
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8-sig") as f:
+        with sig_path.open(encoding="utf-8-sig") as f:
             sig = json.load(f)
         filename = sig.get("filename")
 
@@ -99,7 +107,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
     sig_path = model_path / "signature.json"
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8-sig") as f:
+        with sig_path.open(encoding="utf-8-sig") as f:
             sig = json.load(f)
         if "classes" in sig and "Label" in sig["classes"]:
             return sig["classes"]["Label"]
@@ -111,7 +119,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
 
 class ONNXImageModel:
-    def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:
+    def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:  # noqa: ANN401
         self._session = session
         self._labels = labels
         self._input_name = input_name
@@ -124,7 +132,7 @@ class ONNXImageModel:
         # When both dims 1 and 3 are plausible channel counts (1 or 3),
         # fall back to NHWC (common for TF-exported ONNX models). This
         # mis-detects NCHW with 1x1 spatial dims like [1, 3, 1, 1].
-        if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
+        if len(shape) == _TENSOR_4D and shape[_NCHW_CHANNEL_DIM] in (1, 3) and shape[_NHWC_CHANNEL_DIM] not in (1, 3):
             self._is_nchw = True
 
     @classmethod
@@ -137,26 +145,25 @@ class ONNXImageModel:
         shape: list[int | str | None] = list(input_meta.shape)  # type: ignore[reportUnknownMemberType]
         dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
-        if len(dims) >= 4:
+        if len(dims) >= _TENSOR_4D:
             dims = dims[1:]
-        if len(dims) == 3:
+        if len(dims) == _TENSOR_3D:
             if dims[0] in (1, 3):
                 _, h, w = dims
             else:
                 h, w, _ = dims
-        elif len(dims) == 2:
+        elif len(dims) == _TENSOR_2D:
             h, w = dims
         else:
             h, w = 224, 224
 
         input_size = (h, w)
 
-        if input_name.endswith(":0"):  # type: ignore[reportUnknownMemberType]
-            input_name = input_name[:-2]  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
+        input_name = input_name.removesuffix(":0")  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
 
         labels = _read_labels(Path(model_path))
 
-        return cls(session, labels, input_name, input_size)
+        return cls(session, labels, input_name, input_size)  # type: ignore[reportUnknownArgumentType]
 
     def predict(self, image: Image.Image) -> ClassificationResult:
         processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
@@ -174,7 +181,7 @@ class ONNXImageModel:
 
 
 class TFLiteImageModel:
-    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:
+    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:  # noqa: ANN401
         self._interpreter = interpreter
         self._labels = labels
         self._input_size = input_size

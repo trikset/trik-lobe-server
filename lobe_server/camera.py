@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import requests
 from PIL import Image
 
-from lobe_server.config import Settings
+if TYPE_CHECKING:
+    from lobe_server.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ class CameraSource(ABC):
 
 
 class UrlCamera(CameraSource):
-    def __init__(self, url: str, username: str = "", password: str = ""):
+    def __init__(self, url: str, username: str = "", password: str = "") -> None:
         self._url = url
         self._auth: tuple[str, str] | None = None
         if username and password:
@@ -41,7 +43,7 @@ class UrlCamera(CameraSource):
 
 
 class RobotCamera(CameraSource):
-    def __init__(self, server_ip: str):
+    def __init__(self, server_ip: str) -> None:
         self._url = f"http://{server_ip}:8080/?action=snapshot"
 
     def capture(self) -> Image.Image | None:
@@ -58,8 +60,8 @@ class RobotCamera(CameraSource):
 
 
 class WebcamCamera(CameraSource):
-    def __init__(self, camera_number: int):
-        import cv2 as _cv2  # lazy: 50+ MB native DLLs, only WebcamCamera needs it
+    def __init__(self, camera_number: int) -> None:
+        import cv2 as _cv2  # noqa: PLC0415  # lazy: 50+ MB native DLLs, only WebcamCamera needs it
 
         self._cv2 = _cv2
         self._camera = _cv2.VideoCapture(camera_number)

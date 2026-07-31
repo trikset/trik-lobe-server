@@ -43,8 +43,19 @@ show_missing = true
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "W", "SIM", "PLE", "PLW", "PT", "T10", "TRY", "EM", "RUF", "NPY", "RET"]
-ignore = ["N802", "N803", "N806", "N815", "N816"]
+select = ["ALL"]
+ignore = [
+    # Tests use assert extensively — would require major rewrite
+    "S101",
+    # Tests access private members intentionally (e.g. _labels, _running)
+    "SLF001",
+    # Docstrings on every module/class/method is very high effort
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
+    "D209", "D212",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "ANN401", "N802", "N803", "N806"]
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = [
@@ -71,9 +82,6 @@ reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
 reportAttributeAccessIssue = "none"
-reportUnknownLambdaType = "none"
-reportUnknownParameterType = "none"
-reportUnknownArgumentType = "none"
 
 [tool.vulture]
 ignore_names = ["return_value", "side_effect", "prediction", "im", "settings", "mock_model", "mock_camera"]

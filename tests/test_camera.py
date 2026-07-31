@@ -75,7 +75,9 @@ def test_webcam_camera() -> None:
     mock_capture.read.return_value = (True, frame)
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_cv2.COLOR_BGR2RGB = 4
-    mock_cv2.cvtColor = lambda img, _: img
+    def _mock_cvtColor(img: object, _: object) -> object:
+        return img
+    mock_cv2.cvtColor = _mock_cvtColor
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)
@@ -108,7 +110,7 @@ def test_factory_url() -> None:
     settings = Settings(
         photo_url="http://example.com/snapshot",
         username="u",
-        password="p",
+        password="p",  # noqa: S106
     )
     cam = create_camera(settings, "127.0.0.1")
     assert isinstance(cam, UrlCamera)
