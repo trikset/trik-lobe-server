@@ -9,7 +9,7 @@ Structure: Overview → Running tests → Coverage config → Coverage notes →
 
 ## Overview
 
-87 tests, 100% coverage. All mock-based — no real camera, network, or TFLite
+106 tests, 100% coverage. All mock-based — no real camera, network, or TFLite
 runtime needed.
 
 ## Running tests
@@ -97,7 +97,7 @@ what was missed and how to catch it next time.
 
 | Lines missed | Module | Why not tested? |
 |---|---|---|
-| `camera.py:62-67` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera |
+| `camera.py:68` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera (runtime error path tested via mock) |
 | `server.py:114-120` | `run_forever` success branch | Requires a real TCP server to connect to |
 | `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
 | `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
@@ -107,5 +107,7 @@ All gaps require real hardware (camera, network) or platform-specific packages.
 Previously untested: empty-recv is now covered (`test_reader_empty_recv`),
 partial message framing (`test_reader_partial_then_complete`),
 multi-message buffers (`test_reader_multi_then_quit`, `test_reader_parsed_message`),
-heartbeat timeout (`test_reader_heartbeat_timeout`), and keepalive preservation
-(`test_reader_keepalive_preserves_connection`).
+heartbeat timeout (`test_reader_heartbeat_timeout`), keepalive preservation
+(`test_reader_keepalive_preserves_connection`), Cyrillic/unicode message
+content (`test_format_message_cyrillic`, `test_try_parse_message_cyrillic`),
+and non-ASCII folder paths (`test_load_model_unicode_path`).

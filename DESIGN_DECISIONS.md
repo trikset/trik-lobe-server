@@ -266,4 +266,22 @@ heartbeat timeout feature was implemented. Key findings and resolutions:
 - **`ai-edge-litert` missing Intel Mac wheel** — the package has no macOS x86_64
   wheel. `macos-latest` CI runner is ARM64 (Apple Silicon), so CI is unaffected.
   Intel Mac users would need to compile from source or use Docker.
+
+## [2026-07-30] Gitignore policy for model files
+
+**Context:** Model files (`.tflite`, `.onnx`) and `signature.json` are large
+binary or user-specific configuration files that should not be version-controlled.
+
+**Decision:** Ignore `*.tflite`, `*.onnx`, and `signature.json` in `.gitignore`.
+
+**Rationale:**
+- Model files are typically hundreds of MB — bloating the repo history
+- Models are trained externally and copied into the project directory
+- `signature.json` is auto-exported by Lobe/Teachable Machine and user-specific
+- The required file structure is documented in README.md and DESIGN_DECISIONS.md
+
+**Consequences:**
+- Users must provide model files manually
+- CI does not test with real models (all tests are mock-based)
+- `.onnx` was added later for consistency with `.tflite`
 ```

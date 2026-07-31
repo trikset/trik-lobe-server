@@ -53,7 +53,7 @@ def load_model(path: str | Path) -> ImageModel:
 
     filename: str | None = None
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8") as f:
+        with open(sig_path, encoding="utf-8-sig") as f:
             sig = json.load(f)
         filename = sig.get("filename")
 
@@ -98,7 +98,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
     sig_path = model_path / "signature.json"
     if sig_path.exists():
-        with open(sig_path, encoding="utf-8") as f:
+        with open(sig_path, encoding="utf-8-sig") as f:
             sig = json.load(f)
         if "classes" in sig and "Label" in sig["classes"]:
             return sig["classes"]["Label"]

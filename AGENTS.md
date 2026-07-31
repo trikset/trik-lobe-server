@@ -88,6 +88,23 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Run full suite: `uv run pytest`
 - Or single test: `uv run pytest tests/test_model.py::test_name --exitfirst`
 
+### Before running a command
+
+- If this command type has known pitfalls (Shell escaping, temp files,
+  gh PR bodies), re-read the relevant guardrail section before constructing it
+- When in doubt, route through `.tmp/<file>` rather than inline arguments
+
+### On tool error during execution
+
+- When a command outputs `fatal:`, `error:`, or exits non-zero: **stop immediately**
+- Do not proceed to the next command until root cause is identified
+- If the error was a script/command bug (not a real failure):
+  1. Fix the immediate issue
+  1. **Update AGENTS.md now** — add a guardrail, hook, or Shell escaping bullet
+  1. Verify the fix by re-running the failed command
+  1. Only then continue with the next task
+- If the root cause category is new, add it to the Root cause analysis section
+
 ### After CI failure
 
 - Check each tool: ruff, basedpyright, pylint, bandit, vulture, pytest
@@ -297,7 +314,7 @@ uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expecte
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico
+uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
 ```
 
 **Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
@@ -356,6 +373,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 - When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
 - For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
 - Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a `.tmp/<file>` rather than inlining
+- **Commit messages with special chars** — PowerShell interprets `-1`,
+  backticks, and quotes in `git commit -m` as command syntax. Always use
+  `git commit --file .tmp/msg.txt` for non-trivial messages.
 
 ### Three solutions
 
@@ -378,10 +398,12 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 
 ### Continuous improvement
 
-- **Always learn, always improve**
-- Retrospective after push: analyze decisions, suggest improvements
-- Document lessons learned in this section
-- Update Hooks section when new patterns emerge
+- **Every error must leave a trace**: before moving on from any unexpected
+  error, ensure the lesson is captured in AGENTS.md
+- **Check if this has happened before**: grep AGENTS.md for the error type
+  before crafting a fix — the solution may already be documented
+- **Keep patterns general**: phrase new bullets to catch similar future
+  cases, not just the exact one-time scenario
 
 ### Root cause analysis
 
@@ -390,8 +412,13 @@ When something goes wrong, trace past the surface error to one of:
 - **Missing hook**: No trigger or checklist exists for this action — add one
 - **Missing in docs**: The knowledge wasn't recorded — write it down
 - **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
+- **Ignored error signal**: The tool produced `fatal:` or non-zero exit but execution continued — add an "On tool error" hook
 
-Fix the root cause, not just the symptom. A surface fix without addressing the hook/doc/search gap will repeat.
+Fix the root cause, not just the symptom. A surface fix without addressing the
+hook/doc/search/error gap will repeat.
+
+After fixing the root cause, re-run the failed command to verify.
+Only then proceed to the next task.
 
 ### Safe updates
 

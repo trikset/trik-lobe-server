@@ -510,3 +510,19 @@ def test_onnx_model_predict_nchw() -> None:
     im = Image.new("RGB", (10, 10))
     result = model.predict(im)
     assert result.prediction == "a"
+
+
+def test_load_model_unicode_path() -> None:
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        model_dir = Path(tmp) / "моя_папка model test"  # Cyrillic + spaces
+        model_dir.mkdir()
+        (model_dir / "model.onnx").write_bytes(b"fake onnx")
+        _write_labels_txt(str(model_dir), ["a", "b", "c"])
+        model = load_model(str(model_dir))
+
+    assert isinstance(model, ONNXImageModel)
+    assert model._labels == ["a", "b", "c"]

@@ -141,6 +141,7 @@ dmypy.json
 # Lobe model
 signature.json
 *.tflite
+*.onnx
 
 # Local temp files (PR bodies, scratch data, hypothesis notes)
 .tmp/
