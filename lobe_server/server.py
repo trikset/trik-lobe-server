@@ -9,7 +9,7 @@ from pathlib import Path
 from lobe_server.camera import CameraSource, create_camera
 from lobe_server.config import Settings
 from lobe_server.model import load_model
-from lobe_server.protocol import format_message, is_quit_command, make_command
+from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,8 @@ class LobeServer:
     RECONNECT_DELAY = 3
     SOCKET_TIMEOUT = 10
     BUFFER_SIZE = 255
+    RECV_TIMEOUT = 10
+    CONNECTION_RETRY_DELAY = 0.1
 
     def __init__(self, settings: Settings, model_path: Path):
         self._settings = settings
@@ -57,16 +59,36 @@ class LobeServer:
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
     async def _reader(self, sock: socket.socket) -> None:
-        data = ""
-        while self._running and not is_quit_command(data):
+        buf = ""
+        while self._running:
             try:
-                raw = await asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE)
-                data = raw.decode("utf-8")
+                raw = await asyncio.wait_for(
+                    asyncio.get_running_loop().sock_recv(sock, self.BUFFER_SIZE),
+                    timeout=self.RECV_TIMEOUT,
+                )
+                if not raw:
+                    logger.info("Peer closed connection")
+                    break
+                buf += raw.decode("utf-8", errors="replace")
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "No data from peer in %ss, reconnecting...",
+                    self.RECV_TIMEOUT,
+                )
+                break
             except (OSError, ConnectionResetError):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(self.CONNECTION_RETRY_DELAY)
                 continue
-            if data:
-                logger.debug("Received: %s", data)
+            while self._running:
+                ok, msg, rest = try_parse_message(buf)
+                if not ok:
+                    break
+                buf = rest
+                if is_quit_command(msg):
+                    self._running = False
+                    return
+                if msg:
+                    logger.debug("Received: %s", msg)
             await asyncio.sleep(0)
         self._running = False
 
