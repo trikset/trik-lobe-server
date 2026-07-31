@@ -41,7 +41,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before commit
 
 - No need to run pre-commit hooks (installed to git, runs automatically)
-- If docs changed: run `uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check`
+- If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
   (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
@@ -63,6 +63,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ### Before branch
 
 - Create feature branch from main: `git switch main && git pull && git switch --create feat/name`
+- If the PR depends on another unmerged PR, branch from that PR's branch instead of main
 - Branch naming: `feat/description`, `fix/description`, `docs/description`
 - Keep feature branches focused (one idea per branch)
 
@@ -101,9 +102,16 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 - Review PR description for mojibake, encoding, or broken links
 - If description was passed via CLI, verify with `gh pr view --json body`
+- If this PR is stacked on another PR (base != main), add "Depends on #N" to the description
 - Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
 - Push signed commit
 - Mark PR as ready for review
+
+### After push to existing PR
+
+- If new commits were pushed after the PR was created, update the PR body:
+  `gh pr edit <N> --body-file .tmp/pr-body.md`
+- Stale PR bodies are misleading — the description must reflect all commits
 
 ### After push (retrospective)
 
@@ -136,12 +144,17 @@ architecture, or conventions, document it in AGENTS.md first.
 
 PR description must cover:
 
-- **Root cause** — what problem does this solve?
+- **Root cause** — what problem does this solve? (not: "various X accumulated" —
+  trace to the actual reason: missing check, missing doc, wrong assumption)
 - **Profit** — measurable benefit (numbers if possible)
 - **Trade-offs** — alternatives considered and rejected
 - **Verification** — proof not visible in diff or CI checks
 
 Do NOT list changed files (visible in diff) or CI status (visible in checks).
+Do NOT list commit hashes (fragile, visible in PR commit tab).
+
+Before writing the body, check: is the base `main`? If not, add
+"Depends on #N" referencing the base PR.
 
 ### Pattern recurrence escalation
 
@@ -247,10 +260,9 @@ When you make a non-obvious choice, document it at the right level:
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
 When writing code or tests that touch OS-level APIs (sockets, files,
-processes), always consider platform differences. `socket.socketpair()`
-returns AF_INET on Windows but AF_UNIX on macOS/Linux, which changes
-`getsockname()` behavior. Local tests on one OS are not proof the
-code works on others.
+processes), always consider platform differences. See TESTING.md for
+platform-specific test patterns (socketpair, temp files, deprecations).
+Local tests on one OS are not proof the code works on others.
 
 ### Tooling assumptions
 
@@ -265,8 +277,12 @@ code works on others.
   `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
   fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
   `ai_edge_litert` is a mandatory dependency.
-- `lobe_server/server.py`: `LobeServer` — TCP server with asyncio event loop.
-  `run_forever()` retries on connection failure after `RECONNECT_DELAY=3s`.
+- `lobe_server/server.py`: `LobeServer` — TCP client connecting to robot's mailbox
+  server. Sends `register`, `self`, `keepalive`, `data:<prediction>`. Receives
+  `keepalive` every 3s from robot (hardcoded in trikRuntime, not negotiated).
+  `_reader` is the sole health monitor: breaks on empty recv or `RECV_TIMEOUT`.
+  `_keepalive_loop`/`_prediction_loop` are outbound-only — death detection is
+  the reader's job via heartbeat timeout.
 
 ## Commands
 
@@ -275,7 +291,7 @@ uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
 uv run ruff check .          # lint
 uv run ruff format .         # format
-uv run mdformat README.md AGENTS.md TESTING.md DESIGN_DECISIONS.md --check  # markdown
+uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"  # markdown (root-level docs)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan

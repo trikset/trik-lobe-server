@@ -61,7 +61,7 @@ async def test_send_format(
 
     server = _make_server(settings, mock_model, mock_camera)
     await server._send(sock, "hello")
-    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"5:hello"
 
 
@@ -73,7 +73,7 @@ async def test_send_message(
 
     server = _make_server(settings, mock_model, mock_camera)
     await server._send_message(sock, "cat")
-    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"8:data:cat"
 
 
@@ -122,7 +122,7 @@ def test_close(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
 @pytest.mark.asyncio
 async def test_reader_quit(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -134,7 +134,7 @@ async def test_reader_quit(settings: Settings, mock_model: MagicMock, mock_camer
 @pytest.mark.asyncio
 async def test_reader_empty_recv(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -146,8 +146,8 @@ async def test_reader_empty_recv(settings: Settings, mock_model: MagicMock, mock
 @pytest.mark.asyncio
 async def test_reader_heartbeat_timeout(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
-    loop.sock_recv = AsyncMock(side_effect=asyncio.TimeoutError)
+    loop = asyncio.get_running_loop()
+    loop.sock_recv = AsyncMock(side_effect=TimeoutError)
 
     server = _make_server(settings, mock_model, mock_camera)
     server._running = True
@@ -160,7 +160,7 @@ async def test_reader_keepalive_preserves_connection(
     settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
 ) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"9:keepalive")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -182,7 +182,7 @@ async def test_reader_keepalive_preserves_connection(
 @pytest.mark.asyncio
 async def test_reader_connection_reset(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(side_effect=ConnectionResetError)
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -204,7 +204,7 @@ async def test_reader_connection_reset(settings: Settings, mock_model: MagicMock
 @pytest.mark.asyncio
 async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"some garbage")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -226,7 +226,7 @@ async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, 
 @pytest.mark.asyncio
 async def test_reader_parsed_message(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"8:data:cat")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -249,7 +249,7 @@ async def test_reader_parsed_message(settings: Settings, mock_model: MagicMock, 
 @pytest.mark.asyncio
 async def test_reader_multi_then_quit(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(return_value=b"8:data:cat9:data:quit")
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -261,7 +261,7 @@ async def test_reader_multi_then_quit(settings: Settings, mock_model: MagicMock,
 @pytest.mark.asyncio
 async def test_reader_partial_then_complete(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     sock = MagicMock()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.sock_recv = AsyncMock(side_effect=[b"9:data:q", b"9:data:quit"])
 
     server = _make_server(settings, mock_model, mock_camera)
@@ -300,7 +300,7 @@ async def test_keepalive_loop(
         ],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"9:keepalive"
 
 
@@ -324,7 +324,7 @@ async def test_prediction_loop(
         ],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    data = await asyncio.get_event_loop().sock_recv(reader, 255)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"8:data:cat"
 
 
@@ -339,7 +339,7 @@ async def test_handle_connection(
 
     async def send_quit():
         await asyncio.sleep(0.1)
-        await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
+        await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
     await asyncio.wait(
         [
@@ -423,7 +423,7 @@ async def test_handle_connection_cancels_pending(
 
     async def send_quit() -> None:
         await asyncio.sleep(0.1)
-        await asyncio.get_event_loop().sock_sendall(reader, b"9:data:quit")
+        await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
     asyncio.create_task(send_quit())  # noqa: RUF006
     with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):

@@ -20,7 +20,7 @@ class LobeServer:
     RECONNECT_DELAY = 3
     SOCKET_TIMEOUT = 10
     BUFFER_SIZE = 255
-    RECV_TIMEOUT = 10
+    RECV_TIMEOUT = 10  # robot sends keepalive every 3s; 10s = 3 missed + margin
     CONNECTION_RETRY_DELAY = 0.1
 
     def __init__(self, settings: Settings, model_path: Path):
@@ -35,7 +35,7 @@ class LobeServer:
         logger.debug("Send: %s", data)
         loop = asyncio.get_running_loop()
         async with self._lock:
-            with contextlib.suppress(OSError):
+            with contextlib.suppress(OSError):  # intentional: _reader is the sole health monitor
                 await loop.sock_sendall(sock, data)
 
     async def _send_message(self, sock: socket.socket, message: str) -> None:
@@ -59,7 +59,7 @@ class LobeServer:
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
     async def _reader(self, sock: socket.socket) -> None:
-        buf = ""
+        buf = ""  # accumulates across recv (TCP is a stream, messages split at any byte)
         while self._running:
             try:
                 raw = await asyncio.wait_for(
@@ -70,7 +70,7 @@ class LobeServer:
                     logger.info("Peer closed connection")
                     break
                 buf += raw.decode("utf-8", errors="replace")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "No data from peer in %ss, reconnecting...",
                     self.RECV_TIMEOUT,
@@ -110,8 +110,8 @@ class LobeServer:
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()
         sock.settimeout(self.SOCKET_TIMEOUT)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.connect((self._settings.server_ip, self._settings.server_port))
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.setblocking(False)
         return sock
 

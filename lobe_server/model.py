@@ -13,12 +13,6 @@ signature.json may also contain:
 
 Legacy Microsoft Lobe format is supported — only "classes.Label" and
 "filename" are read, everything else is ignored.
-
-Input layout detection for ONNX:
-  Assumes NHWC ([N, H, W, C]) by default.
-  Detects NCHW ([N, C, H, W]) when channel count is 1 or 3
-  and the last dimension is not 1 or 3. This covers all common
-  image classification models; exotic layouts may need explicit config.
 """
 
 from __future__ import annotations
@@ -123,6 +117,8 @@ class ONNXImageModel:
         self._input_size = input_size
         self._is_nchw = False
         shape = session.get_inputs()[0].shape
+        # Heuristic: NHWC by default. Detect NCHW when channel dim is 1 or 3
+        # and the last dim is neither. Covers all common image classification.
         if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
             self._is_nchw = True
 
