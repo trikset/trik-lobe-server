@@ -2,14 +2,14 @@
 name = "trik-lobe-server"
 version = "1.1.0"
 description = "TRIK Lobe ML inference server"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "opencv-python>=4.11.0,<5.0.0",
     "requests>=2.32.0,<3.0.0",
     "Pillow>=12.3.0,<13.0.0",
     "numpy>=1.26.0,<2.0.0",
     "onnxruntime>=1.17.0,<2.0.0",
-    "ai-edge-litert>=2.1.0",
+    "ai-edge-litert>=2.1.0,<3.0.0",
 ]
 
 
@@ -70,11 +70,8 @@ reportPrivateUsage = "none"
 reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
-reportUnknownMemberType = "none"
 reportAttributeAccessIssue = "none"
 reportUnknownLambdaType = "none"
-reportMissingTypeArgument = "none"
-reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownArgumentType = "none"
 

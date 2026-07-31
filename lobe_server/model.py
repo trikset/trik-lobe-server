@@ -24,6 +24,7 @@ from typing import Any, Protocol
 
 import ai_edge_litert.interpreter as tflite
 import numpy as np
+import numpy.typing as npt
 import onnxruntime as _ort
 from PIL import Image
 
@@ -117,8 +118,12 @@ class ONNXImageModel:
         self._input_size = input_size
         self._is_nchw = False
         shape = session.get_inputs()[0].shape
-        # Heuristic: NHWC by default. Detect NCHW when channel dim is 1 or 3
-        # and the last dim is neither. Covers all common image classification.
+        # Heuristic: detect NCHW vs NHWC layout for 4D tensors.
+        # NCHW: channels in dim 1 (e.g., [1, 3, 224, 224])
+        # NHWC: channels in dim 3 (e.g., [1, 224, 224, 3])
+        # When both dims 1 and 3 are plausible channel counts (1 or 3),
+        # fall back to NHWC (common for TF-exported ONNX models). This
+        # mis-detects NCHW with 1x1 spatial dims like [1, 3, 1, 1].
         if len(shape) == 4 and shape[1] in (1, 3) and shape[3] not in (1, 3):
             self._is_nchw = True
 
@@ -127,9 +132,9 @@ class ONNXImageModel:
         onnx_path = Path(model_path) / filename
         session = _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
 
-        input_meta = session.get_inputs()[0]
-        input_name: str = input_meta.name
-        shape: list[int | str | None] = list(input_meta.shape)
+        input_meta = session.get_inputs()[0]  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        input_name: str = input_meta.name  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        shape: list[int | str | None] = list(input_meta.shape)  # type: ignore[reportUnknownMemberType]
         dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
         if len(dims) >= 4:
@@ -146,21 +151,24 @@ class ONNXImageModel:
 
         input_size = (h, w)
 
-        if input_name.endswith(":0"):
-            input_name = input_name[:-2]
+        if input_name.endswith(":0"):  # type: ignore[reportUnknownMemberType]
+            input_name = input_name[:-2]  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
 
         labels = _read_labels(Path(model_path))
 
         return cls(session, labels, input_name, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
-        processed: np.ndarray = _preprocess(image, self._input_size)
+        processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
         if self._is_nchw:
             processed = np.transpose(processed, (0, 3, 1, 2))
         output = self._session.run(None, {self._input_name: processed})
         raw = output[0]
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
-        paired = list(zip(self._labels, confidences, strict=False))
+        if len(self._labels) != len(confidences):
+            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            raise ValueError(msg)
+        paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
         return ClassificationResult(paired)
 
@@ -179,7 +187,7 @@ class TFLiteImageModel:
         interpreter = tflite.Interpreter(model_path=str(tflite_path))
         interpreter.allocate_tensors()
 
-        input_details = interpreter.get_input_details()[0]
+        input_details = interpreter.get_input_details()[0]  # type: ignore[reportUnknownVariableType]
         shape: list[int] = list(input_details["shape"])  # type: ignore[arg-type]
         _, h, w, _ = shape
         input_size = (h, w)
@@ -189,17 +197,20 @@ class TFLiteImageModel:
         return cls(interpreter, labels, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
-        processed: np.ndarray = _preprocess(image, self._input_size)
+        processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
         self._interpreter.set_tensor(self._input_index, processed)
         self._interpreter.invoke()
         raw = self._interpreter.get_tensor(self._output_index)
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
-        paired = list(zip(self._labels, confidences, strict=False))
+        if len(self._labels) != len(confidences):
+            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            raise ValueError(msg)
+        paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
         return ClassificationResult(paired)
 
 
-def _preprocess(image: Image.Image, target_size: tuple[int, int]) -> np.ndarray:
+def _preprocess(image: Image.Image, target_size: tuple[int, int]) -> npt.NDArray[np.float32]:
     image = image.convert("RGB")
     image = _resize_uniform_to_fill(image, target_size)
     image = _crop_center(image, target_size)

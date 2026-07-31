@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class LobeServer:
-    KEEPALIVE_INTERVAL = 5
+    KEEPALIVE_INTERVAL = 5  # robot sends every 3s; predictions also reset heartbeat timer
     PREDICTION_INTERVAL = 0.2
     RECONNECT_DELAY = 3
-    SOCKET_TIMEOUT = 10
     BUFFER_SIZE = 255
     RECV_TIMEOUT = 10  # robot sends keepalive every 3s; 10s = 3 missed + margin
     CONNECTION_RETRY_DELAY = 0.1
@@ -76,7 +75,7 @@ class LobeServer:
                     self.RECV_TIMEOUT,
                 )
                 break
-            except (OSError, ConnectionResetError):
+            except OSError:
                 await asyncio.sleep(self.CONNECTION_RETRY_DELAY)
                 continue
             while self._running:
@@ -93,7 +92,7 @@ class LobeServer:
         self._running = False
 
     async def _handle_connection(self, sock: socket.socket) -> None:
-        _ip, port = sock.getsockname()
+        port = sock.getsockname()[1]
         hull = self._settings.my_hull_number
         await self._send(sock, make_command("register", port, hull))
         await self._send(sock, make_command("self", hull))
@@ -109,10 +108,10 @@ class LobeServer:
 
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()
-        sock.settimeout(self.SOCKET_TIMEOUT)
-        sock.connect((self._settings.server_ip, self._settings.server_port))
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.setblocking(False)
+        loop = asyncio.get_running_loop()
+        await loop.sock_connect(sock, (self._settings.server_ip, self._settings.server_port))
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return sock
 
     async def run_forever(self) -> None:

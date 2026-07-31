@@ -9,7 +9,7 @@ Structure: Overview → Running tests → Coverage config → Coverage notes →
 
 ## Overview
 
-106 tests, 100% coverage. All mock-based — no real camera, network, or TFLite
+105 tests, 100% coverage. All mock-based — no real camera, network, or TFLite
 runtime needed.
 
 ## Running tests
