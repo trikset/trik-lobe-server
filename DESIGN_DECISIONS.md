@@ -305,3 +305,4 @@ matching the project's own `>=3.12,<3.14`), regenerate `uv.lock`, and pin
 - `uv.lock` resolved 2.5.1 and was committed with the real version
 - Dependabot's constraint-only PR (#96) was superseded and closed
 - `pyproject.toml` version bumped to 2.0.0 for the first dual-backend release
+```
