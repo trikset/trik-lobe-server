@@ -298,6 +298,14 @@ When you make a non-obvious choice, document it at the right level:
 1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
 1. **DESIGN_DECISIONS.md** — full "why" explanation with rationale and trade-offs.
 
+**AGENTS.md stores rules/constraints only** — never rationale or "why"
+explanations. Rationale → DESIGN_DECISIONS.md. If a line explains *why*
+instead of *what to do*, it's in the wrong file.
+
+**Verify toolchain/dependency-manager names against executable sources**
+(`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value
+(e.g. Dependabot `package-ecosystem: "pip"`) is not the project's ecosystem (uv).
+
 ### Cross-platform
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
@@ -363,6 +371,9 @@ Always query live, never hardcode:
 - `setup-uv` installs uv with built-in caching on GitHub-hosted runners
 - Python version is read from `.python-version` — never hardcoded in YAML
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
+- setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
+- `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
+- Dependabot ecosystem tag is `uv` (this project); pip updates are grouped into one PR per interval so a single CI run covers them
 
 ### Runner notes
 
