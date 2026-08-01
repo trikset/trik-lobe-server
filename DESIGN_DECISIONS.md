@@ -284,4 +284,24 @@ binary or user-specific configuration files that should not be version-controlle
 - Users must provide model files manually
 - CI does not test with real models (all tests are mock-based)
 - `.onnx` was added later for consistency with `.tflite`
-```
+
+## [2026-08-01] numpy 2.x upgrade
+
+**Context:** The `numpy<2.0.0` pin blocked NumPy 2.x, which had been stable
+for over two years. onnxruntime, opencv-python, and ai-edge-litert all support
+NumPy 2.x. Dependabot offered to relax the bound but would not regenerate the
+lockfile, leaving 1.26.4 installed in CI.
+
+**Decision:** Upgrade to numpy 2.5.1 (latest stable, `requires-python >=3.12`
+matching the project's own `>=3.12,<3.14`), regenerate `uv.lock`, and pin
+`numpy>=2.0,<3.0`.
+
+**Rationale:**
+- 2.5.1 is the newest stable line with pre-built wheels for all supported platforms
+- Full suite (107 tests, 100% coverage, all linters) passes on 2.5.1
+- Forcing `>=2.0` prevents silent fallback to 1.26 in fresh installs
+
+**Consequences:**
+- `uv.lock` resolved 2.5.1 and was committed with the real version
+- Dependabot's constraint-only PR (#96) was superseded and closed
+- `pyproject.toml` version bumped to 2.0.0 for the first dual-backend release
