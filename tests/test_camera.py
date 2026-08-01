@@ -75,8 +75,10 @@ def test_webcam_camera() -> None:
     mock_capture.read.return_value = (True, frame)
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_cv2.COLOR_BGR2RGB = 4
+
     def _mock_cvtColor(img: object, _: object) -> object:
         return img
+
     mock_cv2.cvtColor = _mock_cvtColor
 
     with patch.object(WebcamCamera, "__init__", return_value=None):

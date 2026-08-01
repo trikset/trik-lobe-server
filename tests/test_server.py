@@ -55,7 +55,10 @@ def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMo
 
 @pytest.mark.asyncio
 async def test_send_format(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
 
@@ -67,7 +70,10 @@ async def test_send_format(
 
 @pytest.mark.asyncio
 async def test_send_message(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
 
@@ -79,7 +85,10 @@ async def test_send_message(
 
 @pytest.mark.asyncio
 async def test_send_oserror(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
     reader.close()
@@ -157,7 +166,9 @@ async def test_reader_heartbeat_timeout(settings: Settings, mock_model: MagicMoc
 
 @pytest.mark.asyncio
 async def test_reader_keepalive_preserves_connection(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
 ) -> None:
     sock = MagicMock()
     loop = asyncio.get_running_loop()
@@ -282,7 +293,10 @@ async def test_reader_partial_then_complete(settings: Settings, mock_model: Magi
 
 @pytest.mark.asyncio
 async def test_keepalive_loop(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
 
@@ -306,7 +320,10 @@ async def test_keepalive_loop(
 
 @pytest.mark.asyncio
 async def test_prediction_loop(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
 
@@ -330,7 +347,10 @@ async def test_prediction_loop(
 
 @pytest.mark.asyncio
 async def test_handle_connection(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     sock, reader = real_sock_pair
 
@@ -412,7 +432,9 @@ async def test_run_forever_success(settings: Settings, mock_model: MagicMock, mo
 
 @pytest.mark.asyncio
 async def test_handle_connection_cancels_pending(
-    settings: Settings, mock_model: MagicMock, real_sock_pair: _SockPair,
+    settings: Settings,
+    mock_model: MagicMock,
+    real_sock_pair: _SockPair,
 ) -> None:
     import threading  # noqa: PLC0415
 

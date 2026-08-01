@@ -40,7 +40,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### Before commit
 
-- No need to run pre-commit hooks (installed to git, runs automatically)
+- If hooks are not installed (fresh clone), run `uv run pre-commit install`
+  once — they then run automatically on every commit
+- To run all hooks manually at any time: `uv run pre-commit run --all-files`
 - If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
@@ -148,8 +150,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
-plus `trailing-whitespace`, `end-of-file-fixer`, and `check-yaml`. CI runs
-`mdformat --check` on all root-level `*.md` (via glob).
+plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
+Install once per clone: `uv run pre-commit install`. CI runs `mdformat --check`
+on all root-level `*.md` (via glob).
 
 ## Guardrails
 
