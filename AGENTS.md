@@ -307,7 +307,8 @@ instead of *what to do*, it's in the wrong file.
 
 **Verify toolchain/dependency-manager names against executable sources**
 (`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value
-(e.g. Dependabot `package-ecosystem: "pip"`) is not the project's ecosystem (uv).
+is not the project's ecosystem — e.g. Dependabot used `package-ecosystem: "pip"`
+(its closest legacy tag) until the native `uv` tag existed.
 
 ### Cross-platform
 
@@ -376,7 +377,7 @@ Always query live, never hardcode:
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
 - setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
 - `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
-- Dependabot ecosystem tag is `uv` (this project); pip updates are grouped into one PR per interval so a single CI run covers them
+- Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
 
 ### Runner notes
 
