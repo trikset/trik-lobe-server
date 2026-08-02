@@ -1,3 +1,6 @@
+# Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+
+
 def format_message(msg: str) -> bytes:
     data = msg.encode()
     return bytes(f"{len(data)}:", encoding="UTF-8") + data
