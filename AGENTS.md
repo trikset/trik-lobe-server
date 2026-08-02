@@ -378,6 +378,8 @@ Always query live, never hardcode:
 - setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
 - `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
 - Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
+- Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
+  actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
 
 ### Runner notes
 
@@ -444,6 +446,15 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
   before crafting a fix — the solution may already be documented
 - **Keep patterns general**: phrase new bullets to catch similar future
   cases, not just the exact one-time scenario
+- **Store only high-signal, expensive-to-rediscover facts**: if a failure
+  message, `--help`, or the config file explains it, teach rediscovery instead
+  of memorializing. Every stored line has a maintenance cost — weigh it against
+  the benefit.
+- **Verify tooling "installed/runs automatically" claims against the
+  environment** — a config file existing is not the same as the tool being
+  active. Confirm with a command, not an assumption.
+- **Prefer concepts over exact numbers/line-numbers in docs** — they drift
+  silently; live queries and conceptual descriptions don't.
 
 ### Root cause analysis
 
