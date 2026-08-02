@@ -1,3 +1,5 @@
+# Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+
 """
 Image classification model loader with dual ONNX/TFLite backend.
 

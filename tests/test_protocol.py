@@ -1,3 +1,5 @@
+# Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+
 from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
 
 
