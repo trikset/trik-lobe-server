@@ -25,6 +25,19 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --frozen
+      - name: Check lockfile is up to date
+        run: uv lock --check
+      - name: Check pyproject/lockfile sync
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          git fetch --depth=1 origin "$base"
+          changed="$(git diff --name-only "$base" HEAD)"
+          if echo "$changed" | grep -q '^pyproject.toml$' && ! echo "$changed" | grep -q '^uv.lock$'; then
+            echo "::error::pyproject.toml changed but uv.lock did not. Run 'uv lock' and commit the result."
+            exit 1
+          fi
       - name: Lint with ruff
         run: uv run ruff check .
       - name: Check markdown formatting

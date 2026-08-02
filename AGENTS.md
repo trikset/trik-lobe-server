@@ -40,7 +40,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### Before commit
 
-- No need to run pre-commit hooks (installed to git, runs automatically)
+- If hooks are not installed (fresh clone), run `uv run pre-commit install`
+  once — they then run automatically on every commit
+- To run all hooks manually at any time: `uv run pre-commit run --all-files`
 - If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
@@ -148,8 +150,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
-plus `trailing-whitespace`, `end-of-file-fixer`, and `check-yaml`. CI runs
-`mdformat --check` on all root-level `*.md` (via glob).
+plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
+Install once per clone: `uv run pre-commit install`. CI runs `mdformat --check`
+on all root-level `*.md` (via glob).
 
 ## Guardrails
 
@@ -298,6 +301,15 @@ When you make a non-obvious choice, document it at the right level:
 1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
 1. **DESIGN_DECISIONS.md** — full "why" explanation with rationale and trade-offs.
 
+**AGENTS.md stores rules/constraints only** — never rationale or "why"
+explanations. Rationale → DESIGN_DECISIONS.md. If a line explains *why*
+instead of *what to do*, it's in the wrong file.
+
+**Verify toolchain/dependency-manager names against executable sources**
+(`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value
+is not the project's ecosystem — e.g. Dependabot used `package-ecosystem: "pip"`
+(its closest legacy tag) until the native `uv` tag existed.
+
 ### Cross-platform
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
@@ -363,6 +375,11 @@ Always query live, never hardcode:
 - `setup-uv` installs uv with built-in caching on GitHub-hosted runners
 - Python version is read from `.python-version` — never hardcoded in YAML
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
+- setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
+- `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
+- Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
+- Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
+  actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
 
 ### Runner notes
 
@@ -429,6 +446,15 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
   before crafting a fix — the solution may already be documented
 - **Keep patterns general**: phrase new bullets to catch similar future
   cases, not just the exact one-time scenario
+- **Store only high-signal, expensive-to-rediscover facts**: if a failure
+  message, `--help`, or the config file explains it, teach rediscovery instead
+  of memorializing. Every stored line has a maintenance cost — weigh it against
+  the benefit.
+- **Verify tooling "installed/runs automatically" claims against the
+  environment** — a config file existing is not the same as the tool being
+  active. Confirm with a command, not an assumption.
+- **Prefer concepts over exact numbers/line-numbers in docs** — they drift
+  silently; live queries and conceptual descriptions don't.
 
 ### Root cause analysis
 

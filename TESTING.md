@@ -9,8 +9,8 @@ Structure: Overview → Running tests → Coverage config → Coverage notes →
 
 ## Overview
 
-105 tests, 100% coverage. All mock-based — no real camera, network, or TFLite
-runtime needed.
+100% coverage. All mock-based — no real camera, network, or TFLite
+runtime needed. Test count is a live metric — see AGENTS.md Live metrics.
 
 ## Running tests
 
@@ -93,21 +93,19 @@ Every test batch must consider and test:
 Where edge cases emerge during testing, improve process documentation:
 what was missed and how to catch it next time.
 
-## Coverage gaps
+## Coverage
 
-| Lines missed | Module | Why not tested? |
-|---|---|---|
-| `camera.py:68` | `WebcamCamera.__init__` | Requires `cv2` + a physical camera (runtime error path tested via mock) |
-| `server.py:114-120` | `run_forever` success branch | Requires a real TCP server to connect to |
-| `model.py:150` | `ONNXImageModel.load` `:0` suffix | Only triggers on TF SavedModel models (rare) |
-| `model.py:136-146` | `ONNXImageModel.load` shape inference | Rare ONNX shapes (2D, 0D, dynamic dims) |
+Coverage is 100% across all modules (`--cov-fail-under=100` enforced in CI).
+All code paths are exercised via mocks — no real camera, network, or TFLite
+runtime needed.
 
-All gaps require real hardware (camera, network) or platform-specific packages.
+Hardware-dependent behavior is verified through mocked interfaces:
 
-Previously untested: empty-recv is now covered (`test_reader_empty_recv`),
-partial message framing (`test_reader_partial_then_complete`),
-multi-message buffers (`test_reader_multi_then_quit`, `test_reader_parsed_message`),
-heartbeat timeout (`test_reader_heartbeat_timeout`), keepalive preservation
-(`test_reader_keepalive_preserves_connection`), Cyrillic/unicode message
-content (`test_format_message_cyrillic`, `test_try_parse_message_cyrillic`),
-and non-ASCII folder paths (`test_load_model_unicode_path`).
+- `WebcamCamera` init and failure paths — via a mocked `cv2` module
+- TCP connect / `run_forever` / reader — via `socket.socketpair()` and
+  mocked sockets
+- ONNX shape inference and TF `:0` input-name suffix — via mocked
+  `InferenceSession` inputs
+
+Paths that require real hardware (physical camera, real robot, real model
+file) are intentionally exercised only at integration level, never in CI.
