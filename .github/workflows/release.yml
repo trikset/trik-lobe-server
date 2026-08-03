@@ -73,7 +73,8 @@ jobs:
       - name: Determine previous release tag
         shell: bash
         run: |
-          prev="$(gh release list --limit 10 --json tagName --jq '.[].tagName' | grep -v "^${GITHUB_REF_NAME}$" | head -1)"
+          prev="$(gh release list --limit 10 --json tagName --jq '.[].tagName' 2>/dev/null \
+            | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)"
           echo "PREV_TAG=${prev:-v1.0.0}" >> "$GITHUB_ENV"
       - name: Generate release notes
         run: |
