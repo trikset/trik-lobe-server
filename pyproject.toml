@@ -1,6 +1,6 @@
 [project]
 name = "trik-lobe-server"
-version = "26.08.04.dev0"
+version = "26.08.03"
 description = "TRIK Lobe ML inference server"
 requires-python = ">=3.12,<3.14"
 dependencies = [
