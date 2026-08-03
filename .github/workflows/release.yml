@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Check version matches tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"          # v26.08.03 -> 26.08.03
+          version="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::pyproject.toml version $version does not match tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "Version check OK: $version == $GITHUB_REF_NAME"
+
+  build:
+    needs: version-check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      SCRIPT_NAME: TRIKLobeServer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Build single app for ${{ env.SCRIPT_NAME }}
+        run: >
+          uv run pyinstaller ${{ env.SCRIPT_NAME }}.py --onefile
+          ${{ runner.os == 'Windows' && '--icon=trik-studio.ico' || '' }}
+      - name: Archive artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.SCRIPT_NAME }}-${{ runner.os }}
+          path: |
+            dist
+            settings.ini
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install opencode
+        run: npm install -g opencode-ai
+      - name: Download binaries
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+      - name: Generate release notes
+        run: |
+          opencode run --agent build --auto \
+            "Load the release-notes skill. Generate notes for tag ${GITHUB_REF_NAME}."
+      - name: Verify release notes were written
+        shell: bash
+        run: |
+          test -s release-notes.md || { echo "::error::release-notes.md missing or empty"; exit 1; }
+          head -5 release-notes.md
+      - name: List artifacts
+        shell: bash
+        run: find artifacts -type f | sort
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body_path: release-notes.md
+          files: |
+            artifacts/**/dist/*
+            artifacts/**/settings.ini
