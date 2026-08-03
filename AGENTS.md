@@ -81,6 +81,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Re-validate: `uv run ruff check . && uv run pytest`
 - Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
 - Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
+- **Docs drift review**: `git diff HEAD -- AGENTS.md` and review it hard — every added line must pass the boundary test. Then read the full AGENTS.md top-to-bottom for generalization (phrase specific one-off facts as general patterns) and extract any remaining detail/rationale into MEMORY.md.
 - Check if PR title follows Conventional Commits format
 - Check if PR description covers root cause, profit, trade-offs, and verification
 - Check if PR description has "Out of scope" section
@@ -160,22 +161,19 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Commit, tag `vYY.MM.DD`, push the tag
 - The `release` job of `python-app.yml` (triggered by the `v*` tag) builds 3
   platform binaries and creates a DRAFT release with LLM-generated release
-  notes (via the `release-notes` skill). Artifact naming (`-Windows.zip`,
-  `-Linux.tar.gz`, `-macOS.tar.gz`, each bundling `settings.ini`) and notes
-  structure: see `MEMORY.md` CI quirks + the skill file.
+  notes (via the `release-notes` skill). Artifact naming and notes structure:
+  see `MEMORY.md` CI quirks + the skill file.
 - **Review/edit the draft notes**, then publish manually — releases are never
   auto-published
 
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff` (`uv run ruff check --fix`), `ruff-format`,
-and `mdformat` as local hooks using the venv tools (single source of truth is
-`uv.lock`), plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and
-`uv-lock`. Install once per clone: `uv run pre-commit install`. CI runs
-`uv run mdformat *.md --check` on all root-level `*.md` (via bash glob). On
-Windows PowerShell, run the check through pre-commit instead:
-`uv run pre-commit run mdformat --all-files`. The `mdformat` hook loads
-`mdformat-frontmatter` so YAML frontmatter in opencode skills is preserved.
+and `mdformat` as local hooks using the venv tools, plus the remote
+`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`. Install
+once per clone: `uv run pre-commit install`. Run all hooks manually:
+`uv run pre-commit run --all-files`. On Windows PowerShell, check markdown
+through the hook: `uv run pre-commit run mdformat --all-files`.
 
 ## Guardrails
 
@@ -329,6 +327,13 @@ When you make a non-obvious choice, document it at the right level:
 **AGENTS.md stores rules/constraints only** — never rationale or "why"
 explanations. Rationale → MEMORY.md. If a line explains *why*
 instead of *what to do*, it's in the wrong file.
+
+Operational boundary test when deciding where a line goes:
+
+- A hook/rule line that needs a concrete value (name, number, command arg)
+  must be a pointer — `see MEMORY.md <section>` — never the value itself.
+- If the agent behaves correctly without the line loaded in AGENTS.md and
+  only needs it for a specific task, it belongs in MEMORY.md.
 
 **Verify toolchain/dependency-manager names against executable sources**
 (`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value

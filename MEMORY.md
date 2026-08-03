@@ -497,3 +497,24 @@ because it is the standard and keeps file permissions.
 - The `release` job needs `zip` and `tar` on the runner (both preinstalled on
   `ubuntu-latest`), enforced by the "Check for all tools" step.
 - Users download one archive instead of a binary + separate config.
+
+### [2026-08-03] Pre-commit local hooks (uv)
+
+**Context:** Pre-commit hooks pinned tool revisions separately from the project's
+own dependency pins — ruff 0.15.21 in `.pre-commit-config.yaml` while the venv
+ran 0.16.1 (and similarly mdformat), so pre-commit and CI could disagree about
+what the code should look like. `ruff select = ["ALL"]` auto-enables rules on
+bump, making the mismatch consequential.
+
+**Decision:** Run ruff, ruff-format, and mdformat as **local hooks** with
+`language: system` and `entry: uv run …`. Their versions come from `uv.lock` —
+the single source of truth shared with CI.
+
+**Rationale:** eliminates the pinned-rev-vs-venv drift class entirely; the venv
+tools are already installed, so no separate hook environments to manage.
+
+**Consequences:** fresh clones must `uv sync` before committing (local hooks
+need the venv); `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and
+`uv-lock` remain remote hooks. `mdformat-frontmatter` is a project dev
+dependency, so the local `uv run mdformat` hook still preserves skill
+frontmatter.
