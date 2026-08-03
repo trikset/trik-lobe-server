@@ -383,8 +383,8 @@ Details live in `MEMORY.md` — pull a section on demand:
 | Rationale and trade-offs for choices | Design decisions |
 | Python version constraint | Python version (below) |
 
-`python-app.yml` is the single workflow file: `test` on all events, `build` on
-non-PR pushes, `version-check` + `release` on `v*` tags.
+`python-app.yml` is the single workflow file — job guards: see `MEMORY.md`
+CI quirks.
 
 ## Commands
 
