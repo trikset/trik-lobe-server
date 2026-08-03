@@ -158,13 +158,24 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
   release with LLM-generated release notes (via the `release-notes` skill)
 - **Review/edit the draft notes**, then publish manually — releases are never
   auto-published
+- Artifact naming: `TRIKLobeServer-v<tag>-Windows.exe`,
+  `TRIKLobeServer-v<tag>-Linux.tar.gz`, `TRIKLobeServer-v<tag>-macOS.tar.gz`.
+  Inner binaries are versioned with an extension: `TRIKLobeServer-v<tag>.exe`
+  (Windows, standalone) or `TRIKLobeServer-v<tag>.bin` (Linux/macOS, inside the
+  archive).
+- Release notes structure (encoded in the `release-notes` skill): Part 1
+  simple-English user summary; Part 2 opens with an "Updated dependencies"
+  table, then major issues/PRs only, then contributors (bots removed, new
+  contributors bold with `(new)`), ending with a "Detailed comparison with
+  previous release" GitHub link.
 
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
 plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
 Install once per clone: `uv run pre-commit install`. CI runs `mdformat --check`
-on all root-level `*.md` (via glob).
+on all root-level `*.md` (via glob). The `mdformat` hook loads
+`mdformat-frontmatter` so YAML frontmatter in opencode skills is preserved.
 
 ## Guardrails
 
@@ -418,8 +429,10 @@ Always query live, never hardcode:
   hand-creating an equivalent dep PR — manual and auto PRs overlap.
 - `release.yml` builds 3 platform binaries and creates a DRAFT release with
   LLM-generated notes (via the `release-notes` skill); versions are zero-filled
-  dates (`26.08.03` ↔ tag `v26.08.03`). Drafts require maintainer review —
-  never auto-publish.
+  dates (`26.08.03` ↔ tag `v26.08.03`). Artifacts are versioned and compressed
+  (`*.exe` / `*.tar.gz`); inner binaries carry version + `.bin`/`.exe`. Drafts
+  require maintainer review — never auto-publish. Skill frontmatter is
+  preserved via `mdformat-frontmatter`.
 
 ### Runner notes
 

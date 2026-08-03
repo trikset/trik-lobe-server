@@ -352,3 +352,31 @@ date with a `.dev0` suffix (e.g. `26.08.04.dev0`).
 - `pyproject.toml` version no longer matches a marketing version number
 - Releases are tagged `vYY.MM.DD` and always created as drafts for review
 - `version-check` in `release.yml` enforces tag/version consistency
+
+## [2026-08-03] Release artifacts and notes conventions
+
+**Context:** The first modern release (v26.08.03) exposed several gaps: no
+publish pipeline, LLM-generated notes cluttered by dependency-bump lines, no
+compare link, and ambiguous artifact filenames.
+
+**Decisions:**
+
+- Artifacts carry the release tag in the filename (e.g.
+  `TRIKLobeServer-v26.08.03-Linux.tar.gz`) so multiple downloads don't
+  collide in a user's Downloads folder.
+- Inner binaries keep the version plus an extension (`TRIKLobeServer-v26.08.03.bin`
+  / `.exe`) so users can identify and execute them after extraction. Linux and
+  macOS ship as `.tar.gz` archives to cut download size.
+- Release notes Part 2 opens with an "Updated dependencies" table instead of
+  one bullet per dependency bump; then lists only major issues/PRs; then
+  contributors (bots filtered, new contributors bold with `(new)`); ends with
+  a GitHub compare link to the previous release.
+- `mdformat-frontmatter` plugin preserves skill YAML frontmatter (mdformat
+  otherwise corrupts it into a thematic break).
+
+**Rationale:** teacher/enthusiast audience; unambiguous versioned filenames;
+download-time reduction via `.tar.gz`; noise-free, human-written-feeling notes.
+
+**Consequences:** `release.yml` implements the artifact packaging; the
+`release-notes` skill encodes the notes structure; first-release compare base
+is the obsolete `v1.0.0` tag.
