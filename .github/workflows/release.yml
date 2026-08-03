@@ -69,10 +69,15 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: artifacts
+      - name: Determine previous release tag
+        shell: bash
+        run: |
+          prev="$(gh release list --limit 10 --json tagName --jq '.[].tagName' | grep -v "^${GITHUB_REF_NAME}$" | head -1)"
+          echo "PREV_TAG=${prev:-v1.0.0}" >> "$GITHUB_ENV"
       - name: Generate release notes
         run: |
           opencode run --agent build --auto \
-            "Load the release-notes skill. Generate notes for tag ${GITHUB_REF_NAME}."
+            "Load the release-notes skill. Generate notes for tag ${GITHUB_REF_NAME}. Previous release: ${PREV_TAG}."
       - name: Verify release notes were written
         shell: bash
         run: |
@@ -81,12 +86,17 @@ jobs:
       - name: List artifacts
         shell: bash
         run: find artifacts -type f | sort
-      - name: Rename binaries with platform suffix
+      - name: Package versioned binaries
         shell: bash
         run: |
-          cp artifacts/TRIKLobeServer-Linux/dist/TRIKLobeServer TRIKLobeServer-Linux
-          cp artifacts/TRIKLobeServer-Windows/dist/TRIKLobeServer.exe TRIKLobeServer-Windows.exe
-          cp artifacts/TRIKLobeServer-macOS/dist/TRIKLobeServer TRIKLobeServer-macOS
+          version="${GITHUB_REF_NAME}"                       # v26.08.03
+          cp artifacts/TRIKLobeServer-Windows/dist/TRIKLobeServer.exe \
+             "TRIKLobeServer-${version}-Windows.exe"
+          for os in Linux macOS; do
+            cp "artifacts/TRIKLobeServer-${os}/dist/TRIKLobeServer" "TRIKLobeServer-${version}.bin"
+            tar -czf "TRIKLobeServer-${version}-${os}.tar.gz" "TRIKLobeServer-${version}.bin"
+            rm -f "TRIKLobeServer-${version}.bin"
+          done
           ls -la TRIKLobeServer-*
       - name: Publish draft release
         uses: softprops/action-gh-release@v2
@@ -94,7 +104,7 @@ jobs:
           draft: true
           body_path: release-notes.md
           files: |
-            TRIKLobeServer-Linux
-            TRIKLobeServer-Windows.exe
-            TRIKLobeServer-macOS
+            TRIKLobeServer-${{ github.ref_name }}-Windows.exe
+            TRIKLobeServer-${{ github.ref_name }}-Linux.tar.gz
+            TRIKLobeServer-${{ github.ref_name }}-macOS.tar.gz
             artifacts/TRIKLobeServer-Linux/settings.ini
