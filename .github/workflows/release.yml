@@ -81,11 +81,20 @@ jobs:
       - name: List artifacts
         shell: bash
         run: find artifacts -type f | sort
+      - name: Rename binaries with platform suffix
+        shell: bash
+        run: |
+          cp artifacts/TRIKLobeServer-Linux/dist/TRIKLobeServer TRIKLobeServer-Linux
+          cp artifacts/TRIKLobeServer-Windows/dist/TRIKLobeServer.exe TRIKLobeServer-Windows.exe
+          cp artifacts/TRIKLobeServer-macOS/dist/TRIKLobeServer TRIKLobeServer-macOS
+          ls -la TRIKLobeServer-*
       - name: Publish draft release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           body_path: release-notes.md
           files: |
-            artifacts/**/dist/*
-            artifacts/**/settings.ini
+            TRIKLobeServer-Linux
+            TRIKLobeServer-Windows.exe
+            TRIKLobeServer-macOS
+            artifacts/TRIKLobeServer-Linux/settings.ini
