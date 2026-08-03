@@ -324,6 +324,16 @@ Local tests on one OS are not proof the code works on others.
 - Shell escaping is a common trap: test with `echo` before passing to real command
 - When in doubt, route through files: write to `.tmp/<file>`, pipe to command
 
+### Decision-making
+
+- **When unsure or in doubt, ask the user** — never guess or assume intent
+- **Default to conservative**: if an action risks code, tests, architecture,
+  or the product, postpone and discuss rather than act
+- **When the user says "run auto"**: execute fully and accurately without
+  questions — but still postpone anything genuinely biased or uncertain
+- **Self-verify first**: check doubts yourself with read-only experiments
+  before asking
+
 ## Architecture
 
 - `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
@@ -380,6 +390,12 @@ Always query live, never hardcode:
 - Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
 - Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
   actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
+- ruff `select = ["ALL"]` auto-enables any new rules a ruff version bump adds —
+  a previously-green tree failing after a bump is likely a new rule, not a code
+  regression. Evaluate the rule on merit before "fixing" code.
+- Changing `dependabot.yml` (e.g. adding an ignore) closes open grouped PRs and
+  Dependabot regenerates them shortly after. Wait for regeneration before
+  hand-creating an equivalent dep PR — manual and auto PRs overlap.
 
 ### Runner notes
 
