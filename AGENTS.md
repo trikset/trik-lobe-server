@@ -47,7 +47,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - If hooks are not installed (fresh clone), run `uv run pre-commit install`
   once — they then run automatically on every commit
 - To run all hooks manually at any time: `uv run pre-commit run --all-files`
-- If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
+- If docs changed: run `uv run pre-commit run mdformat --all-files`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
   (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
@@ -79,7 +79,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
   or `git pull --rebase origin main`
 - Re-validate: `uv run ruff check . && uv run pytest`
-- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md
+- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
 - Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
 - Check if PR title follows Conventional Commits format
 - Check if PR description covers root cause, profit, trade-offs, and verification
@@ -160,17 +160,21 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Commit, tag `vYY.MM.DD`, push the tag
 - The `release` job of `python-app.yml` (triggered by the `v*` tag) builds 3
   platform binaries and creates a DRAFT release with LLM-generated release
-  notes (via the `release-notes` skill). Artifact naming and notes structure:
-  see `MEMORY.md` CI quirks + the skill file.
+  notes (via the `release-notes` skill). Artifact naming (`-Windows.zip`,
+  `-Linux.tar.gz`, `-macOS.tar.gz`, each bundling `settings.ini`) and notes
+  structure: see `MEMORY.md` CI quirks + the skill file.
 - **Review/edit the draft notes**, then publish manually — releases are never
   auto-published
 
 ## Pre-commit hooks
 
-`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
-plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
-Install once per clone: `uv run pre-commit install`. CI runs `mdformat --check`
-on all root-level `*.md` (via glob). The `mdformat` hook loads
+`.pre-commit-config.yaml` runs `ruff` (`uv run ruff check --fix`), `ruff-format`,
+and `mdformat` as local hooks using the venv tools (single source of truth is
+`uv.lock`), plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and
+`uv-lock`. Install once per clone: `uv run pre-commit install`. CI runs
+`uv run mdformat *.md --check` on all root-level `*.md` (via bash glob). On
+Windows PowerShell, run the check through pre-commit instead:
+`uv run pre-commit run mdformat --all-files`. The `mdformat` hook loads
 `mdformat-frontmatter` so YAML frontmatter in opencode skills is preserved.
 
 ## Guardrails
@@ -384,7 +388,7 @@ uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
 uv run ruff check .          # lint
 uv run ruff format .         # format
-uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"  # markdown (root-level docs)
+uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
@@ -468,7 +472,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
   environment** — a config file existing is not the same as the tool being
   active. Confirm with a command, not an assumption.
 - **Prefer concepts over exact numbers/line-numbers in docs** — they drift
-  silently; live queries and conceptual descriptions don't.
+  silently; live queries and conceptual descriptions don't. When adding a new
+  rule/guardrail, grep AGENTS.md and MEMORY.md for existing entries that the
+  rule makes stale and migrate them to the concept form.
 
 ### Root cause analysis
 

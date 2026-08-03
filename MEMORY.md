@@ -72,10 +72,14 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   `.bin` name.
 - The release flow builds 3 platform binaries and creates a DRAFT release with
   LLM-generated notes (via the `release-notes` skill); versions are zero-filled
-  dates (`26.08.03` ↔ tag `v26.08.03`). Artifacts are versioned and compressed
-  (`*.exe` / `*.tar.gz`); inner binaries carry version + `.bin`/`.exe`. Drafts
-  require maintainer review — never auto-publish. Skill frontmatter is
-  preserved via `mdformat-frontmatter`.
+  dates (`26.08.03` ↔ tag `v26.08.03`). Each platform ships as one archive —
+  `-Windows.zip`, `-Linux.tar.gz`, `-macOS.tar.gz` — bundling the versioned
+  binary (`*.exe` / `*.bin`) + `settings.ini` at the root. Drafts require
+  maintainer review — never auto-publish. Skill frontmatter is preserved via
+  `mdformat-frontmatter`.
+- Every job runs a "Check for all tools" step (composite action) after its
+  install steps — verifies worker binaries and venv packages exist and logs
+  versions, failing fast if a runner lost a tool (e.g. `zip`).
 
 ### Runner notes
 
@@ -234,10 +238,9 @@ and no markdown formatting.
 
 **Decision:** Add `pytest` + `pytest-cov` with `--cov-fail-under=100`.
 
-**Coverage history:**
+**Coverage approach:**
 
-- Initial: 56 tests, 96% coverage
-- Current: 87 tests, 100% coverage
+- 100% coverage enforced (count is a live metric — see `AGENTS.md` Live metrics)
 - Mock-based: no real camera, no real network, no real TFLite runtime needed
 - See `TESTING.md` for full details and known gaps.
 
@@ -345,7 +348,7 @@ heartbeat timeout feature was implemented. Key findings and resolutions:
 | `asyncio.get_event_loop()` deprecated | Migrated to `get_running_loop()` | Deprecated since 3.10, emits warnings in 3.12 |
 | `TCP_NODELAY` before `connect()` | Moved after `connect()` | Implementation-defined on some platforms |
 | `requires-python` mismatch | Bumped to `>=3.12` | Match `.python-version` and project convention |
-| mdformat command in AGENTS.md | Changed to Python glob | Cross-platform: `*.md` not expanded by PowerShell |
+| mdformat on Windows PowerShell | Run through pre-commit hook (`uv run pre-commit run mdformat --all-files`); CI uses `shell: bash` | PowerShell doesn't expand `*.md` globs |
 
 **Known gaps (accepted, not fixed):**
 
@@ -451,8 +454,7 @@ compare link, and ambiguous artifact filenames.
   `TRIKLobeServer-v26.08.03-Linux.tar.gz`) so multiple downloads don't
   collide in a user's Downloads folder.
 - Inner binaries keep the version plus an extension (`TRIKLobeServer-v26.08.03.bin`
-  / `.exe`) so users can identify and execute them after extraction. Linux and
-  macOS ship as `.tar.gz` archives to cut download size.
+  / `.exe`) so users can identify and execute them after extraction.
 - Release notes Part 2 opens with an "Updated dependencies" table instead of
   one bullet per dependency bump; then lists only major issues/PRs; then
   contributors (bots filtered, new contributors bold with `(new)`); ends with
@@ -461,9 +463,37 @@ compare link, and ambiguous artifact filenames.
   otherwise corrupts it into a thematic break).
 
 **Rationale:** teacher/enthusiast audience; unambiguous versioned filenames;
-download-time reduction via `.tar.gz`; noise-free, human-written-feeling notes.
+noise-free, human-written-feeling notes.
 
 **Consequences:** the `release` job of `python-app.yml` implements the artifact
 packaging (the single workflow file runs all 4 CI jobs with per-job guards);
 the `release-notes` skill encodes the notes structure; first-release compare
-base is the obsolete `v1.0.0` tag.
+base is the obsolete `v1.0.0` tag. Archive format per platform — see the
+"Release archive formats" decision below.
+
+### [2026-08-03] Release archive formats (zip/tgz per platform)
+
+**Context:** Releases previously attached the Windows binary raw (`.exe`) and
+Linux/macOS as `.tar.gz`, plus a separate `settings.ini` asset. Download size
+matters for users on slow connections.
+
+**Decision:** Ship every platform as one archive — Windows `.zip` (native
+double-click extraction in Explorer), Linux and macOS `.tar.gz` (platform
+standard, preserves the executable bit). Each archive contains the versioned
+binary (`TRIKLobeServer-v<tag>.exe` / `.bin`) **and** `settings.ini` at the
+root. The separate `settings.ini` release asset is dropped.
+
+**Trade-off:** PyInstaller one-file binaries are already internally compressed,
+so the archive saves only a few percent — the real win is **one download per
+platform** that bundles the config, matching the README install flow
+("download → unpack → edit settings.ini"). `.zip` is chosen for Windows
+because Explorer opens it without extra tools; `.tar.gz` for Linux/macOS
+because it is the standard and keeps file permissions.
+
+**Consequences:**
+
+- Artifact names become `TRIKLobeServer-v<tag>-Windows.zip`, `-Linux.tar.gz`,
+  `-macOS.tar.gz`.
+- The `release` job needs `zip` and `tar` on the runner (both preinstalled on
+  `ubuntu-latest`), enforced by the "Check for all tools" step.
+- Users download one archive instead of a binary + separate config.
