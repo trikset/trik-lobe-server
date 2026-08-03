@@ -186,6 +186,7 @@ C) Microsoft Lobe legacy:
     model_path/
         signature.json
         model.tflite
+```
 
 ## [2026-07-30] Connection protocol architecture
 
@@ -194,12 +195,14 @@ server. Understanding the robot's protocol is essential for correct connection
 health management.
 
 **What the lobe server sends (outbound):**
+
 - `register:<port>:<hull>` — on connect, registers with the robot
 - `self:<hull>` — identifies itself
 - `keepalive` — every `KEEPALIVE_INTERVAL=5s`
 - `data:<prediction>` — every `PREDICTION_INTERVAL=0.2s`
 
 **What the robot sends (inbound):**
+
 - `self:<hull>` — during handshake, identifies itself
 - `connection:<ip>:<port>:<hull>` — during handshake, informs about other robots
 - `data:quit` — explicit shutdown command
@@ -207,6 +210,7 @@ health management.
   never negotiated on the wire)
 
 **Heartbeat on the robot side:**
+
 - Robot kills the TCP connection if **no data received for 5000ms**
   (`heartbeatTime` in `connection.cpp`)
 - The robot's keepalive timer resets on every outbound message, so under
@@ -221,6 +225,7 @@ detect a dead peer. `contextlib.suppress(OSError)` in `_send` is intentional:
 send errors are transient glitches; death detection is the reader's job.
 
 **Decision:**
+
 - **Primary: `RECV_TIMEOUT`** — `asyncio.wait_for(sock_recv, timeout=10)` in
   `_reader`. The robot sends `keepalive` every 3s, so under normal operation
   the timeout never fires. After 10s of silence (3 missed keepalives + margin),
@@ -231,6 +236,7 @@ send errors are transient glitches; death detection is the reader's job.
   already provides a faster, platform-agnostic signal.
 
 **Rationale:**
+
 - `asyncio.wait_for` is stdlib, works identically on all three platforms
 - No new dependencies
 - 10s timeout gives ~3s margin over the 3s keepalive interval
@@ -257,6 +263,7 @@ heartbeat timeout feature was implemented. Key findings and resolutions:
 | mdformat command in AGENTS.md | Changed to Python glob | Cross-platform: `*.md` not expanded by PowerShell |
 
 **Known gaps (accepted, not fixed):**
+
 - **`asyncio.wait_for` + `sock_recv` on Windows IOCP** — cancelling an in-flight
   `sock_recv` via `wait_for` may leave the socket in an indeterminate state on
   Windows. This is a known CPython issue. Not fixed because (a) it passes CI on
@@ -275,12 +282,14 @@ binary or user-specific configuration files that should not be version-controlle
 **Decision:** Ignore `*.tflite`, `*.onnx`, and `signature.json` in `.gitignore`.
 
 **Rationale:**
+
 - Model files are typically hundreds of MB — bloating the repo history
 - Models are trained externally and copied into the project directory
 - `signature.json` is auto-exported by Lobe/Teachable Machine and user-specific
 - The required file structure is documented in README.md and DESIGN_DECISIONS.md
 
 **Consequences:**
+
 - Users must provide model files manually
 - CI does not test with real models (all tests are mock-based)
 - `.onnx` was added later for consistency with `.tflite`
@@ -297,12 +306,25 @@ matching the project's own `>=3.12,<3.14`), regenerate `uv.lock`, and pin
 `numpy>=2.0,<3.0`.
 
 **Rationale:**
+
 - 2.5.1 is the newest stable line with pre-built wheels for all supported platforms
 - Full suite (107 tests, 100% coverage, all linters) passes on 2.5.1
 - Forcing `>=2.0` prevents silent fallback to 1.26 in fresh installs
 
 **Consequences:**
+
 - `uv.lock` resolved 2.5.1 and was committed with the real version
 - Dependabot's constraint-only PR (#96) was superseded and closed
 - `pyproject.toml` version bumped to 2.0.0 for the first dual-backend release
-```
+
+## [2026-08-02] opencv 4.x defer for 2.0.0 release
+
+**Context:** Dependabot proposed opencv-python 5.x. opencv 5 is a native-binary
+major bump with migration risk, and the project was preparing the first
+dual-backend release.
+
+**Decision:** Keep `opencv-python>=4.11.0,<5.0.0`; add a Dependabot ignore for
+`version-update:semver-major` so 5.x is not proposed. Re-evaluate after release.
+
+**Consequences:** Grouped uv PRs exclude opencv 5.x; opencv minor/patch updates
+(4.14) still land normally.
