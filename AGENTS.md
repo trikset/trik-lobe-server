@@ -2,10 +2,12 @@
 
 <!-- encoding: utf-8 -->
 
-Scope: Action triggers, guardrails, commands, and quirks for AI agents.
+Scope: Action triggers, guardrails, and commands for AI agents.
 Aim: Every session starts knowing what to do and how to behave.
 Structure: Hooks (action triggers) → Guardrails (rules) → Reference (commands,
-architecture, CI, Python version) → Agent memory (tooling patterns).
+live metrics, Python version) → Agent behavior (tooling patterns).
+Memory: Details, architecture, design decisions, and quirks explanations live
+in `MEMORY.md`. Pull sections on demand — never duplicate rationale here.
 
 Every line must answer: "Would an agent likely miss this without help?" If not, cut it.
 Removing a documented rule changes agent behavior — only delete if provably incorrect.
@@ -26,6 +28,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Read `pyproject.toml` to understand tool configuration
 - Check `.github/workflows/` for CI setup
 - Check `.pre-commit-config.yaml` for hooks
+- Read `MEMORY.md` header + section list (Architecture, CI quirks, Design
+  decisions); pull sections on demand when a task touches those areas
 - Never talk to user before session warm-up complete
 
 ### Priority tasks (when asked)
@@ -43,7 +47,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - If hooks are not installed (fresh clone), run `uv run pre-commit install`
   once — they then run automatically on every commit
 - To run all hooks manually at any time: `uv run pre-commit run --all-files`
-- If docs changed: run `uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"`
+- If docs changed: run `uv run pre-commit run mdformat --all-files`
 - If adding new tool/config: update this Hooks section
 - If editing or reorganizing AGENTS.md: diff against the original
   (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
@@ -75,8 +79,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
   or `git pull --rebase origin main`
 - Re-validate: `uv run ruff check . && uv run pytest`
-- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md and/or AGENTS.md
-- Ensure AGENTS.md updated with any new decisions/patterns
+- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
+- Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
+- **Docs drift review**: `git diff HEAD -- AGENTS.md` and review it hard — every added line must pass the boundary test. Then read the full AGENTS.md top-to-bottom for generalization (phrase specific one-off facts as general patterns) and extract any remaining detail/rationale into MEMORY.md.
 - Check if PR title follows Conventional Commits format
 - Check if PR description covers root cause, profit, trade-offs, and verification
 - Check if PR description has "Out of scope" section
@@ -102,7 +107,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Do not proceed to the next command until root cause is identified
 - If the error was a script/command bug (not a real failure):
   1. Fix the immediate issue
-  1. **Update AGENTS.md now** — add a guardrail, hook, or Shell escaping bullet
+  1. **Update AGENTS.md (rules) or MEMORY.md (details) now** — add a guardrail, hook, or Shell escaping bullet
   1. Verify the fix by re-running the failed command
   1. Only then continue with the next task
 - If the root cause category is new, add it to the Root cause analysis section
@@ -137,7 +142,7 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Analyze decisions, suggest improvements
 - Suggest comments for unclear code
 - Suggest docs updates for non-obvious patterns
-- Update AGENTS.md with new patterns
+- Update AGENTS.md (rules) or MEMORY.md (details/rationale) with new patterns
 
 ### After merge
 
@@ -154,28 +159,21 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - On a release branch, set `pyproject.toml` version to the zero-filled date,
   e.g. `26.08.03` for tag `v26.08.03` (dev version is `YY.MM.DD.dev0` on main)
 - Commit, tag `vYY.MM.DD`, push the tag
-- The `release.yml` workflow builds 3 platform binaries and creates a DRAFT
-  release with LLM-generated release notes (via the `release-notes` skill)
+- The `release` job of `python-app.yml` (triggered by the `v*` tag) builds 3
+  platform binaries and creates a DRAFT release with LLM-generated release
+  notes (via the `release-notes` skill). Artifact naming and notes structure:
+  see `MEMORY.md` CI quirks + the skill file.
 - **Review/edit the draft notes**, then publish manually — releases are never
   auto-published
-- Artifact naming: `TRIKLobeServer-v<tag>-Windows.exe`,
-  `TRIKLobeServer-v<tag>-Linux.tar.gz`, `TRIKLobeServer-v<tag>-macOS.tar.gz`.
-  Inner binaries are versioned with an extension: `TRIKLobeServer-v<tag>.exe`
-  (Windows, standalone) or `TRIKLobeServer-v<tag>.bin` (Linux/macOS, inside the
-  archive).
-- Release notes structure (encoded in the `release-notes` skill): Part 1
-  simple-English user summary; Part 2 opens with an "Updated dependencies"
-  table, then major issues/PRs only, then contributors (bots removed, new
-  contributors bold with `(new)`), ending with a "Detailed comparison with
-  previous release" GitHub link.
 
 ## Pre-commit hooks
 
-`.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
-plus `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
-Install once per clone: `uv run pre-commit install`. CI runs `mdformat --check`
-on all root-level `*.md` (via glob). The `mdformat` hook loads
-`mdformat-frontmatter` so YAML frontmatter in opencode skills is preserved.
+`.pre-commit-config.yaml` runs `ruff` (`uv run ruff check --fix`), `ruff-format`,
+and `mdformat` as local hooks using the venv tools, plus the remote
+`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`. Install
+once per clone: `uv run pre-commit install`. Run all hooks manually:
+`uv run pre-commit run --all-files`. On Windows PowerShell, check markdown
+through the hook: `uv run pre-commit run mdformat --all-files`.
 
 ## Guardrails
 
@@ -184,7 +182,8 @@ on all root-level `*.md` (via glob). The `mdformat` hook loads
 This session context is ephemeral — all state is lost when the conversation ends.
 **AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
 to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
-architecture, or conventions, document it in AGENTS.md first.
+architecture, or conventions, document it in AGENTS.md (rules) or MEMORY.md
+(details/rationale) first.
 
 PR description must cover:
 
@@ -322,11 +321,19 @@ When you make a non-obvious choice, document it at the right level:
 1. **Inline comment** in the file (CI, code, config) — immediate context
    for anyone reading that file.
 1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
-1. **DESIGN_DECISIONS.md** — full "why" explanation with rationale and trade-offs.
+1. **MEMORY.md** — full "why" explanation with rationale and trade-offs;
+   architecture details, design decisions, and CI quirks all live there.
 
 **AGENTS.md stores rules/constraints only** — never rationale or "why"
-explanations. Rationale → DESIGN_DECISIONS.md. If a line explains *why*
+explanations. Rationale → MEMORY.md. If a line explains *why*
 instead of *what to do*, it's in the wrong file.
+
+Operational boundary test when deciding where a line goes:
+
+- A hook/rule line that needs a concrete value (name, number, command arg)
+  must be a pointer — `see MEMORY.md <section>` — never the value itself.
+- If the agent behaves correctly without the line loaded in AGENTS.md and
+  only needs it for a specific task, it belongs in MEMORY.md.
 
 **Verify toolchain/dependency-manager names against executable sources**
 (`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value
@@ -365,19 +372,19 @@ Local tests on one OS are not proof the code works on others.
 - **Self-verify first**: check doubts yourself with read-only experiments
   before asking
 
-## Architecture
+## Memory index
 
-- `lobe_server/model.py`: Dual backend — `ONNXImageModel` (onnxruntime) and
-  `TFLiteImageModel` (ai_edge_litert). Auto-detects format by scanning for
-  `.onnx` or `.tflite` files. Labels from `labels.txt` (one per line), with
-  fallback to `signature.json` → `classes.Label` (legacy Lobe compat).
-  `ai_edge_litert` is a mandatory dependency.
-- `lobe_server/server.py`: `LobeServer` — TCP client connecting to robot's mailbox
-  server. Sends `register`, `self`, `keepalive`, `data:<prediction>`. Receives
-  `keepalive` every 3s from robot (hardcoded in trikRuntime, not negotiated).
-  `_reader` is the sole health monitor: breaks on empty recv or `RECV_TIMEOUT`.
-  `_keepalive_loop`/`_prediction_loop` are outbound-only — death detection is
-  the reader's job via heartbeat timeout.
+Details live in `MEMORY.md` — pull a section on demand:
+
+| Topic | Section in MEMORY.md |
+|-------|----------------------|
+| Model loading, connection protocol | Architecture |
+| CI quirks, runner notes, release flow | CI quirks |
+| Rationale and trade-offs for choices | Design decisions |
+| Python version constraint | Python version (below) |
+
+`python-app.yml` is the single workflow file — job guards: see `MEMORY.md`
+CI quirks.
 
 ## Commands
 
@@ -386,7 +393,7 @@ uv sync                      # install everything (Python 3.12 required)
 uv sync --frozen             # CI: use locked versions
 uv run ruff check .          # lint
 uv run ruff format .         # format
-uv run python -c "import glob, subprocess; subprocess.run(['mdformat', *glob.glob('*.md'), '--check'])"  # markdown (root-level docs)
+uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
 uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
@@ -407,50 +414,12 @@ Always query live, never hardcode:
 | Coverage | `uv run pytest --cov-report=term-missing` |
 | CI status (main) | `gh run list --branch main --limit 1 --json conclusion` |
 
-## CI quirks
-
-### CI setup
-
-`astral-sh/setup-uv` replaces both `actions/setup-python` and `pip install uv`:
-
-- `setup-uv` installs uv with built-in caching on GitHub-hosted runners
-- Python version is read from `.python-version` — never hardcoded in YAML
-- `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
-- setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
-- `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
-- Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
-- Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
-  actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
-- ruff `select = ["ALL"]` auto-enables any new rules a ruff version bump adds —
-  a previously-green tree failing after a bump is likely a new rule, not a code
-  regression. Evaluate the rule on merit before "fixing" code.
-- Changing `dependabot.yml` (e.g. adding an ignore) closes open grouped PRs and
-  Dependabot regenerates them shortly after. Wait for regeneration before
-  hand-creating an equivalent dep PR — manual and auto PRs overlap.
-- `release.yml` builds 3 platform binaries and creates a DRAFT release with
-  LLM-generated notes (via the `release-notes` skill); versions are zero-filled
-  dates (`26.08.03` ↔ tag `v26.08.03`). Artifacts are versioned and compressed
-  (`*.exe` / `*.tar.gz`); inner binaries carry version + `.bin`/`.exe`. Drafts
-  require maintainer review — never auto-publish. Skill frontmatter is
-  preserved via `mdformat-frontmatter`.
-
-### Runner notes
-
-- `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
-- Build runners use **oldest free** for widest binary compatibility:
-  `ubuntu-22.04`, `windows-2022`, `macos-latest`.
-- Test runners use **`-latest`** for newest OS coverage:
-  `ubuntu-latest`, `windows-latest`, `macos-latest`.
-- `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
-- `macos-latest` is ARM64 (Apple Silicon).
-- Build produces per-OS artifacts via PyInstaller `--onefile`.
-
 ## Python version
 
 **Must use Python 3.12** — Python 3.14 breaks `onnx` (no wheel, C++ build fails).
 Pinned in `.python-version` (single source of truth — never hardcode in CI YAML).
 
-## Agent memory
+## Agent behavior
 
 ### Tool options
 
@@ -494,9 +463,10 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 ### Continuous improvement
 
 - **Every error must leave a trace**: before moving on from any unexpected
-  error, ensure the lesson is captured in AGENTS.md
-- **Check if this has happened before**: grep AGENTS.md for the error type
-  before crafting a fix — the solution may already be documented
+  error, ensure the lesson is captured in AGENTS.md (rules) or MEMORY.md
+  (details/rationale)
+- **Check if this has happened before**: grep AGENTS.md and MEMORY.md for the
+  error type before crafting a fix — the solution may already be documented
 - **Keep patterns general**: phrase new bullets to catch similar future
   cases, not just the exact one-time scenario
 - **Store only high-signal, expensive-to-rediscover facts**: if a failure
@@ -507,7 +477,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
   environment** — a config file existing is not the same as the tool being
   active. Confirm with a command, not an assumption.
 - **Prefer concepts over exact numbers/line-numbers in docs** — they drift
-  silently; live queries and conceptual descriptions don't.
+  silently; live queries and conceptual descriptions don't. When adding a new
+  rule/guardrail, grep AGENTS.md and MEMORY.md for existing entries that the
+  rule makes stale and migrate them to the concept form.
 
 ### Root cause analysis
 

@@ -1,15 +1,21 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.21
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
       - id: ruff-format
-  - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.22
-    hooks:
+        name: ruff-format
+        entry: uv run ruff format
+        language: system
+        types: [python]
       - id: mdformat
-        additional_dependencies: [mdformat-frontmatter]
+        name: mdformat
+        entry: uv run mdformat
+        language: system
+        types: [markdown]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

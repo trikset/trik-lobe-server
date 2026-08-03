@@ -1,0 +1,36 @@
+name: Check for all tools
+description: Verify every tool a job needs exists on the runner and log its version, so missing tooling fails fast before long jobs run.
+
+inputs:
+  binaries:
+    description: Space-separated worker binaries to check, e.g. "uv git zip tar"
+    required: false
+    default: ""
+  uv-packages:
+    description: Space-separated venv packages to check via uv, e.g. "ruff pytest"
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Check for all tools
+      shell: bash
+      run: |
+        set -eu
+        for tool in ${{ inputs.binaries }}; do
+          if command -v "$tool" >/dev/null 2>&1; then
+            echo "[OK] $tool: $("$tool" --version 2>&1 | head -1)"
+          else
+            echo "::error::Missing tool: $tool"
+            exit 1
+          fi
+        done
+        for pkg in ${{ inputs.uv-packages }}; do
+          if uv run "$pkg" --version >/dev/null 2>&1; then
+            echo "[OK] $pkg: $(uv run "$pkg" --version 2>&1 | head -1)"
+          else
+            echo "::error::Missing uv package: $pkg"
+            exit 1
+          fi
+        done
