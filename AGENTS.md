@@ -147,6 +147,18 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Update local main: `git switch main && git pull`
 - Delete merged feature branch: `git branch --delete branch-name`
 
+### Before release
+
+- Check release gates: 0 open PRs, 0 security alerts, green main CI
+  (`gh pr list --state open`, `gh api .../dependabot/alerts`)
+- On a release branch, set `pyproject.toml` version to the zero-filled date,
+  e.g. `26.08.03` for tag `v26.08.03` (dev version is `YY.MM.DD.dev0` on main)
+- Commit, tag `vYY.MM.DD`, push the tag
+- The `release.yml` workflow builds 3 platform binaries and creates a DRAFT
+  release with LLM-generated release notes (via the `release-notes` skill)
+- **Review/edit the draft notes**, then publish manually — releases are never
+  auto-published
+
 ## Pre-commit hooks
 
 `.pre-commit-config.yaml` runs `ruff check --fix` + `ruff-format` automatically,
@@ -310,6 +322,14 @@ instead of *what to do*, it's in the wrong file.
 is not the project's ecosystem — e.g. Dependabot used `package-ecosystem: "pip"`
 (its closest legacy tag) until the native `uv` tag existed.
 
+### Language
+
+- Use SIMPLE ENGLISH for all globally-visible content: release notes, PR
+  descriptions, commit messages, docs, comments.
+- EXCEPTION: reply to GitHub issues/comments in the same language the author
+  used.
+- Friendly small-talk is fine; keep it brief.
+
 ### Cross-platform
 
 This project runs on Windows, macOS, and Linux. CI tests on all three.
@@ -396,6 +416,10 @@ Always query live, never hardcode:
 - Changing `dependabot.yml` (e.g. adding an ignore) closes open grouped PRs and
   Dependabot regenerates them shortly after. Wait for regeneration before
   hand-creating an equivalent dep PR — manual and auto PRs overlap.
+- `release.yml` builds 3 platform binaries and creates a DRAFT release with
+  LLM-generated notes (via the `release-notes` skill); versions are zero-filled
+  dates (`26.08.03` ↔ tag `v26.08.03`). Drafts require maintainer review —
+  never auto-publish.
 
 ### Runner notes
 
