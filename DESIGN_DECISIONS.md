@@ -351,7 +351,7 @@ date with a `.dev0` suffix (e.g. `26.08.04.dev0`).
 
 - `pyproject.toml` version no longer matches a marketing version number
 - Releases are tagged `vYY.MM.DD` and always created as drafts for review
-- `version-check` in `release.yml` enforces tag/version consistency
+- `version-check` in `python-app.yml` enforces tag/version consistency
 
 ## [2026-08-03] Release artifacts and notes conventions
 
@@ -377,6 +377,7 @@ compare link, and ambiguous artifact filenames.
 **Rationale:** teacher/enthusiast audience; unambiguous versioned filenames;
 download-time reduction via `.tar.gz`; noise-free, human-written-feeling notes.
 
-**Consequences:** `release.yml` implements the artifact packaging; the
-`release-notes` skill encodes the notes structure; first-release compare base
-is the obsolete `v1.0.0` tag.
+**Consequences:** the `release` job of `python-app.yml` implements the artifact
+packaging (the single workflow file runs all 4 CI jobs with per-job guards);
+the `release-notes` skill encodes the notes structure; first-release compare
+base is the obsolete `v1.0.0` tag.

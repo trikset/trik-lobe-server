@@ -154,8 +154,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - On a release branch, set `pyproject.toml` version to the zero-filled date,
   e.g. `26.08.03` for tag `v26.08.03` (dev version is `YY.MM.DD.dev0` on main)
 - Commit, tag `vYY.MM.DD`, push the tag
-- The `release.yml` workflow builds 3 platform binaries and creates a DRAFT
-  release with LLM-generated release notes (via the `release-notes` skill)
+- The `release` job of `python-app.yml` (triggered by the `v*` tag) builds 3
+  platform binaries and creates a DRAFT release with LLM-generated release
+  notes (via the `release-notes` skill)
 - **Review/edit the draft notes**, then publish manually — releases are never
   auto-published
 - Artifact naming: `TRIKLobeServer-v<tag>-Windows.exe`,
@@ -427,7 +428,20 @@ Always query live, never hardcode:
 - Changing `dependabot.yml` (e.g. adding an ignore) closes open grouped PRs and
   Dependabot regenerates them shortly after. Wait for regeneration before
   hand-creating an equivalent dep PR — manual and auto PRs overlap.
-- `release.yml` builds 3 platform binaries and creates a DRAFT release with
+- `python-app.yml` is the single workflow file. It runs `test` on all events
+  (PR, main-push, tag-push, dispatch — tag runs are rare and catch worker
+  drift); `build` on non-PR pushes; `version-check` + `release` only on `v*`
+  tags. The `release` job overrides permissions to `contents: write`.
+- `gh` CLI in GitHub Actions needs `GH_TOKEN: ${{ github.token }}` explicitly —
+  it is not auto-injected.
+- `softprops/action-gh-release` reuses an existing release for a tag. When
+  re-releasing the same tag, delete the release (and tag) first:
+  `gh release delete <tag> --yes --cleanup-tag`, then re-tag.
+- Verify the full release output, not just "workflow green" — a draft can be
+  green yet carry a stale body or old assets. Check: notes structure (deps
+  table, contributors, compare link), all 3 versioned assets, and the inner
+  `.bin` name.
+- The release flow builds 3 platform binaries and creates a DRAFT release with
   LLM-generated notes (via the `release-notes` skill); versions are zero-filled
   dates (`26.08.03` ↔ tag `v26.08.03`). Artifacts are versioned and compressed
   (`*.exe` / `*.tar.gz`); inner binaries carry version + `.bin`/`.exe`. Drafts
