@@ -328,3 +328,27 @@ dual-backend release.
 
 **Consequences:** Grouped uv PRs exclude opencv 5.x; opencv minor/patch updates
 (4.14) still land normally.
+
+## [2026-08-03] Zero-filled date versioning
+
+**Context:** The project previously used semantic feature versions (1.1.0,
+2.0.0). The first modern dual-backend release was planned as 2.0.0, but the
+maintainer decided all releases should use date-based versions.
+
+**Decision:** Use zero-filled date versions for all releases. Tagged commits
+carry `YY.MM.DD` (e.g. `26.08.03` for tag `v26.08.03`); `main` carries the next
+date with a `.dev0` suffix (e.g. `26.08.04.dev0`).
+
+**Rationale:**
+
+- Date versions are inherently ordered and unambiguous
+- Zero-filling (`26.08.03`) keeps tag and version strings identical, and
+  normalizes to valid semver (`26.8.3`) under PEP 440
+- A CI `version-check` job fails the release if the tag and `pyproject.toml`
+  version disagree, preventing mis-tagged releases
+
+**Consequences:**
+
+- `pyproject.toml` version no longer matches a marketing version number
+- Releases are tagged `vYY.MM.DD` and always created as drafts for review
+- `version-check` in `release.yml` enforces tag/version consistency
