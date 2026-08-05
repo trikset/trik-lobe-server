@@ -7,10 +7,14 @@ from lobe_server.protocol import format_message, is_quit_command, make_command, 
 _KOSHKA = "кошка".encode()
 
 
-def test_format_message() -> None:
+def test_format_and_command() -> None:
     assert format_message("hello") == b"5:hello"
     assert format_message("") == b"0:"
     assert format_message("data:cat") == b"8:data:cat"
+    assert make_command("register", 12345, 2) == "register:12345:2"
+    assert make_command("self", 2) == "self:2"
+    assert make_command("data", "cat") == "data:cat"
+    assert format_message(make_command("self", 3)) == b"6:self:3"
 
 
 @pytest.mark.parametrize("raw", ["кошка", "café"])
@@ -19,16 +23,6 @@ def test_format_message_multibyte(raw: str) -> None:
     prefix = f"{len(raw.encode())}:".encode()
     assert data[: len(prefix)] == prefix
     assert data[len(prefix) :].decode("utf-8") == raw
-
-
-def test_make_command() -> None:
-    assert make_command("register", 12345, 2) == "register:12345:2"
-    assert make_command("self", 2) == "self:2"
-    assert make_command("data", "cat") == "data:cat"
-
-
-def test_make_and_format() -> None:
-    assert format_message(make_command("self", 3)) == b"6:self:3"
 
 
 def test_is_quit_command() -> None:

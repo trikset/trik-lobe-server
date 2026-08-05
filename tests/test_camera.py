@@ -33,6 +33,11 @@ _HTTP_CAMERAS = [
     ),
 ]
 
+_COOLDOWN_SCENARIOS = [
+    pytest.param([100.0, 100.5, 103.0], ["err", "ok"], [None, None, "ok"], id="fail"),
+    pytest.param([100.0, 103.0, 104.0], ["err", "ok", "err"], [None, "ok", None], id="reset"),
+]
+
 
 def test_abstract() -> None:
     class Impl(CameraSource):
@@ -79,51 +84,28 @@ def test_http_camera_release(factory: _CamFactory, _url: str, _extra: dict[str, 
 
 
 @pytest.mark.parametrize(("factory", "_url", "_extra"), _HTTP_CAMERAS)
-def test_http_camera_failure_cooldown(factory: _CamFactory, _url: str, _extra: dict[str, object]) -> None:
+@pytest.mark.parametrize(("clock", "get_seq", "expected"), _COOLDOWN_SCENARIOS)
+def test_http_camera_cooldown(
+    factory: _CamFactory,
+    _url: str,
+    _extra: dict[str, object],
+    clock: list[float],
+    get_seq: list[str],
+    expected: list[object],
+) -> None:
     mock_response = MagicMock()
     mock_response.content = _minimal_png()
+    side_effect = [mock_response if kind == "ok" else requests.RequestException("timeout") for kind in get_seq]
     with (
-        patch(
-            "lobe_server.camera.requests.get",
-            side_effect=[requests.RequestException("timeout"), mock_response],
-        ) as mock_get,
-        patch("lobe_server.camera.time.monotonic", side_effect=[100.0, 100.5, 103.0]),
+        patch("lobe_server.camera.requests.get", side_effect=side_effect) as mock_get,
+        patch("lobe_server.camera.time.monotonic", side_effect=clock),
     ):
         cam = factory()
-        im1 = cam.capture()
-        im2 = cam.capture()
-        im3 = cam.capture()
+        results = [cam.capture() for _ in expected]
 
-    assert im1 is None
-    assert im2 is None
-    assert im3 is not None
-    assert mock_get.call_count == 2
-
-
-@pytest.mark.parametrize(("factory", "_url", "_extra"), _HTTP_CAMERAS)
-def test_http_camera_success_resets_cooldown(factory: _CamFactory, _url: str, _extra: dict[str, object]) -> None:
-    mock_response = MagicMock()
-    mock_response.content = _minimal_png()
-    with (
-        patch(
-            "lobe_server.camera.requests.get",
-            side_effect=[
-                requests.RequestException("timeout"),
-                mock_response,
-                requests.RequestException("timeout"),
-            ],
-        ) as mock_get,
-        patch("lobe_server.camera.time.monotonic", side_effect=[100.0, 103.0, 104.0]),
-    ):
-        cam = factory()
-        im1 = cam.capture()
-        im2 = cam.capture()
-        im3 = cam.capture()
-
-    assert im1 is None
-    assert im2 is not None
-    assert im3 is None
-    assert mock_get.call_count == 3
+    for got, want in zip(results, expected, strict=True):
+        assert (got is None) is (want is None)
+    assert mock_get.call_count == len(get_seq)
 
 
 def test_webcam_camera() -> None:

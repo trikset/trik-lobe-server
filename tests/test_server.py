@@ -61,6 +61,12 @@ def server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) ->
     return _make_server(settings, mock_model, mock_camera)
 
 
+@pytest.fixture
+def running_server(server: LobeServer) -> LobeServer:
+    server._running = True
+    return server
+
+
 def _reader_sock(data: Any) -> MagicMock:
     """Mock socket whose reads come from a stubbed loop.sock_recv (bytes → value, else side_effect)."""
     sock = MagicMock()
@@ -134,47 +140,37 @@ def test_close(server: LobeServer, mock_camera: MagicMock) -> None:
     mock_camera.release.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("recv", "race", "final_running"),
+    [
+        pytest.param(b"9:data:quit", False, False, id="quit"),
+        pytest.param(b"", False, True, id="empty-recv"),
+        pytest.param(TimeoutError, False, True, id="timeout"),
+        pytest.param(ConnectionResetError, False, True, id="connection-reset"),
+        pytest.param(b"9:keepalive", True, False, id="keepalive"),
+        pytest.param(b"some garbage", True, False, id="garbage"),
+        pytest.param(b"8:data:cat", True, False, id="parsed-message"),
+        pytest.param(b"8:data:cat9:data:quit", False, False, id="multi-then-quit"),
+        pytest.param([b"9:data:q", b"uit"], False, False, id="partial-then-complete"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_reader_quit(server: LobeServer) -> None:
-    sock = _reader_sock(b"9:data:quit")
-    server._running = True
-    await server._reader(sock)
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_empty_recv(server: LobeServer) -> None:
-    sock = _reader_sock(b"")
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
-
-
-@pytest.mark.asyncio
-async def test_reader_heartbeat_timeout(server: LobeServer) -> None:
-    sock = _reader_sock(TimeoutError)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
-
-
-@pytest.mark.asyncio
-async def test_reader_connection_reset(server: LobeServer) -> None:
-    sock = _reader_sock(ConnectionResetError)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
+async def test_reader_behavior(
+    running_server: LobeServer,
+    recv: Any,
+    race: bool,  # noqa: FBT001
+    final_running: bool,  # noqa: FBT001
+) -> None:
+    sock = _reader_sock(recv)
+    if race:
+        await _run_with_timeout(running_server, running_server._reader(sock))
+    else:
+        await running_server._reader(sock)
+    assert running_server._running is final_running
 
 
 @pytest.mark.asyncio
-async def test_reader_keepalive_preserves_connection(server: LobeServer) -> None:
-    sock = _reader_sock(b"9:keepalive")
-    server._running = True
-    await _run_with_timeout(server, server._reader(sock))
-
-
-@pytest.mark.asyncio
-async def test_reader_oserror_transient_recovers(server: LobeServer) -> None:
+async def test_reader_oserror_transient_recovers(running_server: LobeServer) -> None:
     calls = {"n": 0}
 
     def _recv(*_: Any) -> bytes:
@@ -184,89 +180,52 @@ async def test_reader_oserror_transient_recovers(server: LobeServer) -> None:
             raise OSError(err)
         return b"9:keepalive"
 
-    sock = _reader_sock(_recv)
-    server._running = True
-    task = asyncio.create_task(server._reader(sock))
+    task = asyncio.create_task(running_server._reader(_reader_sock(_recv)))
     await asyncio.sleep(0.2)
     assert not task.done()
-    server._running = False
+    running_server._running = False
     await task
 
 
 @pytest.mark.asyncio
-async def test_reader_oserror_exhausts_retries(server: LobeServer) -> None:
+async def test_reader_oserror_exhausts_retries(running_server: LobeServer) -> None:
     def _recv(*_: Any) -> bytes:
         err = "fatal"
         raise OSError(err)
 
-    sock = _reader_sock(_recv)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
+    await running_server._reader(_reader_sock(_recv))
+    assert running_server._running is True
 
 
 @pytest.mark.asyncio
-async def test_reader_ignore_garbage(server: LobeServer) -> None:
-    sock = _reader_sock(b"some garbage")
-    server._running = True
-    await _run_with_timeout(server, server._reader(sock))
-
-
-@pytest.mark.asyncio
-async def test_reader_parsed_message(server: LobeServer) -> None:
-    sock = _reader_sock(b"8:data:cat")
-    server._running = True
-    await _run_with_timeout(server, server._reader(sock))
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_multi_then_quit(server: LobeServer) -> None:
-    sock = _reader_sock(b"8:data:cat9:data:quit")
-    server._running = True
-    await server._reader(sock)
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_partial_then_complete(server: LobeServer) -> None:
-    sock = _reader_sock([b"9:data:q", b"9:data:quit"])
-    server._running = True
-    await _run_with_timeout(server, server._reader(sock))
-
-
-@pytest.mark.asyncio
-async def test_keepalive_loop(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_keepalive_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-    server._running = True
-    await _run_with_timeout(server, server._keepalive_loop(sock), seconds=0.1)
+    await _run_with_timeout(running_server, running_server._keepalive_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"9:keepalive"
 
 
 @pytest.mark.asyncio
-async def test_prediction_loop(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_prediction_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-    server._running = True
-    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    await _run_with_timeout(running_server, running_server._prediction_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"8:data:cat"
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_handle_connection(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-    server._running = True
 
     async def send_quit() -> None:
         await asyncio.sleep(0.1)
         await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
     await asyncio.wait(
-        [asyncio.create_task(server._handle_connection(sock)), asyncio.create_task(send_quit())],
+        [asyncio.create_task(running_server._handle_connection(sock)), asyncio.create_task(send_quit())],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    server._running = False
+    running_server._running = False
 
 
 def test_load_model(settings: Settings) -> None:
