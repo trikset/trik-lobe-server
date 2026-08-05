@@ -8,9 +8,6 @@ updates:
       uv:
         patterns:
           - "*"
-    ignore:
-      - dependency-name: "opencv-python"
-        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

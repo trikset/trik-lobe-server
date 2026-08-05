@@ -66,6 +66,54 @@ def test_load_settings_not_found() -> None:
         load_settings(Path("nonexistent.ini"))
 
 
+def test_load_settings_missing_section() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Other]\nfoo=1\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"Settings"):
+            load_settings(tmp)
+
+
+def test_load_settings_invalid_int() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Settings]\nMY_HULL_NUMBER=abc\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"MY_HULL_NUMBER"):
+            load_settings(tmp)
+
+
+def test_load_settings_port_out_of_range() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Settings]\nSERVER_PORT=70000\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"SERVER_PORT"):
+            load_settings(tmp)
+
+
+def test_load_settings_port_zero() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Settings]\nSERVER_PORT=0\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"SERVER_PORT"):
+            load_settings(tmp)
+
+
+def test_load_settings_hull_not_positive() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Settings]\nMY_HULL_NUMBER=0\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"MY_HULL_NUMBER"):
+            load_settings(tmp)
+
+
+def test_load_settings_camera_number_negative() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "settings.ini"
+        tmp.write_text("[Settings]\nCAMERA_NUMBER=-1\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=r"CAMERA_NUMBER"):
+            load_settings(tmp)
+
+
 def test_load_settings_default_path() -> None:
     with (
         patch("lobe_server.config.Path.exists", return_value=False),

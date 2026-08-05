@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -14,6 +15,12 @@ if TYPE_CHECKING:
     from lobe_server.config import Settings
 
 logger = logging.getLogger(__name__)
+
+_FAILURE_COOLDOWN = 2.0  # skip HTTP fetch for this long after a failure
+
+
+def _within_cooldown(last_failure: float | None) -> bool:
+    return last_failure is not None and time.monotonic() - last_failure < _FAILURE_COOLDOWN
 
 
 class CameraSource(ABC):
@@ -30,14 +37,19 @@ class UrlCamera(CameraSource):
         self._auth: tuple[str, str] | None = None
         if username and password:
             self._auth = (username, password)
+        self._last_failure: float | None = None
 
     def capture(self) -> Image.Image | None:
+        if _within_cooldown(self._last_failure):
+            return None
         try:
             resp = requests.get(self._url, stream=True, auth=self._auth, timeout=10)
             resp.raise_for_status()
+            self._last_failure = None
             return Image.open(BytesIO(resp.content))
         except requests.RequestException:
             logger.exception("Failed to fetch image from URL camera: %s", self._url)
+            self._last_failure = time.monotonic()
             return None
 
     def release(self) -> None:
@@ -47,14 +59,19 @@ class UrlCamera(CameraSource):
 class RobotCamera(CameraSource):
     def __init__(self, server_ip: str) -> None:
         self._url = f"http://{server_ip}:8080/?action=snapshot"
+        self._last_failure: float | None = None
 
     def capture(self) -> Image.Image | None:
+        if _within_cooldown(self._last_failure):
+            return None
         try:
             resp = requests.get(self._url, stream=True, timeout=10)
             resp.raise_for_status()
+            self._last_failure = None
             return Image.open(BytesIO(resp.content))
         except requests.RequestException:
             logger.exception("Failed to fetch image from robot camera: %s", self._url)
+            self._last_failure = time.monotonic()
             return None
 
     def release(self) -> None:
