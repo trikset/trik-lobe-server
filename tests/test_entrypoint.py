@@ -2,6 +2,8 @@
 
 import builtins
 import sys
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,31 +11,18 @@ import pytest
 import TRIKLobeServer
 
 
-def test_pause_prompts_when_tty() -> None:
-    with (
-        patch.object(sys.stdin, "isatty", return_value=True),
-        patch.object(builtins, "input") as mock_input,
-    ):
+@pytest.mark.parametrize(
+    ("stdin_patch", "expected"),
+    [
+        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=True), True, id="tty"),
+        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=False), False, id="non-tty"),
+        pytest.param(lambda: patch.object(sys, "stdin", None), False, id="missing-stdin"),
+    ],
+)
+def test_pause_gating(stdin_patch: Callable[[], Any], expected: bool) -> None:  # noqa: FBT001
+    with stdin_patch(), patch.object(builtins, "input") as mock_input:
         TRIKLobeServer._pause_for_user()
-    mock_input.assert_called_once()
-
-
-def test_pause_skips_when_not_tty() -> None:
-    with (
-        patch.object(sys.stdin, "isatty", return_value=False),
-        patch.object(builtins, "input") as mock_input,
-    ):
-        TRIKLobeServer._pause_for_user()
-    mock_input.assert_not_called()
-
-
-def test_pause_skips_when_stdin_missing() -> None:
-    with (
-        patch.object(sys, "stdin", None),
-        patch.object(builtins, "input") as mock_input,
-    ):
-        TRIKLobeServer._pause_for_user()
-    mock_input.assert_not_called()
+    assert mock_input.called is expected
 
 
 def test_main_missing_settings_exits() -> None:
