@@ -140,7 +140,7 @@ jobs:
           binaries: uv git gh node npm zip tar opencode
           uv-packages: python
       - name: Download binaries
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Determine previous release tag
@@ -184,7 +184,7 @@ jobs:
           done
           ls -la TRIKLobeServer-*
       - name: Publish draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           body_path: release-notes.md
