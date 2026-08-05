@@ -27,6 +27,7 @@ class LobeServer:
     BUFFER_SIZE = 255
     RECV_TIMEOUT = 10  # robot sends keepalive every 3s; 10s = 3 missed + margin
     CONNECTION_RETRY_DELAY = 0.1
+    CONNECTION_ERROR_LIMIT = 3  # consecutive OSErrors before declaring the socket dead
 
     def __init__(self, settings: Settings, model_path: Path) -> None:
         self._settings = settings
@@ -65,6 +66,7 @@ class LobeServer:
 
     async def _reader(self, sock: socket.socket) -> None:
         buf = b""  # accumulates across recv (TCP is a stream, messages split at any byte)
+        consecutive_errors = 0
         while self._running:
             try:
                 raw = await asyncio.wait_for(
@@ -75,27 +77,40 @@ class LobeServer:
                     logger.info("Peer closed connection")
                     break
                 buf += raw
+                consecutive_errors = 0
             except TimeoutError:
                 logger.warning(
                     "No data from peer in %ss, reconnecting...",
                     self.RECV_TIMEOUT,
                 )
                 break
+            except ConnectionError:
+                logger.warning("Peer connection error, reconnecting...")
+                break
             except OSError:
+                consecutive_errors += 1
+                if consecutive_errors >= self.CONNECTION_ERROR_LIMIT:
+                    logger.warning("Repeated socket errors, reconnecting...")
+                    break
                 await asyncio.sleep(self.CONNECTION_RETRY_DELAY)
                 continue
-            while self._running:
-                ok, msg, rest = try_parse_message(buf)
-                if not ok:
-                    break
-                buf = rest
-                if is_quit_command(msg):
-                    self._running = False
-                    return
-                if msg:
-                    logger.debug("Received: %s", msg)
+            buf = self._drain_messages(buf)
+            if not self._running:
+                break
             await asyncio.sleep(0)
-        self._running = False
+
+    def _drain_messages(self, buf: bytes) -> bytes:
+        while self._running:
+            ok, msg, rest = try_parse_message(buf)
+            if not ok:
+                break
+            buf = rest
+            if is_quit_command(msg):
+                self._running = False
+                break
+            if msg:
+                logger.debug("Received: %s", msg)
+        return buf
 
     async def _handle_connection(self, sock: socket.socket) -> None:
         port = sock.getsockname()[1]
@@ -111,6 +126,7 @@ class LobeServer:
         _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()

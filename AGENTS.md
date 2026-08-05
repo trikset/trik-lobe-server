@@ -340,6 +340,10 @@ Operational boundary test when deciding where a line goes:
 is not the project's ecosystem — e.g. Dependabot used `package-ecosystem: "pip"`
 (its closest legacy tag) until the native `uv` tag existed.
 
+- README is end-user-facing only (install, settings, usage, models, releases).
+  Design rationale goes to MEMORY.md. At most a small "For developers" section
+  (build command + doc pointers) for contributors — never design decisions.
+
 ### Language
 
 - Use SIMPLE ENGLISH for all globally-visible content: release notes, PR
@@ -361,6 +365,8 @@ Local tests on one OS are not proof the code works on others.
 - Never assume tooling behaves intuitively — verify
 - Shell escaping is a common trap: test with `echo` before passing to real command
 - When in doubt, route through files: write to `.tmp/<file>`, pipe to command
+- Re-read `.md` diffs after mdformat: line-start `+`/`-`/`*` mid-paragraph get
+  reflowed into lists; never start a wrapped line with a list character
 
 ### Decision-making
 
@@ -371,6 +377,8 @@ Local tests on one OS are not proof the code works on others.
   questions — but still postpone anything genuinely biased or uncertain
 - **Self-verify first**: check doubts yourself with read-only experiments
   before asking
+- Before proposing async/concurrency fixes, read the actual loop (`await`
+  semantics) — a sequential await does not saturate a thread pool
 
 ## Memory index
 

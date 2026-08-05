@@ -28,13 +28,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _pause_for_user() -> None:
+    if sys.stdin is not None and sys.stdin.isatty():
+        input("Press any key to close the window...")
+
+
 def main() -> None:
     logger.info("Starting program")
     try:
         settings = load_settings()
     except FileNotFoundError as _:
         logger.exception("settings.ini not found")
-        input("Press any key to close the window...")
+        _pause_for_user()
         sys.exit(1)
 
     model_path = resolve_model_path(settings)
@@ -48,7 +53,7 @@ def main() -> None:
     finally:
         server.close()
         logger.info("Press any key to close the window...")
-        input()
+        _pause_for_user()
 
 
 if __name__ == "__main__":

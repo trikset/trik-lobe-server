@@ -40,6 +40,27 @@ CI runs bare `uv run pytest`.
 with `patch.object(WebcamCamera, "__init__", return_value=None)`.
 `@patch.dict("sys.modules", {"cv2": mock_cv2})` reaches 100% coverage.
 
+### HTTP camera cooldown testing
+
+`UrlCamera`/`RobotCamera` fast-fail inside a `_FAILURE_COOLDOWN` window tracked
+via `time.monotonic`. Tests patch `lobe_server.camera.time.monotonic` with a
+`side_effect` sequence. Gotcha: `_within_cooldown(None)` short-circuits before
+calling the clock, so the first `capture()` (no prior failure) does NOT consume
+a `monotonic` value — account for that when numbering the sequence.
+
+### Cancelled-task verification
+
+`asyncio.all_tasks()` excludes tasks that are already `done()`. After
+`_handle_connection` returns, diff `all_tasks()` against the pre-call set and
+assert the leftover set is **empty** — done tasks drop out of `all_tasks()`, so
+the green-state assertion is `not leftover`, not `leftover`. This verifies
+cancelled keepalive/prediction tasks were actually awaited
+(`asyncio.gather(*pending, return_exceptions=True)`), not just cancelled.
+
+`asyncio.to_thread` cancellation does not stop the worker thread — a cancelled
+prediction task's thread keeps running until capture returns. Keep it bounded in
+tests with a `threading.Event` fixture (see "Async race conditions").
+
 ### Dead code
 
 `load_model` had unreachable TFLite fallback code (ONNX early return). Removed,
@@ -56,6 +77,11 @@ still pending when reader finishes. Use `threading.Event` to block
 C-level builtins (e.g. `socket.getsockname`) can't be patched on instances —
 `patch.object` raises "read-only attribute". Patch the class instead:
 `patch.object(socket.socket, "getsockname", ...)`.
+
+A plain `MagicMock` never raises, so patching `sys.exit` (or other
+must-raise builtins) with a default mock lets the code continue past the exit.
+Use `side_effect=SystemExit` (or the real exception) so control flow stops where
+it would in production.
 
 ### Silent exception swallowing
 

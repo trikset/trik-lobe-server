@@ -194,6 +194,85 @@ def test_robot_camera_network_error(mock_get: MagicMock) -> None:
     )
 
 
+def test_url_camera_failure_cooldown() -> None:
+    mock_response = MagicMock()
+    mock_response.content = _minimal_png()
+    with (
+        patch(
+            "lobe_server.camera.requests.get",
+            side_effect=[requests.RequestException("timeout"), mock_response],
+        ) as mock_get,
+        patch(
+            "lobe_server.camera.time.monotonic",
+            side_effect=[100.0, 100.5, 103.0],
+        ),
+    ):
+        cam = UrlCamera("http://example.com/snapshot")
+
+        im1 = cam.capture()
+        im2 = cam.capture()
+        im3 = cam.capture()
+
+    assert im1 is None
+    assert im2 is None
+    assert im3 is not None
+    assert mock_get.call_count == 2
+
+
+def test_robot_camera_failure_cooldown() -> None:
+    mock_response = MagicMock()
+    mock_response.content = _minimal_png()
+    with (
+        patch(
+            "lobe_server.camera.requests.get",
+            side_effect=[requests.RequestException("timeout"), mock_response],
+        ) as mock_get,
+        patch(
+            "lobe_server.camera.time.monotonic",
+            side_effect=[100.0, 100.5, 103.0],
+        ),
+    ):
+        cam = RobotCamera("192.168.1.10")
+
+        im1 = cam.capture()
+        im2 = cam.capture()
+        im3 = cam.capture()
+
+    assert im1 is None
+    assert im2 is None
+    assert im3 is not None
+    assert mock_get.call_count == 2
+
+
+def test_url_camera_success_resets_cooldown() -> None:
+    mock_response = MagicMock()
+    mock_response.content = _minimal_png()
+    with (
+        patch(
+            "lobe_server.camera.requests.get",
+            side_effect=[
+                requests.RequestException("timeout"),
+                mock_response,
+                requests.RequestException("timeout"),
+            ],
+        ) as mock_get,
+        patch(
+            "lobe_server.camera.time.monotonic",
+            side_effect=[100.0, 103.0, 104.0],
+        ),
+    ):
+        cam = UrlCamera("http://example.com/snapshot")
+
+        im1 = cam.capture()
+        im2 = cam.capture()
+        im3 = cam.capture()
+
+    assert im1 is None
+    assert im2 is not None
+    assert im3 is None
+    assert mock_get.call_count == 3
+
+
 def _minimal_png() -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n"

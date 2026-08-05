@@ -130,9 +130,10 @@ dual-backend model loader.
 
 ```python
 from lobe import ImageModel
-model = ImageModel.load(path)        # read signature.json + load TFLite
-result = model.predict(pil_image)    # preprocess + inference
-prediction = result.prediction        # top class label string
+
+model = ImageModel.load(path)  # read signature.json + load TFLite
+result = model.predict(pil_image)  # preprocess + inference
+prediction = result.prediction  # top class label string
 ```
 
 **Replacement:** `lobe_server/model.py` — dual backend `ONNXImageModel` +
@@ -334,6 +335,72 @@ Transient send errors are normal; death detection belongs exclusively in
 the `_reader`. Removing the suppress would cause reconnect storms on
 momentary network glitches.
 
+### [2026-08-05] Reconnect forever on peer death
+
+**Context:** `_reader` set `self._running = False` after *every* break
+(timeout, empty recv, reset), so `run_forever` exited instead of reconnecting —
+contradicting the documented "triggers reconnection" behavior, the
+`reconnecting...` log, and the `2c2bb3c` disconnect-fix intent. Worse, a TCP
+reset (`ConnectionResetError` ⊂ `OSError`) hit the generic `except OSError`
+retry path and spun forever on a dead socket, never reconnecting.
+
+**Decision:**
+
+- `_reader` breaks now leave `self._running` intact: timeout / empty recv /
+  `ConnectionError` (reset, abort, refused) all break → `run_forever`
+  reconnects after `RECONNECT_DELAY`. Only `data:quit` sets `_running = False`.
+- Generic `OSError` (e.g. the Windows `wait_for`-cancel artifact) is retried up
+  to `CONNECTION_ERROR_LIMIT = 3` consecutive times before breaking.
+- The server reconnects forever until the robot returns; Ctrl-C / terminal
+  close still terminate it — `KeyboardInterrupt` is a `BaseException`, never
+  caught by `run_forever`'s `except Exception`.
+
+**Consequences:** Robot crash/restart now auto-reconnects. Tests updated:
+`test_reader_empty_recv`, `test_reader_heartbeat_timeout`,
+`test_reader_connection_reset` now assert `_running` stays `True`;
+`test_run_forever_does_not_swallow_keyboardinterrupt` locks the exit property.
+
+**Detail:** `except` ordering in `_reader` is load-bearing — both `TimeoutError`
+and `ConnectionError` subclass `OSError`, so they must come before the generic
+`except OSError`, or their handling is swallowed. Do not reorder.
+
+### [2026-08-05] Robustness batch
+
+**Context:** Several small reliability and UX gaps: `input()` raised EOFError
+when stdin was not a TTY; a down HTTP camera blocked a full 10s timeout every
+prediction cycle and hammered the endpoint; cancelled child tasks in
+`_handle_connection` were not awaited; malformed `settings.ini` surfaced raw
+`KeyError`/`ValueError`.
+
+**Decisions:**
+
+- `TRIKLobeServer._pause_for_user()` gates the "press any key" prompt on
+  `sys.stdin is not None and sys.stdin.isatty()` — headless runs (systemd,
+  nohup) no longer crash on EOF, and a missing stdin is a no-op.
+- `UrlCamera`/`RobotCamera` fast-fail for `_FAILURE_COOLDOWN = 2.0s` after a
+  failed fetch (`_last_failure` tracked via `time.monotonic`), so a dead
+  endpoint costs one 10s timeout per 12s instead of per cycle, and recovers
+  within the cooldown once the camera returns.
+- `_handle_connection` awaits cancelled tasks via
+  `await asyncio.gather(*pending, return_exceptions=True)` — no "Task was
+  destroyed" warnings, no leftover pending tasks when a connection drops.
+- `load_settings` validates input: missing `[Settings]` section, non-integer
+  values, `SERVER_PORT` outside 1-65535, non-positive `MY_HULL_NUMBER`, and
+  negative `CAMERA_NUMBER` raise `ValueError` naming the offending key.
+
+**Rationale:** `time.monotonic` is the correct clock (immune to wall-clock
+jumps). The OSError retry limit preserves the Windows `wait_for`-cancel
+protection while preventing infinite spin.
+
+**Known limitation:** cancelling a task blocked in `asyncio.to_thread` does not
+stop the worker thread — a prediction thread can finish after `data:quit` or a
+reconnect. Pre-existing; `asyncio.gather(*pending)` only awaits the cancel, it
+does not join the thread. For camera capture this is bounded by the HTTP
+timeout / `VideoCapture.read()` duration.
+
+**Consequences:** Friendlier error messages, bounded HTTP retry, clean task
+shutdown, headless-safe entrypoint.
+
 ### [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the
@@ -417,6 +484,14 @@ dual-backend release.
 
 **Consequences:** Grouped uv PRs exclude opencv 5.x; opencv minor/patch updates
 (4.14) still land normally.
+
+**Resolution (2026-08-05):** Adopted opencv-python 5.0.0.93
+(`>=5.0.0.93,<6.0.0`). Verified: `cp37-abi3` wheels for all build platforms
+(win_amd64, manylinux x86_64/aarch64, macOS arm64 + Intel), the `WebcamCamera`
+API surface (`VideoCapture`, `cvtColor`, `COLOR_BGR2RGB`) is present and
+functional, the full suite is green, and PyInstaller bundles cv2 5 (`cv2.pyd`
+and the `opencv_videoio_ffmpeg500` DLL). The Dependabot
+`version-update:semver-major` ignore was removed.
 
 ### [2026-08-03] Zero-filled date versioning
 

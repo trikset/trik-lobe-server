@@ -106,10 +106,10 @@ CAMERA_NUMBER=0
 
 ```python
 def main():
-  while True:
-      predict = mailbox.receive(True)
-      print(predict)
-      script.wait(1000)
+    while True:
+        predict = mailbox.receive(True)
+        print(predict)
+        script.wait(1000)
 ```
 
 ## Поддерживаемые модели
@@ -121,7 +121,9 @@ def main():
 
 Формат авто-определяется по расширению файла. Labels — из `labels.txt` или `signature.json` → `classes.Label` (приоритет у `labels.txt`).
 
-## Сборка из исходников
+## Для разработчиков
+
+Сборка из исходников:
 
 ```bash
 uv sync
@@ -129,3 +131,6 @@ uv run pyinstaller TRIKLobeServer.py --onefile  # add --icon=trik-studio.ico on 
 ```
 
 Готовый исполняемый файл появится в `dist/`.
+
+Дизайн-решения и устройство соединения описаны в `MEMORY.md`, стратегия
+тестирования (100% покрытие, моки) — в `TESTING.md`.
