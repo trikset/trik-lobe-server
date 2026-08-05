@@ -527,6 +527,12 @@ module import → string patch target) were kept. Verified with `exclude_also`
 that coverage.py's `exclude_lines` would have replaced defaults incl.
 `if TYPE_CHECKING:`.
 
+**Correction (same session):** the instructions did **not** stop the bot
+re-flagging the same `...` lines on the next review (9 comments on the revert
+commit). The instruction mechanism is best-effort, not guaranteed. Treat the
+bot's comments as advisory: resolve/dismiss the threads rather than contort
+idiomatic code that passes our own gates.
+
 ### [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the

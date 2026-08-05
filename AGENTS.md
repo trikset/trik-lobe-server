@@ -415,11 +415,13 @@ Local tests on one OS are not proof the code works on others.
 
 GitHub's `github-code-quality` bot (Copilot code review) reads
 `.github/copilot-instructions.md` and `AGENTS.md` from the PR's head branch —
-align it with our standards there. Do **not** change code to satisfy it if the
-change breaks our own gates. Verify a bot comment against our gates (100%
-coverage, ruff ALL, basedpyright strict) before "fixing": a suggestion that
-breaks a gate is a false positive, not a requirement. See MEMORY.md "GitHub AI
-reviewer (code-quality) alignment".
+align it with our standards there, but treat this as **best-effort**: the bot
+may still flag idiomatic patterns (e.g. `...` Protocol stubs) despite the
+instructions. Do **not** change code to satisfy it if the change breaks our
+own gates. Verify a bot comment against our gates (100% coverage, ruff ALL,
+basedpyright strict) before "fixing": a suggestion that breaks a gate is a
+false positive — dismiss the thread, don't degrade the code. See MEMORY.md
+"GitHub AI reviewer (code-quality) alignment".
 
 ### Suppressions
 
