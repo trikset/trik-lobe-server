@@ -308,6 +308,10 @@ dictate scope names, not a fixed list.
 
 Link issues in the PR body with `Closes #N` or `Fixes <full-url>`.
 
+When a PR supersedes/absorbs another PR, add `Closes #N` to the description —
+`Supersedes` is **not** a GitHub closing keyword (only `Closes`/`Fixes`/
+`Resolves` + variants close on merge).
+
 ### PR descriptions
 
 PR descriptions document **results and non-obvious decisions**, not a
