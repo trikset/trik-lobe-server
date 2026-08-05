@@ -569,3 +569,9 @@ root cause analysis:
   exists because it was needed.
 - **Is the claim provably wrong?** Only then delete or correct — verify against
   executable sources (config, workflow, code) before removing.
+- **Does it enforce a docs/structure contract?** A rule can read like generic
+  advice yet underpin a repo convention — e.g. "Progressive disclosure" is the
+  principle behind AGENTS.md = pointers / MEMORY.md = on-demand detail. The
+  model consumes progressive disclosure from training, but the docs must still
+  be written that way. Keep rules that state structural conventions even when
+  their wording looks generic.

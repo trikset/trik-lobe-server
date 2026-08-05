@@ -533,6 +533,26 @@ commit). The instruction mechanism is best-effort, not guaranteed. Treat the
 bot's comments as advisory: resolve/dismiss the threads rather than contort
 idiomatic code that passes our own gates.
 
+### [2026-08-05] Docs-contract rules are not generic advice
+
+**Context:** During the AGENTS.md compaction review, "Progressive disclosure"
+was first proposed for removal as "generic agent guidance the model already
+follows". The maintainer pushed back: models are trained to *consume*
+progressively-disclosed input, but the docs must be *produced* that way.
+
+**Decision:** Keep "Progressive disclosure". Add a third removal-safety test to
+AGENTS.md "Safe updates": a rule that enforces a docs/structure contract is
+behavior-changing even when its wording looks generic.
+
+**Rationale:** Consumption behavior comes from model training; docs-production
+behavior comes from repo conventions encoded in AGENTS.md. Confusing the two
+misclassifies a structural rule as fluff. The AGENTS = pointers / MEMORY =
+on-demand detail split, the "Documenting decisions" boundary test, and the
+"On session init" pull-on-demand hook all depend on the stated principle.
+
+**Consequences:** Doc-compaction only removes/relocates rules where every fact
+survives; structural-directive sections stay.
+
 ### [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the
