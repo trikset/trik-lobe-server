@@ -3,435 +3,259 @@
 <!-- encoding: utf-8 -->
 
 Scope: Action triggers, guardrails, and commands for AI agents.
-Aim: Every session starts knowing what to do and how to behave.
-Structure: Hooks (action triggers) → Guardrails (rules) → Reference (commands,
-live metrics, Python version) → Agent behavior (tooling patterns).
 Memory: Details, architecture, design decisions, and quirks explanations live
-in `MEMORY.md`. Pull sections on demand — never duplicate rationale here.
+in `MEMORY.md` (pull sections on demand) — never duplicate rationale here.
 
 Every line must answer: "Would an agent likely miss this without help?" If not, cut it.
 Removing a documented rule changes agent behavior — only delete if provably incorrect.
 
 ## Hooks
 
-Action triggers for AI agents. Before/when/after each action, follow the
-corresponding hook. Keep this section updated when workflows change.
-
-**Managing this section:** When adding/removing tools, changing configurations,
-or learning new patterns, update this section and the corresponding reference
-file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
+Action triggers for AI agents. When adding/removing tools or changing
+configurations, update this section and the referenced config files
+(`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 ### On session init
 
-- Read this Hooks section completely
-- Read entire Guardrails section
-- Read `pyproject.toml` to understand tool configuration
-- Check `.github/workflows/` for CI setup
-- Check `.pre-commit-config.yaml` for hooks
-- Read `MEMORY.md` header + section list (Architecture, CI quirks, Design
-  decisions); pull sections on demand when a task touches those areas
+- Read Hooks + Guardrails, `pyproject.toml`, `.github/workflows/`,
+  `.pre-commit-config.yaml`, and `MEMORY.md` header + section list (pull
+  sections on demand)
 - Never talk to user before session warm-up complete
 
-### Priority tasks (when asked)
+### Priority tasks / PR review (when asked)
 
-- Check main branch CI status: `gh run list --branch main --limit 5`
-- Check security alerts: `gh api repos/{owner}/{repo}/dependabot/alerts --jq '.[] | "\(.state) \(.security_advisory.severity) \(.dependency.package.name)"'`
-
-### PR review (when asked)
-
-- List open PRs: `gh pr list --state open`
-- Suggest PRs for review based on age, size, or priority
+- Main CI status: `gh run list --branch main --limit 5`
+- Security alerts: `gh api repos/{owner}/{repo}/dependabot/alerts --jq '.[] | "\(.state) \(.security_advisory.severity) \(.dependency.package.name)"'`
+- List open PRs: `gh pr list --state open`; suggest by age, size, or priority
 
 ### Before commit
 
-- If hooks are not installed (fresh clone), run `uv run pre-commit install`
-  once — they then run automatically on every commit
-- To run all hooks manually at any time: `uv run pre-commit run --all-files`
-- If docs changed: run `uv run pre-commit run mdformat --all-files`
-- If adding new tool/config: update this Hooks section
-- If editing or reorganizing AGENTS.md: diff against the original
-  (`git diff HEAD -- AGENTS.md`), review every removed/modified line,
-  and confirm each deletion was intentional — not an accidental drop
-- When replacing a section, check if parts of the old content should
-  be merged into the new rather than deleted outright
-- Check if `uv.lock` should be committed (dependency changes)
-- Check if `pyproject.toml` should be committed (config changes)
+- Fresh clone: `uv run pre-commit install` once; run all hooks with
+  `uv run pre-commit run --all-files` (see Pre-commit hooks)
+- New tool/config → update this Hooks section
+- Editing or reorganizing AGENTS.md: `git diff HEAD -- AGENTS.md`, review every
+  removed/modified line — confirm each deletion is intentional; when replacing
+  a section, merge old content into the new rather than deleting outright
+- Dependency changes → commit `uv.lock`; config changes → commit `pyproject.toml`
 
-### Before push
+### Before push/PR
 
-- Check for useless files and secrets: `git status && git diff --cached`
-- Check if config files changed: `git diff --stat`
-- Run pre-push analysis: `uv run ruff check . && uv run pytest`
-- Review lessons learned, suggest improvements
-- Squash merge if mistake: `git reset --soft HEAD~1 && git commit`
-- Never push to main directly
-
-### Before branch
-
-- Create feature branch from main: `git switch main && git pull && git switch --create feat/name`
-- If the PR depends on another unmerged PR, branch from that PR's branch instead of main
-- Branch naming: `feat/description`, `fix/description`, `docs/description`
-- Keep feature branches focused (one idea per branch)
-
-### Before PR
-
-- Read PR discipline: PR titles, PR descriptions, PR size and focus
-- Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
-  or `git pull --rebase origin main`
-- Before rebasing, confirm the branch's real base (`git merge-base HEAD origin/main`) — rebasing onto an ancestor replays already-merged commits as
-  duplicates; only rebase onto the actual upstream tip
+- Branch from main: `git switch main && git pull && git switch --create feat/name`; name `feat/`, `fix/`, or `docs/` + description; branch from the dependent PR's branch if stacked
+- Rebase onto the real upstream tip: `git fetch origin && git rebase origin/main`; confirm the base first (`git merge-base HEAD origin/main`) — rebasing onto an ancestor replays merged commits
+- Review PR discipline (titles, descriptions, size/focus) and commits: `git log --oneline --max-count=5`
+- Check for useless files/secrets: `git status && git diff --cached`; config changes: `git diff --stat`
 - Re-validate: `uv run ruff check . && uv run pytest`
-- Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
-- Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
-- **Docs drift review**: `git diff HEAD -- AGENTS.md` and review it hard — every added line must pass the boundary test. Then read the full AGENTS.md top-to-bottom for generalization (phrase specific one-off facts as general patterns) and extract any remaining detail/rationale into MEMORY.md.
-- Check if PR title follows Conventional Commits format
-- Check if PR description covers root cause, profit, trade-offs, and verification
-- Check if PR description has "Out of scope" section
-- Run `git log --oneline --max-count=5` to review commits
-- Sign commits (always sign for PRs — `--no-gpg-sign` is for feature branches only)
-- Commit hypothesis in feature-branches for temporary knowledge storage
+- Squash-fix mistakes before push: `git reset --soft HEAD~1 && git commit`
+- Never push to main directly
+- Docs and code stay in sync: config/dependency/public-interface/workflow changes update README.md, AGENTS.md, and/or MEMORY.md; if `.github/workflows/` changed, grep docs for stale claims
+- **Docs drift review**: `git diff HEAD -- AGENTS.md` — every added line must pass the boundary test; read AGENTS.md top-to-bottom for generalization and extract detail/rationale into MEMORY.md
+- Sign commits for PRs (see "Commit signing & merge")
 
-### Before test
+### Before test / command
 
-- Ensure dependencies synced: `uv sync`
-- Run full suite: `uv run pytest`
-- Or single test: `uv run pytest tests/test_model.py::test_name --exitfirst`
-
-### Before running a command
-
-- If this command type has known pitfalls (Shell escaping, temp files,
-  gh PR bodies), re-read the relevant guardrail section before constructing it
+- `uv sync`; full suite `uv run pytest`; single test
+  `uv run pytest tests/test_model.py::test_name --exitfirst`
+- Re-read the relevant guardrail for known-pitfall command types (Shell
+  escaping, temp files, `gh` PR bodies)
 - When in doubt, route through `.tmp/<file>` rather than inline arguments
 
-### On tool error during execution
+### On tool error / after CI failure
 
-- When a command outputs `fatal:`, `error:`, or exits non-zero: **stop immediately**
-- Do not proceed to the next command until root cause is identified
-- If the error was a script/command bug (not a real failure):
-  1. Fix the immediate issue
-  1. **Update AGENTS.md (rules) or MEMORY.md (details) now** — add a guardrail, hook, or Shell escaping bullet
-  1. Verify the fix by re-running the failed command
-  1. Only then continue with the next task
-- If the root cause category is new, add it to the Root cause analysis section
-- Distinguish transient infrastructure failures (DNS, network, CI outage) from
-  code errors: verify local state is intact, retry with backoff, then report
-  the blocker — don't blindly repeat the failing command
-
-### After CI failure
-
-- Check each tool: ruff, basedpyright, pylint, bandit, vulture, pytest
-- Check if failure is platform-specific (Windows/macOS/Linux)
-- Check if failure is flaky (retry once)
-- Check pytest coverage output
-- **Error triage**: after any unexpected error, ask "Was this expected?
-  Would I have been surprised if it succeeded?" If unexpected, stop and
-  investigate — root cause first, fix second, skip third.
+- `fatal:`, `error:`, or non-zero exit: **stop immediately**; identify the root
+  cause before proceeding
+- Script/command bug: fix → update AGENTS.md (rules) or MEMORY.md (details) now
+  → re-run to verify → continue
+- Transient infra failures (DNS, network, CI outage) ≠ code errors: verify local
+  state, retry with backoff, then report — don't blindly repeat the command
+- CI failure: check each tool (ruff, basedpyright, pylint, bandit, vulture,
+  pytest), platform-specificity, flakiness (retry once), and coverage output
+- **Error triage**: after any unexpected error ask "Was this expected? Would I
+  have been surprised if it succeeded?" If unexpected, stop and investigate —
+  root cause first, fix second, skip third.
 
 ### PR finalization (after CI green)
 
-- Review PR description for mojibake, encoding, or broken links
-- If description was passed via CLI, verify with `gh pr view --json body`
-- Verify head commits are signed: `git log --format=%G? origin/main..HEAD` —
-  all must be `G`; re-sign any `N` commit before merge
-- If this PR is stacked on another PR (base != main), add "Depends on #N" to the description
-- Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
-- Push signed commit
-- Mark PR as ready for review
-
-### After push to existing PR
-
-- If new commits were pushed after the PR was created, update the PR body:
+- Review PR description for mojibake, broken links; verify CLI-passed bodies
+  with `gh pr view --json body`
+- Head commits must be signed: `git log --format=%G? origin/main..HEAD` — all
+  `G`; re-sign any `N` before merge
+- Stacked PR (base != main): add "Depends on #N" to the description
+- After pushing new commits, update the body (stale bodies mislead):
   `gh pr edit <N> --body-file .tmp/pr-body.md`
-- Stale PR bodies are misleading — the description must reflect all commits
+- Sign the final commit (`git commit --amend --no-edit -S`, staged only),
+  push, mark PR ready for review
 
 ### After push (retrospective)
 
-- Analyze decisions, suggest improvements
-- Suggest comments for unclear code
-- Suggest docs updates for non-obvious patterns
-- Update AGENTS.md (rules) or MEMORY.md (details/rationale) with new patterns
-- Capture every rule deviation and missing rule from this session NOW, before
-  moving on — end the retrospective with AGENTS.md/MEMORY.md updated or an
-  explicit decision not to
+- Analyze decisions; suggest comments for unclear code and docs for non-obvious
+  patterns
+- Capture every rule deviation/missing rule NOW — end with AGENTS.md/MEMORY.md
+  updated or an explicit decision not to
 
 ### After merge
 
-- Squash merge the PR: `gh pr merge <N> --squash --subject "<subject>" --body "<body>"`
-- Check main branch CI status: `gh run list --branch main --limit 3`
-- **If main CI fails**: treat as highest priority — fix immediately, don't move on
-- Update local main: `git switch main && git pull`
-- Delete merged feature branch: `git branch --delete branch-name`
+- Squash merge: `gh pr merge <N> --squash --subject "<title>" --body "<body>"`
+- Check main CI: `gh run list --branch main --limit 3` — **if main CI fails,
+  fix immediately, don't move on**
+- Update local main: `git switch main && git pull`; delete the merged branch:
+  `git branch --delete branch-name`
 
 ### Before release
 
-- Check release gates: 0 open PRs, 0 security alerts, green main CI
-  (`gh pr list --state open`, `gh api .../dependabot/alerts`)
-- On a release branch, set `pyproject.toml` version to the zero-filled date,
-  e.g. `26.08.03` for tag `v26.08.03` (dev version is `YY.MM.DD.dev0` on main)
-- Commit, tag `vYY.MM.DD`, push the tag
-- The `release` job of `python-app.yml` (triggered by the `v*` tag) builds 3
-  platform binaries and creates a DRAFT release with LLM-generated release
-  notes (via the `release-notes` skill). Artifact naming and notes structure:
-  see `MEMORY.md` CI quirks + the skill file.
-- **Review/edit the draft notes**, then publish manually — releases are never
-  auto-published
+- Gates: 0 open PRs, 0 security alerts, green main CI
+- Version = zero-filled date: set `pyproject.toml` to `YY.MM.DD` on the release
+  branch (`YY.MM.DD.dev0` on main); commit, tag `vYY.MM.DD`, push the tag
+- The `v*` tag triggers the `release` job (3 platform binaries + DRAFT release
+  with LLM-generated notes) — details: MEMORY.md CI quirks + `release-notes` skill
+- **Review/edit the draft notes**, then publish manually — never auto-published
 
 ## Pre-commit hooks
 
-`.pre-commit-config.yaml` runs `ruff` (`uv run ruff check --fix`), `ruff-format`,
-and `mdformat` as local hooks using the venv tools, plus the remote
-`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`. Install
-once per clone: `uv run pre-commit install`. Run all hooks manually:
-`uv run pre-commit run --all-files`. On Windows PowerShell, check markdown
-through the hook: `uv run pre-commit run mdformat --all-files`.
+`.pre-commit-config.yaml` runs `ruff` (`uv run ruff check --fix`),
+`ruff-format`, and `mdformat` as local hooks via the venv, plus remote
+`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and `uv-lock`.
+Install once: `uv run pre-commit install`; run all: `uv run pre-commit run --all-files`. On Windows PowerShell, check markdown via the hook:
+`uv run pre-commit run mdformat --all-files`.
 
 ## Guardrails
 
 ### PR description
 
-This session context is ephemeral — all state is lost when the conversation ends.
-**AGENTS.md MUST be updated before any PR is created.** Never rely on chat history
-to preserve decisions, rationale, or patterns. If a change affects CI, toolchain,
-architecture, or conventions, document it in AGENTS.md (rules) or MEMORY.md
-(details/rationale) first.
+Session context is ephemeral — update AGENTS.md (rules) or MEMORY.md (details)
+BEFORE creating any PR; never rely on chat history to preserve decisions.
 
-PR description must cover:
+Cover: **Root cause** (traced to the actual reason — missing check, missing doc,
+wrong assumption; not "various X accumulated"), **Profit** (measurable, numbers
+if possible), **Trade-offs** (alternatives rejected), **Verification** (proof
+not visible in diff/CI). Do NOT list changed files, CI status, or commit hashes
+(all visible elsewhere). Base not `main`? Add "Depends on #N".
 
-- **Root cause** — what problem does this solve? (not: "various X accumulated" —
-  trace to the actual reason: missing check, missing doc, wrong assumption)
-- **Profit** — measurable benefit (numbers if possible)
-- **Trade-offs** — alternatives considered and rejected
-- **Verification** — proof not visible in diff or CI checks
+### PR discipline
 
-Do NOT list changed files (visible in diff) or CI status (visible in checks).
-Do NOT list commit hashes (fragile, visible in PR commit tab).
+**Titles:** [Conventional Commits](https://www.conventionalcommits.org/)
+`<type>: <description>` or `<type>(<scope>): <description>`; imperative mood;
+under 50 chars. Types: `feat`, `fix`, `refactor`, `ci`, `docs`, `test`,
+`chore`, `perf`. Scope optional, project-structure-driven (e.g. `model`,
+`server`, `camera`, `deps`). Link `Closes #N` / `Fixes <url>`. Superseding PR:
+add `Closes #N` — `Supersedes` is **not** a closing keyword.
 
-Before writing the body, check: is the base `main`? If not, add
-"Depends on #N" referencing the base PR.
+**Descriptions:** document **results and non-obvious decisions**, not a
+file-by-file changelog (recoverable from git diff); explain *why* when not
+obvious from code. "How to test" only for unobvious changes. Add an "Out of
+scope" section for explicit non-goals. Squash-merge body carries root cause,
+profit, trade-offs, verification, out of scope.
 
-### Pattern recurrence escalation
+**Size and focus:** one idea per PR; don't mix refactors with behavior changes;
+keep diffs under 400 lines. Big changes → stacked PRs (prerequisite first). New
+distinct work → new branch/PR, never append to an open one.
 
-When a gap appears in consecutive PRs or sessions, the fix must escalate:
+### Repo hygiene
 
-- 1st occurrence — **document** (update canonical doc)
-- 2nd occurrence — **automate** (add CI check or pre-commit hook)
-- 3rd+ occurrence — **tool config** (linter rule, structural guard)
+- Use `.tmp/` (repo root, gitignored) for all temporary files (PR bodies,
+  scratch, hypothesis notes) — never `/tmp/` or outside the workspace
+- **Never touch git config** (`git config`, `.git/config`) — managed by the user
+- **Never modify .gitignore** without user acceptance
+- Always work on feature branches, never directly on main; one idea per branch;
+  commit hypothesis in feature-branches; squash-fix mistakes before push
 
-### Temp files
-
-Use `.tmp/` in the repository root for all temporary files (PR bodies,
-scratch data, hypothesis notes). This directory is gitignored.
-Never write temp files to `/tmp/` or outside the workspace — the `.tmp/`
-folder survives local development and is visible to future sessions.
-
-### Git config
-
-- **Never touch git config** — no `git config` commands, no modifying `.git/config`
-- All git configuration is managed by the user
-
-### .gitignore
-
-- **Never modify .gitignore without user acceptance**
-- Always ask before adding or removing entries from `.gitignore`
-
-### Branch discipline
-
-- Always work on feature branches, never directly on main
-- Branch naming: `feat/description`, `fix/description`, `docs/description`
-- Keep feature branches focused (one idea per branch)
-- Commit hypothesis in feature-branches for temporary knowledge storage
-- Squash merge for cleanup before push if mistake (ignored files, secrets)
-
-### Push discipline
-
-- **Feature branches**: unsigned push allowed (`git push` without signing)
-- **PRs**: never use `--no-gpg-sign` (signing required for merge approval)
-- **main branch**: never push directly — only merge via PR
-- Push unsigned for CI runs on feature branches
-- Always ask if doubt, always ask if unsure
-
-### Commit signing
+### Commit signing & merge
 
 - **Feature branches**: may use `--no-gpg-sign` for early CI-only pushes to
-  avoid GPG lock
-- **Push unsigned**: allowed for CI runs (feature branches) ONLY before a PR exists
-- **Before PR**: re-sign branch commits made with `--no-gpg-sign` —
+  avoid GPG lock; push unsigned for CI runs only before a PR exists
+- **Before PR**: re-sign branch commits made with `--no-gpg-sign`:
   `git rebase --exec 'git commit --amend --no-edit -S' <base>`, then verify
   `git log --format=%G? origin/main..HEAD` shows all `G`
 - **PRs**: never use `--no-gpg-sign`; head commits must be signed
-- **main branch**: never push directly; only signed (verified) commits land
-
-### Merge discipline
-
-- Keep history clean with squash-merge: `gh pr merge <N> --squash --subject "<title>" --body "<body>"`
-- Never push a merge commit to main — always merge via GitHub API
-- Merge to main only by direct explicit command by user
-- Otherwise — no merge to main
-- **Never `--admin`-merge unsigned commits** — `--admin` is the only override
-  of main's signed-commits + review protection, so it must never carry unsigned
-  commits to main. If head commits aren't signed, re-sign first, then merge via
-  the normal reviewed squash flow. `--admin` (signed commits only) still needs
-  a direct explicit unbiased user prompt — it bypasses required reviews. Only
-  apply when the user independently confirms.
-- Squash-merge subject uses Conventional Commits format (\<50 chars); all useful
-  info from the PR description goes into the squash body (root cause, profit,
-  trade-offs, verification, out of scope), not just a file changelog.
+- **main**: never push directly; merge only via GitHub API squash merge, and
+  only by a direct explicit user command
+- **Never `--admin`-merge unsigned commits**; `--admin` (signed only) still
+  needs a direct explicit unbiased user prompt — it bypasses required reviews
+- Squash-merge subject uses Conventional Commits (\<50 chars); the body carries
+  the PR-description info, not just a file changelog
 
 ### Stacked PRs (squash merge)
 
-When merging a chain of stacked PRs (A → B → C → main):
-
-- **Merge bottom-up**: the PR targeting `main` first, then each next PR.
-- **After each merge, `--delete-branch` deletes the base branch → GitHub
-  auto-closes the next stacked PR** (base branch gone). Recovery:
-  1. Recreate the deleted base branch from `main` (`git branch <name> main; git push origin <name>`)
-  1. `gh pr reopen <N>` then `gh pr edit <N> --base main`
-  1. Delete the temp base branch
-  1. Rebuild the head branch onto main: `git reset --hard origin/main` then
-     `git cherry-pick <first-commit>^..<last-commit>` (its own commits only)
-  1. `git push --force-with-lease`
-- **Gate on CI**: after each merge, verify main CI is green before merging the
-  next PR (`gh run list --branch main --limit 3`).
-- Conflicts during rebuild are expected (main has squash content the branch
-  pre-dates) — resolve by taking the intended final state, or skip commits
-  already upstream (`git cherry-pick --skip`).
-
-### PR titles
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
-`<type>: <description>` or `<type>(<scope>): <description>`.
-
-Use imperative mood ("add" not "added"). Keep under 50 characters.
-
-Types: `feat`, `fix`, `refactor`, `ci`, `docs`, `test`, `chore`, `perf`.
-Scope is optional — use when the change is confined to one area of the codebase
-(e.g. `model`, `server`, `camera`, `deps`). Let the project's structure
-dictate scope names, not a fixed list.
-
-Link issues in the PR body with `Closes #N` or `Fixes <full-url>`.
-
-When a PR supersedes/absorbs another PR, add `Closes #N` to the description —
-`Supersedes` is **not** a GitHub closing keyword (only `Closes`/`Fixes`/
-`Resolves` + variants close on merge).
-
-### PR descriptions
-
-PR descriptions document **results and non-obvious decisions**, not a
-file-by-file changelog (recoverable from git diff). State the main outcome,
-then explain *why* decisions were made when the reasoning isn't obvious from
-the code.
-
-Add "How to test" steps only for unobvious changes (complex logic,
-multi-step reproduction). Not needed for simple fixes or small
-improvements already covered by tests.
-
-Include an "Out of scope" section when you explicitly decided *not* to
-do something in this PR — documenting intentional boundaries prevents
-scope creep in review.
-
-### PR size and focus
-
-Aim for one idea per PR. Don't mix refactors with behavior changes. Keep
-diffs under 400 lines when possible — large PRs get rubber-stamped or
-delayed. If a change is big, split into stacked PRs (prerequisite first,
-then follow-ups).
-
-If new work is a distinct concern from an already-open PR, open a new
-branch/PR — don't append unrelated changes to an open one, even if the
-branch is still alive.
+Merging A → B → C → main: **merge bottom-up** (the `main`-targeting PR first)
+and **gate on CI** after each merge. `--delete-branch` auto-closes the next PR
+(base branch gone) — full recovery procedure: see MEMORY.md Workflows.
 
 ### Documenting decisions
 
-When you make a non-obvious choice, document it at the right level:
+Non-obvious choices get documented at the right level:
 
-1. **Inline comment** in the file (CI, code, config) — immediate context
-   for anyone reading that file.
-1. **AGENTS.md** — short precise phrases for high-signal facts agents need.
-1. **MEMORY.md** — full "why" explanation with rationale and trade-offs;
-   architecture details, design decisions, and CI quirks all live there.
+1. **Inline comment** in the file — immediate context
+1. **AGENTS.md** — short precise rules agents need
+1. **MEMORY.md** — full "why", rationale, and trade-offs
 
-**AGENTS.md stores rules/constraints only** — never rationale or "why"
-explanations. Rationale → MEMORY.md. If a line explains *why*
-instead of *what to do*, it's in the wrong file.
+**AGENTS.md stores rules/constraints only — never rationale.** If a line
+explains *why* instead of *what to do*, it's in the wrong file. Boundary test:
 
-Operational boundary test when deciding where a line goes:
-
-- A hook/rule line that needs a concrete value (name, number, command arg)
-  must be a pointer — `see MEMORY.md <section>` — never the value itself.
-- If the agent behaves correctly without the line loaded in AGENTS.md and
-  only needs it for a specific task, it belongs in MEMORY.md.
+- A rule needing a concrete value (name, number, command arg) must be a pointer
+  — `see MEMORY.md <section>` — never the value itself
+- If the agent behaves correctly without the line loaded and only needs it for
+  a specific task, it belongs in MEMORY.md
+- A line that explains *why* is rationale → goes to MEMORY.md; removing it
+  without relocating is a loss
 
 **Verify toolchain/dependency-manager names against executable sources**
-(`pyproject.toml`, `uv.lock`) before writing them into any doc. A config value
-is not the project's ecosystem — e.g. Dependabot used `package-ecosystem: "pip"`
-(its closest legacy tag) until the native `uv` tag existed.
+(`pyproject.toml`, `uv.lock`) before writing them into any doc — a config value
+is not the project's ecosystem (see MEMORY.md CI quirks for the Dependabot
+example).
 
-- README is end-user-facing only (install, settings, usage, models, releases).
-  Design rationale goes to MEMORY.md. At most a small "For developers" section
-  (build command + doc pointers) for contributors — never design decisions.
+- README is end-user-facing only (install, settings, usage, models, releases);
+  at most a small "For developers" section
 
-### Language
+### Global conventions
 
-- Use SIMPLE ENGLISH for all globally-visible content: release notes, PR
-  descriptions, commit messages, docs, comments.
-- EXCEPTION: reply to GitHub issues/comments in the same language the author
-  used.
-- Friendly small-talk is fine; keep it brief.
-
-### Cross-platform
-
-This project runs on Windows, macOS, and Linux. CI tests on all three.
-When writing code or tests that touch OS-level APIs (sockets, files,
-processes), always consider platform differences. See TESTING.md for
-platform-specific test patterns (socketpair, temp files, deprecations).
-Local tests on one OS are not proof the code works on others.
+- SIMPLE ENGLISH for all globally-visible content (release notes, PR
+  descriptions, commits, docs, comments); EXCEPTION: reply to GitHub
+  issues/comments in the language the author used
+- Windows, macOS, and Linux — CI tests all three; when code/tests touch OS
+  APIs (sockets, files, processes), consider platform differences (see
+  TESTING.md); local tests on one OS don't prove the others
 
 ### Tooling assumptions
 
-- Never assume tooling behaves intuitively — verify
-- Shell escaping is a common trap: test with `echo` before passing to real command
-- When in doubt, route through files: write to `.tmp/<file>`, pipe to command
+- Never assume tooling behaves intuitively — verify; "probably supported" is
+  not supported. Before proposing a config key, CLI flag, or framework feature,
+  confirm it exists in docs, `--help`, or schema with a read-only probe
+- Shell escaping is a common trap: test with `echo` before passing to a real
+  command; if an argument contains special characters (backticks, quotes,
+  newlines), route through `.tmp/<file>` rather than inlining
 - Re-read `.md` diffs after mdformat: line-start `+`/`-`/`*` mid-paragraph get
-  reflowed into lists; never start a wrapped line with a list character
-- Before proposing a tool/config mechanism (config key, CLI flag, framework
-  feature), confirm it exists in that tool's docs, `--help`, or schema — verify
-  with a read-only probe; "probably supported" is not supported
+  reflowed into lists — never start a wrapped line with a list character
 - `coverage.py` `exclude_lines` REPLACES the default exclusions (incl.
   `if TYPE_CHECKING:`); use `exclude_also` to add to the defaults instead
 
 ### Decision-making
 
 - **When unsure or in doubt, ask the user** — never guess or assume intent
-- **Default to conservative**: if an action risks code, tests, architecture,
-  or the product, postpone and discuss rather than act
-- **When the user says "run auto"**: execute fully and accurately without
-  questions — but still postpone anything genuinely biased or uncertain
+- **Default to conservative**: if an action risks code, tests, architecture, or
+  the product, postpone and discuss rather than act
+- **"run auto"**: execute fully and accurately without questions — but still
+  postpone anything genuinely biased or uncertain
 - **Self-verify first**: check doubts yourself with read-only experiments
   before asking
 - Before proposing async/concurrency fixes, read the actual loop (`await`
   semantics) — a sequential await does not saturate a thread pool
+- Offer three solutions (small effort, best practice, unobvious); present all
+  three, answer 1 = preferred; format questions so the user can answer
+  "yes to all, go"
 
-### AI reviewers
+### Reviewers & suppressions
 
-GitHub's `github-code-quality` bot (Copilot code review) reads
-`.github/copilot-instructions.md` and `AGENTS.md` from the PR's head branch —
-align it with our standards there, but treat this as **best-effort**: the bot
-may still flag idiomatic patterns (e.g. `...` Protocol stubs) despite the
-instructions. Do **not** change code to satisfy it if the change breaks our
-own gates. Verify a bot comment against our gates (100% coverage, ruff ALL,
-basedpyright strict) before "fixing": a suggestion that breaks a gate is a
-false positive — dismiss the thread, don't degrade the code. See MEMORY.md
-"GitHub AI reviewer (code-quality) alignment".
+GitHub's `github-code-quality` bot reads `.github/copilot-instructions.md` +
+`AGENTS.md` from the PR head branch — align it there but treat as
+**best-effort**. Do **not** change code to satisfy it if it breaks our gates
+(100% coverage, ruff ALL, basedpyright strict) — that's a false positive:
+dismiss the thread, don't degrade the code. See MEMORY.md "GitHub AI reviewer
+(code-quality) alignment".
 
-### Suppressions
-
-- Every in-code suppression (`# noqa`, `# type: ignore`, `# pylint: disable`,
-  `# nosec`) must carry a reasoning comment; `# pyright:`/`# pylint: disable`
-  file headers are the mechanism for test-scoped relaxations.
-- Production linters run at full strictness — scope relaxations to tests
-  whenever the trigger is a pytest idiom (fixture shadowing, private access,
-  `assert`, hardcoded fixture passwords, `Any` in mocks). See MEMORY.md
-  "Suppression audit" for the full inventory and rationale.
+Every in-code suppression (`# noqa`, `# type: ignore`, `# pylint: disable`,
+`# nosec`) must carry a reasoning comment; `# pyright:`/`# pylint: disable`
+file headers are the test-scoped relaxation mechanism. Production linters run
+full strictness — scope relaxations to tests for pytest idioms. Full inventory:
+MEMORY.md "Suppression audit".
 
 ## Memory index
 
@@ -441,10 +265,11 @@ Details live in `MEMORY.md` — pull a section on demand:
 |-------|----------------------|
 | Model loading, connection protocol | Architecture |
 | CI quirks, runner notes, release flow | CI quirks |
+| Stacked PR recovery | Workflows |
 | Rationale and trade-offs for choices | Design decisions |
 | Python version constraint | Python version (below) |
 
-`python-app.yml` is the single workflow file — job guards: see `MEMORY.md`
+`python-app.yml` is the single workflow file — job guards: see MEMORY.md
 CI quirks.
 
 ## Commands
@@ -482,96 +307,67 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 
 ## Agent behavior
 
-### Tool options
+### Tooling & verification
 
-- Use standard, long options for all tools to avoid bias
-- Verify which options are documented before adding to commands
-- Git modern commands: prefer `git switch` over `git checkout`
-- Reference: `git --help`, `pytest --help`, `bandit --help`
-- **When asking questions**: answer 1 must be suggested preferred solution
-- **Format questions** so user can answer "yes to all, go" — save their time
+- Use standard, long options for all tools (bias-free, portable); verify
+  options against `--help` before adding them to commands; verify commands
+  work before documenting them
+- Prefer modern git: `git switch` over `git checkout`
+- When claiming a refactor reduces SLOC/complexity/test-count, measure before
+  and after; if a consolidation backfires, revert it. Report measured deltas,
+  not estimates
+- **When presenting suggestions/choices**, use numbered items (1, 2, 3) or
+  letters (A, B, C), mark the recommended option, and format so the user can
+  answer in one line: "yes to all", "just 1 and 3", or "go A and D"
 
 ### Shell escaping
 
-- Each shell has different escape rules — never assume PowerShell behaves like bash
-- PowerShell double-quoted strings: `\b` = backspace (0x08), `\n` = newline, `\r` = CR, `` ` `` = backtick escape
-- When passing complex text via CLI, use file/heredoc/stdin instead of inline arguments
-- For `gh` commands with long bodies: `gh pr edit <N> --body-file <path>` avoids shell escaping entirely
-- Rule of thumb: if a CLI argument contains special characters (backticks, quotes, newlines), route through a `.tmp/<file>` rather than inlining
+- Each shell has different escape rules — never assume PowerShell behaves like
+  bash. PowerShell double-quoted strings: `\b` = backspace (0x08), `\n` =
+  newline, `\r` = CR, `` ` `` = backtick escape
+- Complex text via CLI → file/heredoc/stdin instead of inline arguments; `gh`
+  long bodies → `gh pr edit <N> --body-file <path>` avoids escaping entirely
 - **Commit messages with special chars** — PowerShell interprets `-1`,
   backticks, and quotes in `git commit -m` as command syntax. Always use
-  `git commit --file .tmp/msg.txt` for non-trivial messages.
-
-### Three solutions
-
-- Always think of three solutions: small effort, best practice, unobvious
-- Present all three to user, let them choose
-- Answer 1 is always the preferred solution based on analysis
-
-### Verification
-
-- Verify commands work before documenting them
-- Check `--help` output for standard options
-- Use long options to avoid bias and ensure portability
-- When claiming a refactor reduces SLOC/complexity/test-count, measure before
-  and after (line counts, coverage); if a consolidation backfires (net
-  increase), revert it. Report measured deltas, not estimates.
+  `git commit --file .tmp/msg.txt` for non-trivial messages
 
 ### Progressive disclosure
 
-- Show only what's needed at the moment
-- Let agent read more when needed
-- Don't overwhelm with all information upfront
-- Keep context small and focused
+Show only what's needed at the moment; let the agent read more when needed;
+keep context small and focused. (Docs-structure contract: AGENTS.md = pointers,
+MEMORY.md = on-demand detail.)
 
-### Continuous improvement
+### Process improvement
 
-- **Every error must leave a trace**: before moving on from any unexpected
-  error, ensure the lesson is captured in AGENTS.md (rules) or MEMORY.md
-  (details/rationale)
+- **Every error must leave a trace**: before moving on, capture the lesson in
+  AGENTS.md (rules) or MEMORY.md (details)
 - **Check if this has happened before**: grep AGENTS.md and MEMORY.md for the
-  error type before crafting a fix — the solution may already be documented
-- **Keep patterns general**: phrase new bullets to catch similar future
-  cases, not just the exact one-time scenario
-- **Store only high-signal, expensive-to-rediscover facts**: if a failure
-  message, `--help`, or the config file explains it, teach rediscovery instead
-  of memorializing. Every stored line has a maintenance cost — weigh it against
-  the benefit.
+  error type before crafting a fix
+- **Keep patterns general**: phrase bullets to catch similar future cases, not
+  the exact one-time scenario
+- **Store only high-signal, expensive-to-rediscover facts**; prefer concepts
+  over exact numbers/line-numbers — they drift silently. When adding a rule,
+  grep for entries it makes stale and migrate them
 - **Verify tooling "installed/runs automatically" claims against the
   environment** — a config file existing is not the same as the tool being
-  active. Confirm with a command, not an assumption.
-- **Prefer concepts over exact numbers/line-numbers in docs** — they drift
-  silently; live queries and conceptual descriptions don't. When adding a new
-  rule/guardrail, grep AGENTS.md and MEMORY.md for existing entries that the
-  rule makes stale and migrate them to the concept form.
-
-### Root cause analysis
-
-When something goes wrong, trace past the surface error to one of:
-
-- **Missing hook**: No trigger or checklist exists for this action — add one
-- **Missing in docs**: The knowledge wasn't recorded — write it down
-- **Forgot to search/explore**: Existing docs had the answer but weren't consulted — add a "check docs" step to the hook
-- **Ignored error signal**: The tool produced `fatal:` or non-zero exit but execution continued — add an "On tool error" hook
-
-Fix the root cause, not just the symptom. A surface fix without addressing the
-hook/doc/search/error gap will repeat.
-
-After fixing the root cause, re-run the failed command to verify.
-Only then proceed to the next task.
-
-### Safe updates
-
-When evaluating whether to keep or remove existing content, apply the mirror of
-root cause analysis:
-
-- **Would removing this change agent behavior?** If yes, keep it — the rule
-  exists because it was needed.
-- **Is the claim provably wrong?** Only then delete or correct — verify against
-  executable sources (config, workflow, code) before removing.
-- **Does it enforce a docs/structure contract?** A rule can read like generic
-  advice yet underpin a repo convention — e.g. "Progressive disclosure" is the
-  principle behind AGENTS.md = pointers / MEMORY.md = on-demand detail. The
-  model consumes progressive disclosure from training, but the docs must still
-  be written that way. Keep rules that state structural conventions even when
-  their wording looks generic.
+  active; confirm with a command
+- **Gaps escalate**: 1st occurrence — document (canonical doc); 2nd —
+  automate (CI check or pre-commit hook); 3rd+ — tool config (linter rule,
+  structural guard)
+- **Root cause analysis**: when something goes wrong, fix the root cause, not
+  the symptom — a surface fix repeats; re-run the failed command to verify.
+  Trace past the surface error to one of:
+  - **Missing hook** — no trigger/checklist exists — add one
+  - **Missing in docs** — knowledge wasn't recorded — write it down
+  - **Forgot to search/explore** — add a "check docs" step to the hook
+  - **Ignored error signal** — tool produced `fatal:` but execution continued —
+    add an "On tool error" hook
+- **Safe updates** (mirror of root cause analysis when removing content):
+  - **Would removing this change agent behavior?** If yes, keep it
+  - **Is the claim provably wrong?** Only then delete/correct — verify against
+    executable sources (config, workflow, code)
+  - **Does it enforce a docs/structure contract?** Keep structural-convention
+    rules (e.g. Progressive disclosure) even when the wording looks generic
+  - **Rationale must never be deleted** — when removing a line that is
+    rationale/detail (not a rule), relocate it to MEMORY.md, not drop it; if it
+    wouldn't be re-derivable later, it belongs in MEMORY

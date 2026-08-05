@@ -5,7 +5,7 @@
 Scope: Main memory for AI agents — architecture, CI quirks, and design decisions.
 Aim: Hold every *why* and *detail* that AGENTS.md rules refer to. AGENTS.md is
 the "what to do" front door; this file is the store it points into.
-Structure: Architecture → CI quirks → Design decisions (dated entries).
+Structure: Architecture → CI quirks → Workflows → Design decisions (dated entries).
 Use: Pull the section a task needs on demand (see AGENTS.md "On session init").
 Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 
@@ -97,6 +97,27 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 - `macos-15-large`/`-intel` are paid "larger runners" — not on free plan.
 - `macos-latest` is ARM64 (Apple Silicon).
 - Build produces per-OS artifacts via PyInstaller `--onefile`.
+
+## Workflows
+
+### Stacked PRs (squash merge)
+
+When merging a chain of stacked PRs (A → B → C → main):
+
+- **Merge bottom-up**: the PR targeting `main` first, then each next PR.
+- **After each merge, `--delete-branch` deletes the base branch → GitHub
+  auto-closes the next stacked PR** (base branch gone). Recovery:
+  1. Recreate the deleted base branch from `main` (`git branch <name> main; git push origin <name>`)
+  1. `gh pr reopen <N>` then `gh pr edit <N> --base main`
+  1. Delete the temp base branch
+  1. Rebuild the head branch onto main: `git reset --hard origin/main` then
+     `git cherry-pick <first-commit>^..<last-commit>` (its own commits only)
+  1. `git push --force-with-lease`
+- **Gate on CI**: after each merge, verify main CI is green before merging the
+  next PR (`gh run list --branch main --limit 3`).
+- Conflicts during rebuild are expected (main has squash content the branch
+  pre-dates) — resolve by taking the intended final state, or skip commits
+  already upstream (`git cherry-pick --skip`).
 
 ## Design decisions
 
@@ -745,3 +766,52 @@ need the venv); `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, and
 `uv-lock` remain remote hooks. `mdformat-frontmatter` is a project dev
 dependency, so the local `uv run mdformat` hook still preserves skill
 frontmatter.
+
+### [2026-08-05] AGENTS.md compaction
+
+**Context:** AGENTS.md had grown to 577 lines (27 KB) with extensive
+duplication and embedded rationale. The same rules appeared in multiple hooks
+and guardrails (branch naming, "never push to main", main-CI check, `.tmp/`
+routing, "update AGENTS/MEMORY", signing), four meta-process sections
+(Pattern recurrence escalation, Continuous improvement, Root cause analysis,
+Safe updates) overlapped, and several detail-bearing sections duplicated
+MEMORY content.
+
+**Decision:** Compact AGENTS.md by ~40% (577 → ~370 lines). Dedupe repeated
+rules; merge overlapping hooks (`Before push/branch/PR`, `On tool error / after CI failure`, `After push`); merge guardrails (`Push discipline` + `Commit signing` + `Merge discipline` → `Commit signing & merge`, the four meta-process
+sections → `Process improvement`); strip embedded rationale; and convert
+detail-heavy sections (AI reviewers, Suppressions, Stacked PRs recovery,
+release artifacts) into rule + `see MEMORY.md` pointer. Full stacked-PR
+recovery procedure moved here ("Workflows" section).
+
+**Rationale:** AGENTS.md stores rules/constraints only (see its "Documenting
+decisions" boundary test); a smaller front door loads faster and every kept
+line must pass "would an agent miss this without help?". No rule was removed;
+all rationale was relocated to MEMORY.md — never delete rationale outright.
+
+**Consequences:** AGENTS.md is ~40% shorter. Future compaction must follow the
+same boundary: dedupe into the existing section rather than re-adding parallel
+copies, and keep structural-directive sections (e.g. Progressive disclosure,
+"Docs drift review") intact. Rationale dropped during compaction is a loss —
+see "Agent-behavior rationale (preserved from AGENTS compaction)" below.
+
+### [2026-08-05] Agent-behavior rationale (preserved from AGENTS compaction)
+
+**Context:** The AGENTS.md compaction reviewed every removed line. Two
+rationale items were dropped outright instead of being relocated here, and one
+minor rule needed a documented home. Rationale drives decisions; decisions are
+maintained through rules — so rationale is the gold and must never be deleted.
+
+- **Teach rediscovery, don't memorialize** — if a failure message, `--help`,
+  or the config file already explains something, prefer teaching the agent
+  *how to rediscover* it over storing the fact. Every stored line carries a
+  maintenance cost — weigh it against the benefit. *(Backing rationale for the
+  AGENTS.md "Store only high-signal, expensive-to-rediscover facts" rule.)*
+- **`.tmp/` beats `/tmp/`** — the repo-root `.tmp/` folder survives local
+  development and is visible to future sessions; that's why it is the temp
+  home, never system `/tmp/`. *(Backing rationale for the AGENTS.md "Repo
+  hygiene" rule.)*
+- **Register new root cause categories** — if the root cause category of an
+  error is new, add it to the Root cause analysis section (AGENTS.md
+  "Process improvement") rather than leaving the taxonomy stale. *(Rule
+  preserved from the pre-compaction "On tool error" hook.)*
