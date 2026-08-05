@@ -459,6 +459,34 @@ reasoning comment.
 tests wherever the trigger is a pytest idiom; production linters stay strict.
 Do not re-add global relaxations for test-only concerns.
 
+### [2026-08-05] Signing discipline (main only ever contains signed commits)
+
+**Context:** PR #114 was merged with `gh pr merge --admin` whose head commits
+were unsigned (`--no-gpg-sign` used on the feature branch and never re-signed).
+Branch protection already requires signed commits on main
+(`required_signatures: true`) plus `enforceAdmins` and 1 required review;
+`--admin` is the ONLY override of that protection.
+
+**Decision:**
+
+- Never `--admin`-merge unsigned commits — `--admin` must never carry unsigned
+  commits to main. Re-sign head commits first, then merge via the normal
+  reviewed squash flow. `--admin` (signed commits only) still requires a direct
+  explicit unbiased user prompt.
+- The `--no-gpg-sign` feature-branch allowance is limited to early CI-only
+  pushes; re-sign before creating or finalizing a PR.
+- Verify before merge: `git log --format=%G? origin/main..HEAD` must show all
+  `G`. (`%G?` output: `G` good, `N` no signature, `E` cannot check — GitHub's
+  own squash/merge commits show `E` locally because GitHub's key is not in the
+  local keyring, but are verified on GitHub.)
+
+**Rationale:** main's history is GitHub-verified squash commits; the gap was
+agent discipline, not infrastructure. `--admin` bypasses both review and the
+signed-commits protection, making it the single point of failure to guard.
+
+**Consequences:** PR #116's commits were re-signed before merge; the AGENTS.md
+rule prevents recurrence without user prompting.
+
 ### [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the

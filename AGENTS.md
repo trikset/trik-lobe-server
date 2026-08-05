@@ -111,6 +111,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
   1. Verify the fix by re-running the failed command
   1. Only then continue with the next task
 - If the root cause category is new, add it to the Root cause analysis section
+- Distinguish transient infrastructure failures (DNS, network, CI outage) from
+  code errors: verify local state is intact, retry with backoff, then report
+  the blocker — don't blindly repeat the failing command
 
 ### After CI failure
 
@@ -126,6 +129,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 - Review PR description for mojibake, encoding, or broken links
 - If description was passed via CLI, verify with `gh pr view --json body`
+- Verify head commits are signed: `git log --format=%G? origin/main..HEAD` —
+  all must be `G`; re-sign any `N` commit before merge
 - If this PR is stacked on another PR (base != main), add "Depends on #N" to the description
 - Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
 - Push signed commit
@@ -143,6 +148,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Suggest comments for unclear code
 - Suggest docs updates for non-obvious patterns
 - Update AGENTS.md (rules) or MEMORY.md (details/rationale) with new patterns
+- Capture every rule deviation and missing rule from this session NOW, before
+  moving on — end the retrospective with AGENTS.md/MEMORY.md updated or an
+  explicit decision not to
 
 ### After merge
 
@@ -242,10 +250,14 @@ folder survives local development and is visible to future sessions.
 
 ### Commit signing
 
-- **Feature branches**: may use `--no-gpg-sign` to prevent GPG lock
-- **Push unsigned**: allowed for CI runs (feature branches)
-- **PRs**: never use `--no-gpg-sign` (signing required for merge)
-- **main branch**: never push directly
+- **Feature branches**: may use `--no-gpg-sign` for early CI-only pushes to
+  avoid GPG lock
+- **Push unsigned**: allowed for CI runs (feature branches) ONLY before a PR exists
+- **Before PR**: re-sign branch commits made with `--no-gpg-sign` —
+  `git rebase --exec 'git commit --amend --no-edit -S' <base>`, then verify
+  `git log --format=%G? origin/main..HEAD` shows all `G`
+- **PRs**: never use `--no-gpg-sign`; head commits must be signed
+- **main branch**: never push directly; only signed (verified) commits land
 
 ### Merge discipline
 
@@ -253,8 +265,12 @@ folder survives local development and is visible to future sessions.
 - Never push a merge commit to main — always merge via GitHub API
 - Merge to main only by direct explicit command by user
 - Otherwise — no merge to main
-- **Never use `--admin` without direct explicit unbiased user prompt** — it
-  bypasses required reviews. Only apply when the user independently confirms.
+- **Never `--admin`-merge unsigned commits** — `--admin` is the only override
+  of main's signed-commits + review protection, so it must never carry unsigned
+  commits to main. If head commits aren't signed, re-sign first, then merge via
+  the normal reviewed squash flow. `--admin` (signed commits only) still needs
+  a direct explicit unbiased user prompt — it bypasses required reviews. Only
+  apply when the user independently confirms.
 - Squash-merge subject uses Conventional Commits format (\<50 chars); all useful
   info from the PR description goes into the squash body (root cause, profit,
   trade-offs, verification, out of scope), not just a file changelog.
@@ -314,6 +330,10 @@ diffs under 400 lines when possible — large PRs get rubber-stamped or
 delayed. If a change is big, split into stacked PRs (prerequisite first,
 then follow-ups).
 
+If new work is a distinct concern from an already-open PR, open a new
+branch/PR — don't append unrelated changes to an open one, even if the
+branch is still alive.
+
 ### Documenting decisions
 
 When you make a non-obvious choice, document it at the right level:
@@ -367,6 +387,9 @@ Local tests on one OS are not proof the code works on others.
 - When in doubt, route through files: write to `.tmp/<file>`, pipe to command
 - Re-read `.md` diffs after mdformat: line-start `+`/`-`/`*` mid-paragraph get
   reflowed into lists; never start a wrapped line with a list character
+- Before proposing a tool/config mechanism (config key, CLI flag, framework
+  feature), confirm it exists in that tool's docs, `--help`, or schema — verify
+  with a read-only probe; "probably supported" is not supported
 
 ### Decision-making
 
@@ -470,6 +493,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 - Verify commands work before documenting them
 - Check `--help` output for standard options
 - Use long options to avoid bias and ensure portability
+- When claiming a refactor reduces SLOC/complexity/test-count, measure before
+  and after (line counts, coverage); if a consolidation backfires (net
+  increase), revert it. Report measured deltas, not estimates.
 
 ### Progressive disclosure
 
