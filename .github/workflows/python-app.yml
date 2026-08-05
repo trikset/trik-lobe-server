@@ -39,9 +39,11 @@ jobs:
         run: |
           base="${{ github.event.pull_request.base.sha }}"
           git fetch --depth=1 origin "$base"
-          changed="$(git diff --name-only "$base" HEAD)"
-          if echo "$changed" | grep -q '^pyproject.toml$' && ! echo "$changed" | grep -q '^uv.lock$'; then
-            echo "::error::pyproject.toml changed but uv.lock did not. Run 'uv lock' and commit the result."
+          deps_changed="$(git diff "$base" HEAD -- pyproject.toml | \
+            grep -E '^[+-][[:space:]]*"[^"]*(>=|==|~=|<=|>)[^"]*"' || true)"
+          lock_changed="$(git diff --name-only "$base" HEAD -- uv.lock)"
+          if [ -n "$deps_changed" ] && [ -z "$lock_changed" ]; then
+            echo "::error::pyproject.toml dependency specs changed but uv.lock did not. Run 'uv lock' and commit the result."
             exit 1
           fi
       - name: Lint with ruff
@@ -140,7 +142,7 @@ jobs:
           binaries: uv git gh node npm zip tar opencode
           uv-packages: python
       - name: Download binaries
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Determine previous release tag
@@ -184,7 +186,7 @@ jobs:
           done
           ls -la TRIKLobeServer-*
       - name: Publish draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           body_path: release-notes.md
