@@ -48,6 +48,12 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
 - setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
 - `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
+- The PR-only "Check pyproject/lockfile sync" step is dependency-aware: it
+  greps the `pyproject.toml` diff for version-operator lines (`>=`, `==`,
+  `~=`, etc.) and only fails when those changed without a `uv.lock` update.
+  Tool-config-only edits (ruff/pylint/basedpyright/vulture sections) must NOT
+  trip it — an earlier any-pyproject-edit check false-positived on config-only
+  changes (e.g. the suppression audit).
 - Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
 - Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
   actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
@@ -400,6 +406,152 @@ timeout / `VideoCapture.read()` duration.
 
 **Consequences:** Friendlier error messages, bounded HTTP retry, clean task
 shutdown, headless-safe entrypoint.
+
+### [2026-08-05] Suppression audit
+
+**Context:** Full audit of every in-code suppression (noqa, type: ignore,
+pylint disable, nosec) and config-level relaxation. Goal: linters that check
+code quality, not linters that are suppressed. Production linters now run at
+full strictness; suppressions that remain are scoped to tests or carry a
+reasoning comment.
+
+**Fixed (suppressions removed):**
+
+- `model.py`: `ONNXImageModel`/`TFLiteImageModel` were typed `Any` with seven
+  `type: ignore` comments because onnxruntime and ai_edge_litert ship no type
+  info. Replaced with private Protocols (`_ONNXSession`, `_TFLiteInterpreter`,
+  `_ONNXNode`, `_TFLiteDetails` TypedDict) plus a single `cast` at each load
+  boundary — onnxruntime's own `run` return type is too loose
+  (`Sequence[ndarray | SparseTensor | list | dict]`) to satisfy the protocol.
+  Removed 2× ANN401 + 7× type: ignore; model.py is now fully type-checked.
+- ruff `S101`/`SLF001` moved from global to `tests/**` per-file ignores
+  (production has no `assert` and no cross-object private access, so it gains
+  the checks; pytest idioms are test-only).
+- ruff `N802`/`N803`/`N806` deleted (empirically dead in tests).
+- ruff `S105`/`S106` inline noqa deleted in favour of `tests/**` per-file
+  ignores (fixtures legitimately use `"pass"` as data).
+- pylint `W0212`/`W0621`/`E0110` moved from global disable to per-file header
+  comments in test files (pytest fixture-name shadowing, intentional private
+  access, and the one abstract-instantiation test are test-only idioms).
+- basedpyright `reportPrivateUsage`/`reportAttributeAccessIssue` removed from
+  global config (production restored to strict) and relaxed per-file via
+  `# pyright: reportPrivateUsage=false` headers in test files that inspect
+  privates. Note: `[tool.basedpyright] overrides` is NOT supported (emits
+  "unrecognized setting"); per-file `# pyright:` comments are the mechanism.
+- vulture `ignore_names` shrank from 7 dead entries to 1 justified entry
+  (`index`) — TypedDict string-key access is invisible to vulture.
+- bandit `--skip B107` dropped from CI/AGENTS in favour of an inline
+  `# nosec B107` on the empty-string `password=""` default.
+- Test inline: cvtColor lambda `type: ignore` → typed `_cvt_identity`;
+  `import threading`/`import lobe_server.model` moved to top level; RUF006
+  detached task → kept reference + awaited; reader-table/entrypoint `FBT001`
+  bool params → `mode` string / int `call_count`.
+
+**Remaining suppressions (all reasoned):**
+
+- Production: `camera.py` `# noqa: PLC0415` (lazy cv2 import, 50 MB DLLs) and
+  `# nosec B107` (empty password default); `server.py` `# noqa: FBT003`
+  (`setblocking(False)` is a stdlib positional-bool API).
+- Config: ruff `D*` + `COM812` (docstring policy; formatter owns trailing
+  commas); ruff `tests/**` per-file ignores (pytest idioms + fixture data +
+  `Any` in mocks); pylint docstring/data-class/C-extension/lazy-import disables;
+  basedpyright `reportMissingTypeStubs`/`reportMissingImports` (onnx, litert,
+  cv2 have no stubs) and `extension-pkg-allow-list`.
+- Tests: `test_camera.py` `reportAbstractUsage` (intentional) and four
+  `reportAttributeAccessIssue` ignores (`__new__` bypass to inject mocks);
+  `test_server.py` `FBT003` (stdlib/mock-call asserts).
+
+**Guardrail:** every suppression must carry a reasoning comment; scope to
+tests wherever the trigger is a pytest idiom; production linters stay strict.
+Do not re-add global relaxations for test-only concerns.
+
+### [2026-08-05] Signing discipline (main only ever contains signed commits)
+
+**Context:** PR #114 was merged with `gh pr merge --admin` whose head commits
+were unsigned (`--no-gpg-sign` used on the feature branch and never re-signed).
+Branch protection already requires signed commits on main
+(`required_signatures: true`) plus `enforceAdmins` and 1 required review;
+`--admin` is the ONLY override of that protection.
+
+**Decision:**
+
+- Never `--admin`-merge unsigned commits — `--admin` must never carry unsigned
+  commits to main. Re-sign head commits first, then merge via the normal
+  reviewed squash flow. `--admin` (signed commits only) still requires a direct
+  explicit unbiased user prompt.
+- The `--no-gpg-sign` feature-branch allowance is limited to early CI-only
+  pushes; re-sign before creating or finalizing a PR.
+- Verify before merge: `git log --format=%G? origin/main..HEAD` must show all
+  `G`. (`%G?` output: `G` good, `N` no signature, `E` cannot check — GitHub's
+  own squash/merge commits show `E` locally because GitHub's key is not in the
+  local keyring, but are verified on GitHub.)
+
+**Rationale:** main's history is GitHub-verified squash commits; the gap was
+agent discipline, not infrastructure. `--admin` bypasses both review and the
+signed-commits protection, making it the single point of failure to guard.
+
+**Consequences:** PR #116's commits were re-signed before merge; the AGENTS.md
+rule prevents recurrence without user prompting.
+
+### [2026-08-05] GitHub AI reviewer (code-quality) alignment
+
+**Context:** GitHub's `github-code-quality` bot (Copilot code review) flagged
+bare `...` in `Protocol` method stubs as "statement has no effect" (9 false
+positives on `model.py` + tests). An initial "fix" replaced `...` with
+`raise NotImplementedError` and added `exclude_also` to the coverage config —
+this added ~9 SLOC and a suppression to appease an AI reviewer, both against
+project policy.
+
+**Toolchain constraint (why `...` is the only stub body that passes all
+gates):**
+
+- `...` — coverage.py treats a stub line as excluded by design → 100% coverage
+  holds; basedpyright accepts it.
+- `pass` — fails basedpyright `reportReturnType` ("must return value on all
+  code paths").
+- `raise NotImplementedError` — effectful (CodeQL/AI-clean) but counted as
+  uncovered code → coverage drops below 100% unless ignored.
+
+**Decision:** Revert the `raise`/`exclude_also` detour. Keep `...` stubs.
+Align the AI reviewer via `.github/copilot-instructions.md`, which Copilot
+code review reads (with `AGENTS.md`) from the PR's head branch — so the
+instructions land in the same PR that needs them.
+
+**Rationale:** An AI reviewer's comment is advisory, not a gate. When its
+suggestion breaks a mechanical gate (coverage, basedpyright), it is a false
+positive — configure the reviewer instead of degrading idiomatic code.
+
+**Consequences:** PR #116 carries `.github/copilot-instructions.md`; two
+legitimately-correct bot comments (bare no-op `await` → `.result()`; dual
+module import → string patch target) were kept. Verified with `exclude_also`
+that coverage.py's `exclude_lines` would have replaced defaults incl.
+`if TYPE_CHECKING:`.
+
+**Correction (same session):** the instructions did **not** stop the bot
+re-flagging the same `...` lines on the next review (9 comments on the revert
+commit). The instruction mechanism is best-effort, not guaranteed. Treat the
+bot's comments as advisory: resolve/dismiss the threads rather than contort
+idiomatic code that passes our own gates.
+
+### [2026-08-05] Docs-contract rules are not generic advice
+
+**Context:** During the AGENTS.md compaction review, "Progressive disclosure"
+was first proposed for removal as "generic agent guidance the model already
+follows". The maintainer pushed back: models are trained to *consume*
+progressively-disclosed input, but the docs must be *produced* that way.
+
+**Decision:** Keep "Progressive disclosure". Add a third removal-safety test to
+AGENTS.md "Safe updates": a rule that enforces a docs/structure contract is
+behavior-changing even when its wording looks generic.
+
+**Rationale:** Consumption behavior comes from model training; docs-production
+behavior comes from repo conventions encoded in AGENTS.md. Confusing the two
+misclassifies a structural rule as fluff. The AGENTS = pointers / MEMORY =
+on-demand detail split, the "Documenting decisions" boundary test, and the
+"On session init" pull-on-demand hook all depend on the stated principle.
+
+**Consequences:** Doc-compaction only removes/relocates rules where every fact
+survives; structural-directive sections stay.
 
 ### [2026-07-30] Cross-platform audit findings
 

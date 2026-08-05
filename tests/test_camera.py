@@ -1,5 +1,8 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212,E0110  # inspect privates; abstract-instantiation test
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -15,59 +18,96 @@ from lobe_server.camera import (
 )
 from lobe_server.config import Settings
 
+_CamFactory = Callable[[], UrlCamera | RobotCamera]
+
+_HTTP_CAMERAS = [
+    pytest.param(
+        lambda: UrlCamera("http://example.com/snapshot", "user", "pass"),
+        "http://example.com/snapshot",
+        {"auth": ("user", "pass")},
+        id="url",
+    ),
+    pytest.param(
+        lambda: RobotCamera("192.168.1.10"),
+        "http://192.168.1.10:8080/?action=snapshot",
+        {},
+        id="robot",
+    ),
+]
+
+_COOLDOWN_SCENARIOS = [
+    pytest.param([100.0, 100.5, 103.0], ["err", "ok"], [None, None, "ok"], id="fail"),
+    pytest.param([100.0, 103.0, 104.0], ["err", "ok", "err"], [None, "ok", None], id="reset"),
+]
+
 
 def test_abstract() -> None:
     class Impl(CameraSource):
         pass
 
     with pytest.raises(TypeError):
-        Impl()  # type: ignore[reportAbstractUsage]
+        Impl()  # type: ignore[reportAbstractUsage]  # intentionally instantiate an abstract class to assert TypeError
 
 
+@pytest.mark.parametrize(("factory", "url", "extra"), _HTTP_CAMERAS)
 @patch("lobe_server.camera.requests.get")
-def test_url_camera(mock_get: MagicMock) -> None:
+def test_http_camera_capture(
+    mock_get: MagicMock,
+    factory: _CamFactory,
+    url: str,
+    extra: dict[str, object],
+) -> None:
     mock_response = MagicMock()
     mock_response.content = _minimal_png()
     mock_get.return_value = mock_response
 
-    cam = UrlCamera("http://example.com/snapshot", "user", "pass")
-    im = cam.capture()
+    im = factory().capture()
 
-    mock_get.assert_called_once_with(
-        "http://example.com/snapshot",
-        stream=True,
-        auth=("user", "pass"),
-        timeout=10,
-    )
+    mock_get.assert_called_once_with(url, stream=True, timeout=10, **extra)
     assert im is not None
     assert im.mode
 
 
-@patch("lobe_server.camera.requests.get")
-def test_robot_camera(mock_get: MagicMock) -> None:
+@pytest.mark.parametrize(("factory", "url", "extra"), _HTTP_CAMERAS)
+@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
+def test_http_camera_network_error(
+    mock_get: MagicMock,
+    factory: _CamFactory,
+    url: str,
+    extra: dict[str, object],
+) -> None:
+    assert factory().capture() is None
+    mock_get.assert_called_once_with(url, stream=True, timeout=10, **extra)
+
+
+@pytest.mark.parametrize(("factory", "_url", "_extra"), _HTTP_CAMERAS)
+def test_http_camera_release(factory: _CamFactory, _url: str, _extra: dict[str, object]) -> None:
+    factory().release()
+
+
+@pytest.mark.parametrize(("factory", "_url", "_extra"), _HTTP_CAMERAS)
+@pytest.mark.parametrize(("clock", "get_seq", "expected"), _COOLDOWN_SCENARIOS)
+def test_http_camera_cooldown(
+    factory: _CamFactory,
+    _url: str,
+    _extra: dict[str, object],
+    clock: list[float],
+    get_seq: list[str],
+    expected: list[object],
+) -> None:
     mock_response = MagicMock()
     mock_response.content = _minimal_png()
-    mock_get.return_value = mock_response
+    side_effect = [mock_response if kind == "ok" else requests.RequestException("timeout") for kind in get_seq]
+    with (
+        patch("lobe_server.camera.requests.get", side_effect=side_effect) as mock_get,
+        patch("lobe_server.camera.time.monotonic", side_effect=clock),
+    ):
+        cam = factory()
+        results = [cam.capture() for _ in expected]
 
-    cam = RobotCamera("192.168.1.10")
-    im = cam.capture()
-
-    mock_get.assert_called_once_with(
-        "http://192.168.1.10:8080/?action=snapshot",
-        stream=True,
-        timeout=10,
-    )
-    assert im is not None
-
-
-def test_url_camera_release() -> None:
-    cam = UrlCamera("http://example.com")
-    cam.release()
-
-
-def test_robot_camera_release() -> None:
-    cam = RobotCamera("192.168.1.1")
-    cam.release()
+    for got, want in zip(results, expected, strict=True):
+        assert (got is None) is (want is None)
+    assert mock_get.call_count == len(get_seq)
 
 
 def test_webcam_camera() -> None:
@@ -77,17 +117,12 @@ def test_webcam_camera() -> None:
     mock_capture.read.return_value = (True, frame)
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_cv2.COLOR_BGR2RGB = 4
-
-    def _mock_cvtColor(img: object, _: object) -> object:
-        return img
-
-    mock_cv2.cvtColor = _mock_cvtColor
+    mock_cv2.cvtColor = _cvt_identity
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)
         cam._cv2 = mock_cv2  # type: ignore[reportAttributeAccessIssue]
         cam._camera = mock_capture  # type: ignore[reportAttributeAccessIssue]
-
         im = cam.capture()
 
     assert im is not None
@@ -106,7 +141,6 @@ def test_webcam_camera_fail() -> None:
         cam = WebcamCamera.__new__(WebcamCamera)
         cam._cv2 = mock_cv2  # type: ignore[reportAttributeAccessIssue]
         cam._camera = mock_capture  # type: ignore[reportAttributeAccessIssue]
-
         assert cam.capture() is None
 
 
@@ -114,10 +148,9 @@ def test_factory_url() -> None:
     settings = Settings(
         photo_url="http://example.com/snapshot",
         username="u",
-        password="p",  # noqa: S106
+        password="p",
     )
-    cam = create_camera(settings, "127.0.0.1")
-    assert isinstance(cam, UrlCamera)
+    assert isinstance(create_camera(settings, "127.0.0.1"), UrlCamera)
 
 
 def test_factory_robot() -> None:
@@ -125,8 +158,7 @@ def test_factory_robot() -> None:
         photo_url="",
         get_images_from_robot=True,
     )
-    cam = create_camera(settings, "192.168.1.10")
-    assert isinstance(cam, RobotCamera)
+    assert isinstance(create_camera(settings, "192.168.1.10"), RobotCamera)
 
 
 def test_factory_webcam() -> None:
@@ -165,112 +197,11 @@ def test_webcam_camera_init_not_opened() -> None:
 
 
 def test_url_camera_no_auth() -> None:
-    cam = UrlCamera("http://example.com")
-    assert cam._auth is None
+    assert UrlCamera("http://example.com")._auth is None
 
 
-@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
-def test_url_camera_network_error(mock_get: MagicMock) -> None:
-    cam = UrlCamera("http://example.com/snapshot")
-    im = cam.capture()
-    assert im is None
-    mock_get.assert_called_once_with(
-        "http://example.com/snapshot",
-        stream=True,
-        auth=None,
-        timeout=10,
-    )
-
-
-@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
-def test_robot_camera_network_error(mock_get: MagicMock) -> None:
-    cam = RobotCamera("192.168.1.10")
-    im = cam.capture()
-    assert im is None
-    mock_get.assert_called_once_with(
-        "http://192.168.1.10:8080/?action=snapshot",
-        stream=True,
-        timeout=10,
-    )
-
-
-def test_url_camera_failure_cooldown() -> None:
-    mock_response = MagicMock()
-    mock_response.content = _minimal_png()
-    with (
-        patch(
-            "lobe_server.camera.requests.get",
-            side_effect=[requests.RequestException("timeout"), mock_response],
-        ) as mock_get,
-        patch(
-            "lobe_server.camera.time.monotonic",
-            side_effect=[100.0, 100.5, 103.0],
-        ),
-    ):
-        cam = UrlCamera("http://example.com/snapshot")
-
-        im1 = cam.capture()
-        im2 = cam.capture()
-        im3 = cam.capture()
-
-    assert im1 is None
-    assert im2 is None
-    assert im3 is not None
-    assert mock_get.call_count == 2
-
-
-def test_robot_camera_failure_cooldown() -> None:
-    mock_response = MagicMock()
-    mock_response.content = _minimal_png()
-    with (
-        patch(
-            "lobe_server.camera.requests.get",
-            side_effect=[requests.RequestException("timeout"), mock_response],
-        ) as mock_get,
-        patch(
-            "lobe_server.camera.time.monotonic",
-            side_effect=[100.0, 100.5, 103.0],
-        ),
-    ):
-        cam = RobotCamera("192.168.1.10")
-
-        im1 = cam.capture()
-        im2 = cam.capture()
-        im3 = cam.capture()
-
-    assert im1 is None
-    assert im2 is None
-    assert im3 is not None
-    assert mock_get.call_count == 2
-
-
-def test_url_camera_success_resets_cooldown() -> None:
-    mock_response = MagicMock()
-    mock_response.content = _minimal_png()
-    with (
-        patch(
-            "lobe_server.camera.requests.get",
-            side_effect=[
-                requests.RequestException("timeout"),
-                mock_response,
-                requests.RequestException("timeout"),
-            ],
-        ) as mock_get,
-        patch(
-            "lobe_server.camera.time.monotonic",
-            side_effect=[100.0, 103.0, 104.0],
-        ),
-    ):
-        cam = UrlCamera("http://example.com/snapshot")
-
-        im1 = cam.capture()
-        im2 = cam.capture()
-        im3 = cam.capture()
-
-    assert im1 is None
-    assert im2 is not None
-    assert im3 is None
-    assert mock_get.call_count == 3
+def _cvt_identity(img: object, _code: object) -> object:
+    return img
 
 
 def _minimal_png() -> bytes:

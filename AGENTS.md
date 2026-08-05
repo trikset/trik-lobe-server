@@ -78,6 +78,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Read PR discipline: PR titles, PR descriptions, PR size and focus
 - Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
   or `git pull --rebase origin main`
+- Before rebasing, confirm the branch's real base (`git merge-base HEAD origin/main`) — rebasing onto an ancestor replays already-merged commits as
+  duplicates; only rebase onto the actual upstream tip
 - Re-validate: `uv run ruff check . && uv run pytest`
 - Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
 - Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
@@ -111,6 +113,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
   1. Verify the fix by re-running the failed command
   1. Only then continue with the next task
 - If the root cause category is new, add it to the Root cause analysis section
+- Distinguish transient infrastructure failures (DNS, network, CI outage) from
+  code errors: verify local state is intact, retry with backoff, then report
+  the blocker — don't blindly repeat the failing command
 
 ### After CI failure
 
@@ -126,6 +131,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 
 - Review PR description for mojibake, encoding, or broken links
 - If description was passed via CLI, verify with `gh pr view --json body`
+- Verify head commits are signed: `git log --format=%G? origin/main..HEAD` —
+  all must be `G`; re-sign any `N` commit before merge
 - If this PR is stacked on another PR (base != main), add "Depends on #N" to the description
 - Sign the final commit: `git commit --amend --no-edit -S` (staged changes only)
 - Push signed commit
@@ -143,6 +150,9 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Suggest comments for unclear code
 - Suggest docs updates for non-obvious patterns
 - Update AGENTS.md (rules) or MEMORY.md (details/rationale) with new patterns
+- Capture every rule deviation and missing rule from this session NOW, before
+  moving on — end the retrospective with AGENTS.md/MEMORY.md updated or an
+  explicit decision not to
 
 ### After merge
 
@@ -242,10 +252,14 @@ folder survives local development and is visible to future sessions.
 
 ### Commit signing
 
-- **Feature branches**: may use `--no-gpg-sign` to prevent GPG lock
-- **Push unsigned**: allowed for CI runs (feature branches)
-- **PRs**: never use `--no-gpg-sign` (signing required for merge)
-- **main branch**: never push directly
+- **Feature branches**: may use `--no-gpg-sign` for early CI-only pushes to
+  avoid GPG lock
+- **Push unsigned**: allowed for CI runs (feature branches) ONLY before a PR exists
+- **Before PR**: re-sign branch commits made with `--no-gpg-sign` —
+  `git rebase --exec 'git commit --amend --no-edit -S' <base>`, then verify
+  `git log --format=%G? origin/main..HEAD` shows all `G`
+- **PRs**: never use `--no-gpg-sign`; head commits must be signed
+- **main branch**: never push directly; only signed (verified) commits land
 
 ### Merge discipline
 
@@ -253,8 +267,12 @@ folder survives local development and is visible to future sessions.
 - Never push a merge commit to main — always merge via GitHub API
 - Merge to main only by direct explicit command by user
 - Otherwise — no merge to main
-- **Never use `--admin` without direct explicit unbiased user prompt** — it
-  bypasses required reviews. Only apply when the user independently confirms.
+- **Never `--admin`-merge unsigned commits** — `--admin` is the only override
+  of main's signed-commits + review protection, so it must never carry unsigned
+  commits to main. If head commits aren't signed, re-sign first, then merge via
+  the normal reviewed squash flow. `--admin` (signed commits only) still needs
+  a direct explicit unbiased user prompt — it bypasses required reviews. Only
+  apply when the user independently confirms.
 - Squash-merge subject uses Conventional Commits format (\<50 chars); all useful
   info from the PR description goes into the squash body (root cause, profit,
   trade-offs, verification, out of scope), not just a file changelog.
@@ -292,6 +310,10 @@ dictate scope names, not a fixed list.
 
 Link issues in the PR body with `Closes #N` or `Fixes <full-url>`.
 
+When a PR supersedes/absorbs another PR, add `Closes #N` to the description —
+`Supersedes` is **not** a GitHub closing keyword (only `Closes`/`Fixes`/
+`Resolves` + variants close on merge).
+
 ### PR descriptions
 
 PR descriptions document **results and non-obvious decisions**, not a
@@ -313,6 +335,10 @@ Aim for one idea per PR. Don't mix refactors with behavior changes. Keep
 diffs under 400 lines when possible — large PRs get rubber-stamped or
 delayed. If a change is big, split into stacked PRs (prerequisite first,
 then follow-ups).
+
+If new work is a distinct concern from an already-open PR, open a new
+branch/PR — don't append unrelated changes to an open one, even if the
+branch is still alive.
 
 ### Documenting decisions
 
@@ -367,6 +393,11 @@ Local tests on one OS are not proof the code works on others.
 - When in doubt, route through files: write to `.tmp/<file>`, pipe to command
 - Re-read `.md` diffs after mdformat: line-start `+`/`-`/`*` mid-paragraph get
   reflowed into lists; never start a wrapped line with a list character
+- Before proposing a tool/config mechanism (config key, CLI flag, framework
+  feature), confirm it exists in that tool's docs, `--help`, or schema — verify
+  with a read-only probe; "probably supported" is not supported
+- `coverage.py` `exclude_lines` REPLACES the default exclusions (incl.
+  `if TYPE_CHECKING:`); use `exclude_also` to add to the defaults instead
 
 ### Decision-making
 
@@ -379,6 +410,28 @@ Local tests on one OS are not proof the code works on others.
   before asking
 - Before proposing async/concurrency fixes, read the actual loop (`await`
   semantics) — a sequential await does not saturate a thread pool
+
+### AI reviewers
+
+GitHub's `github-code-quality` bot (Copilot code review) reads
+`.github/copilot-instructions.md` and `AGENTS.md` from the PR's head branch —
+align it with our standards there, but treat this as **best-effort**: the bot
+may still flag idiomatic patterns (e.g. `...` Protocol stubs) despite the
+instructions. Do **not** change code to satisfy it if the change breaks our
+own gates. Verify a bot comment against our gates (100% coverage, ruff ALL,
+basedpyright strict) before "fixing": a suggestion that breaks a gate is a
+false positive — dismiss the thread, don't degrade the code. See MEMORY.md
+"GitHub AI reviewer (code-quality) alignment".
+
+### Suppressions
+
+- Every in-code suppression (`# noqa`, `# type: ignore`, `# pylint: disable`,
+  `# nosec`) must carry a reasoning comment; `# pyright:`/`# pylint: disable`
+  file headers are the mechanism for test-scoped relaxations.
+- Production linters run at full strictness — scope relaxations to tests
+  whenever the trigger is a pytest idiom (fixture shadowing, private access,
+  `assert`, hardcoded fixture passwords, `Any` in mocks). See MEMORY.md
+  "Suppression audit" for the full inventory and rationale.
 
 ## Memory index
 
@@ -404,7 +457,7 @@ uv run ruff format .         # format
 uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run bandit --recursive lobe_server/ TRIKLobeServer.py  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
@@ -460,6 +513,9 @@ Pinned in `.python-version` (single source of truth — never hardcode in CI YAM
 - Verify commands work before documenting them
 - Check `--help` output for standard options
 - Use long options to avoid bias and ensure portability
+- When claiming a refactor reduces SLOC/complexity/test-count, measure before
+  and after (line counts, coverage); if a consolidation backfires (net
+  increase), revert it. Report measured deltas, not estimates.
 
 ### Progressive disclosure
 
@@ -513,3 +569,9 @@ root cause analysis:
   exists because it was needed.
 - **Is the claim provably wrong?** Only then delete or correct — verify against
   executable sources (config, workflow, code) before removing.
+- **Does it enforce a docs/structure contract?** A rule can read like generic
+  advice yet underpin a repo convention — e.g. "Progressive disclosure" is the
+  principle behind AGENTS.md = pointers / MEMORY.md = on-demand detail. The
+  model consumes progressive disclosure from training, but the docs must still
+  be written that way. Keep rules that state structural conventions even when
+  their wording looks generic.

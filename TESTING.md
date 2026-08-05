@@ -90,6 +90,17 @@ if task A raises but B completes first, the exception is lost and
 tests appear to pass. When you need to verify a task succeeds,
 `await` it directly instead of wrapping in `asyncio.wait`.
 
+### Coverage config gotchas
+
+- `coverage.py` `exclude_lines` REPLACES the default exclusions — including
+  `if TYPE_CHECKING:` — so a custom `exclude_lines` suddenly re-flags
+  TYPE_CHECKING blocks. Use `exclude_also` to add patterns to the defaults.
+- A bare `...` in a `Protocol`/abstract stub body is excluded from coverage by
+  design, keeping 100% coverage for never-called interface methods. `pass`
+  fails basedpyright's return-type check; `raise NotImplementedError` counts
+  as uncovered code. `...` is the only stub body that passes all gates — see
+  MEMORY.md "GitHub AI reviewer (code-quality) alignment".
+
 ### Windows-specific test patterns
 
 - **`socket.socketpair()` returns `AF_INET` on Windows** but `AF_UNIX` on

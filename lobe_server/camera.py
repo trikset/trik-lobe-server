@@ -32,7 +32,7 @@ class CameraSource(ABC):
 
 
 class UrlCamera(CameraSource):
-    def __init__(self, url: str, username: str = "", password: str = "") -> None:
+    def __init__(self, url: str, username: str = "", password: str = "") -> None:  # nosec B107  # empty-string default, not a secret
         self._url = url
         self._auth: tuple[str, str] | None = None
         if username and password:

@@ -1,7 +1,11 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212,W0621  # tests inspect privates; pytest fixtures shadow names
 
 import asyncio
 import socket
+import threading
+from collections.abc import Coroutine
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,163 +59,116 @@ def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMo
         return LobeServer(settings, MagicMock())
 
 
-@pytest.mark.asyncio
-async def test_send_format(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
-    sock, reader = real_sock_pair
+@pytest.fixture
+def server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
+    return _make_server(settings, mock_model, mock_camera)
 
-    server = _make_server(settings, mock_model, mock_camera)
+
+@pytest.fixture
+def running_server(server: LobeServer) -> LobeServer:
+    server._running = True
+    return server
+
+
+def _reader_sock(data: Any) -> MagicMock:
+    """Mock socket whose reads come from a stubbed loop.sock_recv (bytes → value, else side_effect)."""
+    sock = MagicMock()
+    loop = asyncio.get_running_loop()
+    if isinstance(data, bytes):
+        loop.sock_recv = AsyncMock(return_value=data)
+    else:
+        loop.sock_recv = AsyncMock(side_effect=data)
+    return sock
+
+
+async def _run_with_timeout(server: LobeServer, coro: Coroutine[Any, Any, object], seconds: float = 0.5) -> None:
+    """Run coro until it finishes or `seconds` elapse (then stop the server)."""
+
+    async def stop_after() -> None:
+        await asyncio.sleep(seconds)
+        server._running = False
+
+    await asyncio.wait(
+        [asyncio.create_task(coro), asyncio.create_task(stop_after())],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_format(server: LobeServer, real_sock_pair: _SockPair) -> None:
+    sock, reader = real_sock_pair
     await server._send(sock, "hello")
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"5:hello"
 
 
 @pytest.mark.asyncio
-async def test_send_message(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
+async def test_send_message(server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-
-    server = _make_server(settings, mock_model, mock_camera)
     await server._send_message(sock, "cat")
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"8:data:cat"
 
 
 @pytest.mark.asyncio
-async def test_send_oserror(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
+async def test_send_oserror(server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     reader.close()
-
-    server = _make_server(settings, mock_model, mock_camera)
     await server._send(sock, "hello")
 
 
-def test_predict(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    server = _make_server(settings, mock_model, mock_camera)
+def test_predict(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     result = server._predict()
     assert result == "cat"
     mock_camera.capture.assert_called_once()
     mock_model.predict.assert_called_once()
 
 
-def test_predict_none(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+def test_predict_none(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     mock_camera.capture.return_value = None
-
-    server = _make_server(settings, mock_model, mock_camera)
     result = server._predict()
     assert result == "-1"
     mock_model.predict.assert_not_called()
 
 
-def test_shutdown(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    server = _make_server(settings, mock_model, mock_camera)
+def test_shutdown(server: LobeServer) -> None:
     assert server._running is False
     server._running = True
     server.shutdown()
     assert server._running is False
 
 
-def test_close(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    server = _make_server(settings, mock_model, mock_camera)
+def test_close(server: LobeServer, mock_camera: MagicMock) -> None:
     server.close()
     mock_camera.release.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("recv", "mode"),
+    [
+        pytest.param(b"9:data:quit", "stop", id="quit"),
+        pytest.param(b"", "stay", id="empty-recv"),
+        pytest.param(TimeoutError, "stay", id="timeout"),
+        pytest.param(ConnectionResetError, "stay", id="connection-reset"),
+        pytest.param(b"9:keepalive", "race", id="keepalive"),
+        pytest.param(b"some garbage", "race", id="garbage"),
+        pytest.param(b"8:data:cat", "race", id="parsed-message"),
+        pytest.param(b"8:data:cat9:data:quit", "stop", id="multi-then-quit"),
+        pytest.param([b"9:data:q", b"uit"], "stop", id="partial-then-complete"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_reader_quit(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"9:data:quit")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_empty_recv(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
-
-
-@pytest.mark.asyncio
-async def test_reader_heartbeat_timeout(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(side_effect=TimeoutError)
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
+async def test_reader_behavior(running_server: LobeServer, recv: Any, mode: str) -> None:
+    sock = _reader_sock(recv)
+    if mode == "race":
+        await _run_with_timeout(running_server, running_server._reader(sock))
+    else:
+        await running_server._reader(sock)
+    assert running_server._running is (mode == "stay")
 
 
 @pytest.mark.asyncio
-async def test_reader_keepalive_preserves_connection(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"9:keepalive")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.5)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._reader(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-
-@pytest.mark.asyncio
-async def test_reader_connection_reset(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(side_effect=ConnectionResetError)
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
-
-
-@pytest.mark.asyncio
-async def test_reader_oserror_transient_recovers(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
+async def test_reader_oserror_transient_recovers(running_server: LobeServer) -> None:
     calls = {"n": 0}
 
     def _recv(*_: Any) -> bytes:
@@ -221,195 +178,52 @@ async def test_reader_oserror_transient_recovers(
             raise OSError(err)
         return b"9:keepalive"
 
-    loop.sock_recv = AsyncMock(side_effect=_recv)
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    task = asyncio.create_task(server._reader(sock))
+    task = asyncio.create_task(running_server._reader(_reader_sock(_recv)))
     await asyncio.sleep(0.2)
     assert not task.done()
-    server._running = False
+    running_server._running = False
     await task
 
 
 @pytest.mark.asyncio
-async def test_reader_oserror_exhausts_retries(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-
+async def test_reader_oserror_exhausts_retries(running_server: LobeServer) -> None:
     def _recv(*_: Any) -> bytes:
         err = "fatal"
         raise OSError(err)
 
-    loop.sock_recv = AsyncMock(side_effect=_recv)
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is True
+    await running_server._reader(_reader_sock(_recv))
+    assert running_server._running is True
 
 
 @pytest.mark.asyncio
-async def test_reader_ignore_garbage(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"some garbage")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.5)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._reader(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-
-@pytest.mark.asyncio
-async def test_reader_parsed_message(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"8:data:cat")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.5)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._reader(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_multi_then_quit(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(return_value=b"8:data:cat9:data:quit")
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-    await server._reader(sock)
-    assert server._running is False
-
-
-@pytest.mark.asyncio
-async def test_reader_partial_then_complete(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
-    sock = MagicMock()
-    loop = asyncio.get_running_loop()
-    loop.sock_recv = AsyncMock(side_effect=[b"9:data:q", b"9:data:quit"])
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.5)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._reader(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-
-@pytest.mark.asyncio
-async def test_keepalive_loop(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
+async def test_keepalive_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.1)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._keepalive_loop(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
+    await _run_with_timeout(running_server, running_server._keepalive_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"9:keepalive"
 
 
 @pytest.mark.asyncio
-async def test_prediction_loop(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
+async def test_prediction_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
-
-    async def stop_after() -> None:
-        await asyncio.sleep(0.1)
-        server._running = False
-
-    await asyncio.wait(
-        [
-            asyncio.create_task(server._prediction_loop(sock)),
-            asyncio.create_task(stop_after()),
-        ],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
+    await _run_with_timeout(running_server, running_server._prediction_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
     assert data == b"8:data:cat"
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-    real_sock_pair: _SockPair,
-) -> None:
+async def test_handle_connection(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
-
-    server = _make_server(settings, mock_model, mock_camera)
-    server._running = True
 
     async def send_quit() -> None:
         await asyncio.sleep(0.1)
         await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
     await asyncio.wait(
-        [
-            asyncio.create_task(server._handle_connection(sock)),
-            asyncio.create_task(send_quit()),
-        ],
+        [asyncio.create_task(running_server._handle_connection(sock)), asyncio.create_task(send_quit())],
         return_when=asyncio.FIRST_COMPLETED,
     )
-    server._running = False
+    running_server._running = False
 
 
 def test_load_model(settings: Settings) -> None:
@@ -421,7 +235,7 @@ def test_load_model(settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_once(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+async def test_connect_once(server: LobeServer) -> None:
     mock_sock = MagicMock()
     mock_loop = MagicMock()
     mock_loop.sock_connect = AsyncMock()
@@ -430,21 +244,22 @@ async def test_connect_once(settings: Settings, mock_model: MagicMock, mock_came
         patch("lobe_server.server.socket.socket", return_value=mock_sock),
         patch("lobe_server.server.asyncio.get_running_loop", return_value=mock_loop),
     ):
-        server = _make_server(settings, mock_model, mock_camera)
         result = await server._connect_once()
 
     assert result is mock_sock
     mock_sock.setblocking.assert_called_once_with(False)  # noqa: FBT003
-    mock_loop.sock_connect.assert_called_once_with(mock_sock, ("127.0.0.1", 8889))
+    mock_loop.sock_connect.assert_called_once_with(
+        mock_sock,
+        (server._settings.server_ip, server._settings.server_port),
+    )
 
 
 @pytest.mark.asyncio
-async def test_run_forever_connect_failure(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+async def test_run_forever_connect_failure(server: LobeServer) -> None:
     with patch(
         "lobe_server.server.LobeServer._connect_once",
         side_effect=ConnectionRefusedError,
     ):
-        server = _make_server(settings, mock_model, mock_camera)
 
         async def stop_on_reconnect(*_: Any) -> None:
             server.shutdown()
@@ -455,9 +270,8 @@ async def test_run_forever_connect_failure(settings: Settings, mock_model: Magic
 
 
 @pytest.mark.asyncio
-async def test_run_forever_success(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
+async def test_run_forever_success(server: LobeServer) -> None:
     mock_sock = MagicMock()
-    server = _make_server(settings, mock_model, mock_camera)
 
     async def handle_and_stop(_sock: socket.socket) -> None:
         server._running = False
@@ -472,13 +286,8 @@ async def test_run_forever_success(settings: Settings, mock_model: MagicMock, mo
 
 
 @pytest.mark.asyncio
-async def test_run_forever_reconnects_after_reader_break(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-) -> None:
+async def test_run_forever_reconnects_after_reader_break(server: LobeServer) -> None:
     calls = {"n": 0}
-    server = _make_server(settings, mock_model, mock_camera)
 
     def handle_and_stop(_sock: socket.socket) -> None:
         calls["n"] += 1
@@ -497,13 +306,7 @@ async def test_run_forever_reconnects_after_reader_break(
 
 
 @pytest.mark.asyncio
-async def test_run_forever_does_not_swallow_keyboardinterrupt(
-    settings: Settings,
-    mock_model: MagicMock,
-    mock_camera: MagicMock,
-) -> None:
-    server = _make_server(settings, mock_model, mock_camera)
-
+async def test_run_forever_does_not_swallow_keyboardinterrupt(server: LobeServer) -> None:
     with (
         patch.object(server, "_connect_once", return_value=MagicMock()),
         patch.object(server, "_handle_connection", side_effect=KeyboardInterrupt),
@@ -518,8 +321,6 @@ async def test_handle_connection_cancels_pending(
     mock_model: MagicMock,
     real_sock_pair: _SockPair,
 ) -> None:
-    import threading  # noqa: PLC0415
-
     sock, reader = real_sock_pair
 
     block = threading.Event()
@@ -533,12 +334,13 @@ async def test_handle_connection_cancels_pending(
         await asyncio.sleep(0.1)
         await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
-    asyncio.create_task(send_quit())  # noqa: RUF006
+    send_quit_task = asyncio.create_task(send_quit())
     before = set(asyncio.all_tasks())
     with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):
         await server._handle_connection(sock)
     leftover = set(asyncio.all_tasks()) - before
     assert not leftover  # child tasks are cancelled AND awaited before returning
+    send_quit_task.result()  # propagate any send error from the quit sender
 
     server._running = False
     block.set()

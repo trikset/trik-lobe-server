@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 import ai_edge_litert.interpreter as tflite
 import numpy as np
@@ -30,6 +30,8 @@ import numpy.typing as npt
 import onnxruntime as _ort
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,35 @@ _NHWC_CHANNEL_DIM = 3
 _TENSOR_4D = 4
 _TENSOR_3D = 3
 _TENSOR_2D = 2
+
+
+class _ONNXNode(Protocol):
+    name: str
+    shape: list[int | str | None]
+
+
+class _ONNXSession(Protocol):
+    def get_inputs(self) -> Sequence[_ONNXNode]: ...
+
+    def run(
+        self,
+        _output_names: None,
+        _input_feed: dict[str, npt.NDArray[np.float32]],
+    ) -> Sequence[npt.NDArray[np.float32]]: ...
+
+
+class _TFLiteDetails(TypedDict):
+    index: int
+    shape: list[int]
+
+
+class _TFLiteInterpreter(Protocol):
+    def allocate_tensors(self) -> None: ...
+    def get_input_details(self) -> list[_TFLiteDetails]: ...
+    def get_output_details(self) -> list[_TFLiteDetails]: ...
+    def set_tensor(self, _index: int, _value: npt.NDArray[np.float32]) -> None: ...
+    def invoke(self) -> None: ...
+    def get_tensor(self, _index: int) -> npt.NDArray[np.float32]: ...
 
 
 class ClassificationResult:
@@ -121,7 +152,7 @@ def _read_labels(model_path: Path) -> list[str]:
 
 
 class ONNXImageModel:
-    def __init__(self, session: Any, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:  # noqa: ANN401
+    def __init__(self, session: _ONNXSession, labels: list[str], input_name: str, input_size: tuple[int, int]) -> None:
         self._session = session
         self._labels = labels
         self._input_name = input_name
@@ -140,11 +171,11 @@ class ONNXImageModel:
     @classmethod
     def load(cls, model_path: str | Path, filename: str = "model.onnx") -> ONNXImageModel:
         onnx_path = Path(model_path) / filename
-        session = _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+        session = cast("_ONNXSession", _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]))
 
-        input_meta = session.get_inputs()[0]  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        input_name: str = input_meta.name  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        shape: list[int | str | None] = list(input_meta.shape)  # type: ignore[reportUnknownMemberType]
+        input_meta = session.get_inputs()[0]
+        input_name: str = input_meta.name
+        shape: list[int | str | None] = list(input_meta.shape)
         dims = [int(d) for d in shape if isinstance(d, (int, float)) and d != -1]
 
         if len(dims) >= _TENSOR_4D:
@@ -161,11 +192,11 @@ class ONNXImageModel:
 
         input_size = (h, w)
 
-        input_name = input_name.removesuffix(":0")  # type: ignore[reportUnknownVariableType]  # strip TF SavedModel :0 suffix
+        input_name = input_name.removesuffix(":0")  # strip TF SavedModel :0 suffix
 
         labels = _read_labels(Path(model_path))
 
-        return cls(session, labels, input_name, input_size)  # type: ignore[reportUnknownArgumentType]
+        return cls(session, labels, input_name, input_size)
 
     def predict(self, image: Image.Image) -> ClassificationResult:
         processed: npt.NDArray[np.float32] = _preprocess(image, self._input_size)
@@ -183,7 +214,7 @@ class ONNXImageModel:
 
 
 class TFLiteImageModel:
-    def __init__(self, interpreter: Any, labels: list[str], input_size: tuple[int, int]) -> None:  # noqa: ANN401
+    def __init__(self, interpreter: _TFLiteInterpreter, labels: list[str], input_size: tuple[int, int]) -> None:
         self._interpreter = interpreter
         self._labels = labels
         self._input_size = input_size
@@ -193,11 +224,11 @@ class TFLiteImageModel:
     @classmethod
     def load(cls, model_path: str | Path, filename: str = "model.tflite") -> TFLiteImageModel:
         tflite_path = Path(model_path) / filename
-        interpreter = tflite.Interpreter(model_path=str(tflite_path))
+        interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_path=str(tflite_path)))
         interpreter.allocate_tensors()
 
-        input_details = interpreter.get_input_details()[0]  # type: ignore[reportUnknownVariableType]
-        shape: list[int] = list(input_details["shape"])  # type: ignore[arg-type]
+        input_details = interpreter.get_input_details()[0]
+        shape: list[int] = list(input_details["shape"])
         _, h, w, _ = shape
         input_size = (h, w)
 
