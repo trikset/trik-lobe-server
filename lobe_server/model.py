@@ -49,15 +49,13 @@ class _ONNXNode(Protocol):
 
 
 class _ONNXSession(Protocol):
-    def get_inputs(self) -> Sequence[_ONNXNode]:
-        raise NotImplementedError
+    def get_inputs(self) -> Sequence[_ONNXNode]: ...
 
     def run(
         self,
         _output_names: None,
         _input_feed: dict[str, npt.NDArray[np.float32]],
-    ) -> Sequence[npt.NDArray[np.float32]]:
-        raise NotImplementedError
+    ) -> Sequence[npt.NDArray[np.float32]]: ...
 
 
 class _TFLiteDetails(TypedDict):
@@ -66,23 +64,12 @@ class _TFLiteDetails(TypedDict):
 
 
 class _TFLiteInterpreter(Protocol):
-    def allocate_tensors(self) -> None:
-        raise NotImplementedError
-
-    def get_input_details(self) -> list[_TFLiteDetails]:
-        raise NotImplementedError
-
-    def get_output_details(self) -> list[_TFLiteDetails]:
-        raise NotImplementedError
-
-    def set_tensor(self, _index: int, _value: npt.NDArray[np.float32]) -> None:
-        raise NotImplementedError
-
-    def invoke(self) -> None:
-        raise NotImplementedError
-
-    def get_tensor(self, _index: int) -> npt.NDArray[np.float32]:
-        raise NotImplementedError
+    def allocate_tensors(self) -> None: ...
+    def get_input_details(self) -> list[_TFLiteDetails]: ...
+    def get_output_details(self) -> list[_TFLiteDetails]: ...
+    def set_tensor(self, _index: int, _value: npt.NDArray[np.float32]) -> None: ...
+    def invoke(self) -> None: ...
+    def get_tensor(self, _index: int) -> npt.NDArray[np.float32]: ...
 
 
 class ClassificationResult:

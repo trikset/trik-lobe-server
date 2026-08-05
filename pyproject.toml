@@ -41,10 +41,6 @@ source = ["lobe_server"]
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
-# Protocol/abstract stub bodies never execute — raise NotImplementedError is
-# the CodeQL/ai-reviewer-accepted alternative to a bare `...` (which coverage
-# excludes by default but the GitHub code-quality bot flags as no-effect)
-exclude_also = ["raise NotImplementedError"]
 
 [tool.ruff]
 line-length = 120

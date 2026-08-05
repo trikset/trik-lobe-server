@@ -30,8 +30,7 @@ class _Model(Protocol):
     _labels: list[str]
     _input_size: tuple[int, int]
 
-    def predict(self, image: Image.Image) -> ClassificationResult:
-        raise NotImplementedError
+    def predict(self, image: Image.Image) -> ClassificationResult: ...
 
 
 class _Backend(NamedTuple):
