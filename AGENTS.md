@@ -78,6 +78,8 @@ file (`.pre-commit-config.yaml`, `.github/workflows/`, etc.).
 - Read PR discipline: PR titles, PR descriptions, PR size and focus
 - Fetch and rebase to upstream main: `git fetch origin && git rebase origin/main`
   or `git pull --rebase origin main`
+- Before rebasing, confirm the branch's real base (`git merge-base HEAD origin/main`) — rebasing onto an ancestor replays already-merged commits as
+  duplicates; only rebase onto the actual upstream tip
 - Re-validate: `uv run ruff check . && uv run pytest`
 - Ensure docs and code are in sync — any change affecting config, dependencies, public interface, or workflow must update README.md, AGENTS.md, and/or MEMORY.md. If `.github/workflows/` changed, grep README/AGENTS/MEMORY for claims about the affected behavior and update them.
 - Ensure AGENTS.md (rules) or MEMORY.md (details/rationale) updated with any new decisions/patterns
@@ -394,6 +396,8 @@ Local tests on one OS are not proof the code works on others.
 - Before proposing a tool/config mechanism (config key, CLI flag, framework
   feature), confirm it exists in that tool's docs, `--help`, or schema — verify
   with a read-only probe; "probably supported" is not supported
+- `coverage.py` `exclude_lines` REPLACES the default exclusions (incl.
+  `if TYPE_CHECKING:`); use `exclude_also` to add to the defaults instead
 
 ### Decision-making
 
@@ -406,6 +410,16 @@ Local tests on one OS are not proof the code works on others.
   before asking
 - Before proposing async/concurrency fixes, read the actual loop (`await`
   semantics) — a sequential await does not saturate a thread pool
+
+### AI reviewers
+
+GitHub's `github-code-quality` bot (Copilot code review) reads
+`.github/copilot-instructions.md` and `AGENTS.md` from the PR's head branch —
+align it with our standards there. Do **not** change code to satisfy it if the
+change breaks our own gates. Verify a bot comment against our gates (100%
+coverage, ruff ALL, basedpyright strict) before "fixing": a suggestion that
+breaks a gate is a false positive, not a requirement. See MEMORY.md "GitHub AI
+reviewer (code-quality) alignment".
 
 ### Suppressions
 

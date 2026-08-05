@@ -48,6 +48,12 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 - `setup-uv` has a `python-version` input only when `.python-version` is absent or testing a non-default version
 - setup-uv input is `enable-cache`, not `cache` — the deprecated `cache:` input is silently ignored
 - `uv lock --check` is the lockfile-drift gate (CI + pre-commit) — fails when `pyproject.toml` and `uv.lock` diverge
+- The PR-only "Check pyproject/lockfile sync" step is dependency-aware: it
+  greps the `pyproject.toml` diff for version-operator lines (`>=`, `==`,
+  `~=`, etc.) and only fails when those changed without a `uv.lock` update.
+  Tool-config-only edits (ruff/pylint/basedpyright/vulture sections) must NOT
+  trip it — an earlier any-pyproject-edit check false-positived on config-only
+  changes (e.g. the suppression audit).
 - Dependabot ecosystem tag is `uv` (this project); uv/dependency updates are grouped into one PR per interval so a single CI run covers them
 - Dependabot `uv` ecosystem has known gaps (astral-sh/uv#2512) — confirm `uv.lock`
   actually moved in dep PRs; a widened constraint with a stale lock passes `uv lock --check`
@@ -486,6 +492,40 @@ signed-commits protection, making it the single point of failure to guard.
 
 **Consequences:** PR #116's commits were re-signed before merge; the AGENTS.md
 rule prevents recurrence without user prompting.
+
+### [2026-08-05] GitHub AI reviewer (code-quality) alignment
+
+**Context:** GitHub's `github-code-quality` bot (Copilot code review) flagged
+bare `...` in `Protocol` method stubs as "statement has no effect" (9 false
+positives on `model.py` + tests). An initial "fix" replaced `...` with
+`raise NotImplementedError` and added `exclude_also` to the coverage config —
+this added ~9 SLOC and a suppression to appease an AI reviewer, both against
+project policy.
+
+**Toolchain constraint (why `...` is the only stub body that passes all
+gates):**
+
+- `...` — coverage.py treats a stub line as excluded by design → 100% coverage
+  holds; basedpyright accepts it.
+- `pass` — fails basedpyright `reportReturnType` ("must return value on all
+  code paths").
+- `raise NotImplementedError` — effectful (CodeQL/AI-clean) but counted as
+  uncovered code → coverage drops below 100% unless ignored.
+
+**Decision:** Revert the `raise`/`exclude_also` detour. Keep `...` stubs.
+Align the AI reviewer via `.github/copilot-instructions.md`, which Copilot
+code review reads (with `AGENTS.md`) from the PR's head branch — so the
+instructions land in the same PR that needs them.
+
+**Rationale:** An AI reviewer's comment is advisory, not a gate. When its
+suggestion breaks a mechanical gate (coverage, basedpyright), it is a false
+positive — configure the reviewer instead of degrading idiomatic code.
+
+**Consequences:** PR #116 carries `.github/copilot-instructions.md`; two
+legitimately-correct bot comments (bare no-op `await` → `.result()`; dual
+module import → string patch target) were kept. Verified with `exclude_also`
+that coverage.py's `exclude_lines` would have replaced defaults incl.
+`if TYPE_CHECKING:`.
 
 ### [2026-07-30] Cross-platform audit findings
 
