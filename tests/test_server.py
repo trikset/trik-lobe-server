@@ -1,7 +1,10 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212,W0621  # tests inspect privates; pytest fixtures shadow names
 
 import asyncio
 import socket
+import threading
 from collections.abc import Coroutine
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -141,32 +144,27 @@ def test_close(server: LobeServer, mock_camera: MagicMock) -> None:
 
 
 @pytest.mark.parametrize(
-    ("recv", "race", "final_running"),
+    ("recv", "mode"),
     [
-        pytest.param(b"9:data:quit", False, False, id="quit"),
-        pytest.param(b"", False, True, id="empty-recv"),
-        pytest.param(TimeoutError, False, True, id="timeout"),
-        pytest.param(ConnectionResetError, False, True, id="connection-reset"),
-        pytest.param(b"9:keepalive", True, False, id="keepalive"),
-        pytest.param(b"some garbage", True, False, id="garbage"),
-        pytest.param(b"8:data:cat", True, False, id="parsed-message"),
-        pytest.param(b"8:data:cat9:data:quit", False, False, id="multi-then-quit"),
-        pytest.param([b"9:data:q", b"uit"], False, False, id="partial-then-complete"),
+        pytest.param(b"9:data:quit", "stop", id="quit"),
+        pytest.param(b"", "stay", id="empty-recv"),
+        pytest.param(TimeoutError, "stay", id="timeout"),
+        pytest.param(ConnectionResetError, "stay", id="connection-reset"),
+        pytest.param(b"9:keepalive", "race", id="keepalive"),
+        pytest.param(b"some garbage", "race", id="garbage"),
+        pytest.param(b"8:data:cat", "race", id="parsed-message"),
+        pytest.param(b"8:data:cat9:data:quit", "stop", id="multi-then-quit"),
+        pytest.param([b"9:data:q", b"uit"], "stop", id="partial-then-complete"),
     ],
 )
 @pytest.mark.asyncio
-async def test_reader_behavior(
-    running_server: LobeServer,
-    recv: Any,
-    race: bool,  # noqa: FBT001
-    final_running: bool,  # noqa: FBT001
-) -> None:
+async def test_reader_behavior(running_server: LobeServer, recv: Any, mode: str) -> None:
     sock = _reader_sock(recv)
-    if race:
+    if mode == "race":
         await _run_with_timeout(running_server, running_server._reader(sock))
     else:
         await running_server._reader(sock)
-    assert running_server._running is final_running
+    assert running_server._running is (mode == "stay")
 
 
 @pytest.mark.asyncio
@@ -323,8 +321,6 @@ async def test_handle_connection_cancels_pending(
     mock_model: MagicMock,
     real_sock_pair: _SockPair,
 ) -> None:
-    import threading  # noqa: PLC0415
-
     sock, reader = real_sock_pair
 
     block = threading.Event()
@@ -338,12 +334,13 @@ async def test_handle_connection_cancels_pending(
         await asyncio.sleep(0.1)
         await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
 
-    asyncio.create_task(send_quit())  # noqa: RUF006
+    send_quit_task = asyncio.create_task(send_quit())
     before = set(asyncio.all_tasks())
     with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):
         await server._handle_connection(sock)
     leftover = set(asyncio.all_tasks()) - before
     assert not leftover  # child tasks are cancelled AND awaited before returning
+    await send_quit_task
 
     server._running = False
     block.set()

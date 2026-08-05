@@ -1,4 +1,6 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212,W0621  # tests inspect privates; pytest fixtures shadow names
 
 import json
 import tempfile
@@ -12,6 +14,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+import lobe_server.model as model_mod
 from lobe_server.model import (
     ClassificationResult,
     ONNXImageModel,
@@ -135,8 +138,6 @@ def _make_tflite_interpreter(num_classes: int = 3, input_shape: list[int] | None
 
 
 def _tflite_patch(interpreter: MagicMock) -> Any:
-    import lobe_server.model as model_mod  # noqa: PLC0415
-
     tflite_mock = MagicMock()
     tflite_mock.Interpreter.return_value = interpreter
     return patch.object(model_mod, "tflite", tflite_mock)

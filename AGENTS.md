@@ -380,6 +380,16 @@ Local tests on one OS are not proof the code works on others.
 - Before proposing async/concurrency fixes, read the actual loop (`await`
   semantics) — a sequential await does not saturate a thread pool
 
+### Suppressions
+
+- Every in-code suppression (`# noqa`, `# type: ignore`, `# pylint: disable`,
+  `# nosec`) must carry a reasoning comment; `# pyright:`/`# pylint: disable`
+  file headers are the mechanism for test-scoped relaxations.
+- Production linters run at full strictness — scope relaxations to tests
+  whenever the trigger is a pytest idiom (fixture shadowing, private access,
+  `assert`, hardcoded fixture passwords, `Any` in mocks). See MEMORY.md
+  "Suppression audit" for the full inventory and rationale.
+
 ## Memory index
 
 Details live in `MEMORY.md` — pull a section on demand:
@@ -404,7 +414,7 @@ uv run ruff format .         # format
 uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
 uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107  # security scan
+uv run bandit --recursive lobe_server/ TRIKLobeServer.py  # security scan
 uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
 uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)

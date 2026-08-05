@@ -1,4 +1,5 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pylint: disable=W0621  # pytest fixture names shadow module scope
 
 import sys
 from pathlib import Path
@@ -41,7 +42,7 @@ def test_load_settings_full(ini_path: Path) -> None:
     assert s.get_images_from_robot is False
     assert s.camera_number == 1
     assert s.username == "user"
-    assert s.password == "pass"  # noqa: S105
+    assert s.password == "pass"
 
 
 def test_load_settings_minimal(ini_path: Path) -> None:

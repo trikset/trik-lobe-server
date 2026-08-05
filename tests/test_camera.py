@@ -1,4 +1,6 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212,E0110  # inspect privates; abstract-instantiation test
 
 from collections.abc import Callable
 from unittest.mock import MagicMock, patch
@@ -44,7 +46,7 @@ def test_abstract() -> None:
         pass
 
     with pytest.raises(TypeError):
-        Impl()  # type: ignore[reportAbstractUsage]
+        Impl()  # type: ignore[reportAbstractUsage]  # intentionally instantiate an abstract class to assert TypeError
 
 
 @pytest.mark.parametrize(("factory", "url", "extra"), _HTTP_CAMERAS)
@@ -115,7 +117,7 @@ def test_webcam_camera() -> None:
     mock_capture.read.return_value = (True, frame)
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_cv2.COLOR_BGR2RGB = 4
-    mock_cv2.cvtColor = lambda img, _code: img  # type: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    mock_cv2.cvtColor = _cvt_identity
 
     with patch.object(WebcamCamera, "__init__", return_value=None):
         cam = WebcamCamera.__new__(WebcamCamera)
@@ -146,7 +148,7 @@ def test_factory_url() -> None:
     settings = Settings(
         photo_url="http://example.com/snapshot",
         username="u",
-        password="p",  # noqa: S106
+        password="p",
     )
     assert isinstance(create_camera(settings, "127.0.0.1"), UrlCamera)
 
@@ -196,6 +198,10 @@ def test_webcam_camera_init_not_opened() -> None:
 
 def test_url_camera_no_auth() -> None:
     assert UrlCamera("http://example.com")._auth is None
+
+
+def _cvt_identity(img: object, _code: object) -> object:
+    return img
 
 
 def _minimal_png() -> bytes:

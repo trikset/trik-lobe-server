@@ -54,7 +54,7 @@ jobs:
       - name: Lint with pylint
         run: uv run pylint lobe_server TRIKLobeServer.py tests
       - name: Security scan with bandit
-        run: uv run bandit --recursive lobe_server/ TRIKLobeServer.py --skip B107
+        run: uv run bandit --recursive lobe_server/ TRIKLobeServer.py
       - name: Dead code check with vulture
         run: uv run vulture lobe_server/ tests/ TRIKLobeServer.py
       - name: Test with pytest

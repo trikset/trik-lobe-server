@@ -1,4 +1,6 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# pyright: reportPrivateUsage=false
+# pylint: disable=W0212  # tests inspect private entrypoint helpers
 
 import builtins
 import sys
@@ -12,17 +14,17 @@ import TRIKLobeServer
 
 
 @pytest.mark.parametrize(
-    ("stdin_patch", "expected"),
+    ("stdin_patch", "expected_calls"),
     [
-        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=True), True, id="tty"),
-        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=False), False, id="non-tty"),
-        pytest.param(lambda: patch.object(sys, "stdin", None), False, id="missing-stdin"),
+        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=True), 1, id="tty"),
+        pytest.param(lambda: patch.object(sys.stdin, "isatty", return_value=False), 0, id="non-tty"),
+        pytest.param(lambda: patch.object(sys, "stdin", None), 0, id="missing-stdin"),
     ],
 )
-def test_pause_gating(stdin_patch: Callable[[], Any], expected: bool) -> None:  # noqa: FBT001
+def test_pause_gating(stdin_patch: Callable[[], Any], expected_calls: int) -> None:
     with stdin_patch(), patch.object(builtins, "input") as mock_input:
         TRIKLobeServer._pause_for_user()
-    assert mock_input.called is expected
+    assert mock_input.call_count == expected_calls
 
 
 def test_main_missing_settings_exits() -> None:

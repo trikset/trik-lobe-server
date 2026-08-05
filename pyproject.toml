@@ -48,10 +48,6 @@ line-length = 120
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    # Tests use assert extensively — would require major rewrite
-    "S101",
-    # Tests access private members intentionally (e.g. _labels, _running)
-    "SLF001",
     # Docstrings on every module/class/method is very high effort
     "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
     "D209", "D212",
@@ -60,16 +56,13 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004", "ANN401", "N802", "N803", "N806"]
+"tests/**" = ["S101", "S105", "S106", "SLF001", "PLR2004", "ANN401"]
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = [
     "C0114", "C0115", "C0116", "R0903",
     "W0718",  # broad-exception-caught — intentional for reconnect loop
     "R0902",  # too-many-instance-attributes — Settings has 9 fields
-    "W0212",  # protected-access — tests need this
-    "W0621",  # redefined-outer-name — pytest fixture pattern
-    "E0110",  # abstract-class-instantiated — intentional test
     "E1101",  # no-member — cv2 C extension
     "C0103",  # invalid-name — TRIKLobeServer entry point name
     "C0301",  # line-too-long — ruff format handles this at 120
@@ -82,11 +75,11 @@ ignore = [".venv"]
 
 [tool.basedpyright]
 typeCheckingMode = "strict"
-reportPrivateUsage = "none"
 reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
-reportAttributeAccessIssue = "none"
 
 [tool.vulture]
-ignore_names = ["return_value", "side_effect", "prediction", "im", "settings", "mock_model", "mock_camera"]
+# TypedDict string-key access is invisible to vulture — `index` is read via
+# `details["index"]`, which vulture cannot trace (false positive)
+ignore_names = ["index"]

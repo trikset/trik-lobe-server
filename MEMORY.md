@@ -401,6 +401,64 @@ timeout / `VideoCapture.read()` duration.
 **Consequences:** Friendlier error messages, bounded HTTP retry, clean task
 shutdown, headless-safe entrypoint.
 
+### [2026-08-05] Suppression audit
+
+**Context:** Full audit of every in-code suppression (noqa, type: ignore,
+pylint disable, nosec) and config-level relaxation. Goal: linters that check
+code quality, not linters that are suppressed. Production linters now run at
+full strictness; suppressions that remain are scoped to tests or carry a
+reasoning comment.
+
+**Fixed (suppressions removed):**
+
+- `model.py`: `ONNXImageModel`/`TFLiteImageModel` were typed `Any` with seven
+  `type: ignore` comments because onnxruntime and ai_edge_litert ship no type
+  info. Replaced with private Protocols (`_ONNXSession`, `_TFLiteInterpreter`,
+  `_ONNXNode`, `_TFLiteDetails` TypedDict) plus a single `cast` at each load
+  boundary — onnxruntime's own `run` return type is too loose
+  (`Sequence[ndarray | SparseTensor | list | dict]`) to satisfy the protocol.
+  Removed 2× ANN401 + 7× type: ignore; model.py is now fully type-checked.
+- ruff `S101`/`SLF001` moved from global to `tests/**` per-file ignores
+  (production has no `assert` and no cross-object private access, so it gains
+  the checks; pytest idioms are test-only).
+- ruff `N802`/`N803`/`N806` deleted (empirically dead in tests).
+- ruff `S105`/`S106` inline noqa deleted in favour of `tests/**` per-file
+  ignores (fixtures legitimately use `"pass"` as data).
+- pylint `W0212`/`W0621`/`E0110` moved from global disable to per-file header
+  comments in test files (pytest fixture-name shadowing, intentional private
+  access, and the one abstract-instantiation test are test-only idioms).
+- basedpyright `reportPrivateUsage`/`reportAttributeAccessIssue` removed from
+  global config (production restored to strict) and relaxed per-file via
+  `# pyright: reportPrivateUsage=false` headers in test files that inspect
+  privates. Note: `[tool.basedpyright] overrides` is NOT supported (emits
+  "unrecognized setting"); per-file `# pyright:` comments are the mechanism.
+- vulture `ignore_names` shrank from 7 dead entries to 1 justified entry
+  (`index`) — TypedDict string-key access is invisible to vulture.
+- bandit `--skip B107` dropped from CI/AGENTS in favour of an inline
+  `# nosec B107` on the empty-string `password=""` default.
+- Test inline: cvtColor lambda `type: ignore` → typed `_cvt_identity`;
+  `import threading`/`import lobe_server.model` moved to top level; RUF006
+  detached task → kept reference + awaited; reader-table/entrypoint `FBT001`
+  bool params → `mode` string / int `call_count`.
+
+**Remaining suppressions (all reasoned):**
+
+- Production: `camera.py` `# noqa: PLC0415` (lazy cv2 import, 50 MB DLLs) and
+  `# nosec B107` (empty password default); `server.py` `# noqa: FBT003`
+  (`setblocking(False)` is a stdlib positional-bool API).
+- Config: ruff `D*` + `COM812` (docstring policy; formatter owns trailing
+  commas); ruff `tests/**` per-file ignores (pytest idioms + fixture data +
+  `Any` in mocks); pylint docstring/data-class/C-extension/lazy-import disables;
+  basedpyright `reportMissingTypeStubs`/`reportMissingImports` (onnx, litert,
+  cv2 have no stubs) and `extension-pkg-allow-list`.
+- Tests: `test_camera.py` `reportAbstractUsage` (intentional) and four
+  `reportAttributeAccessIssue` ignores (`__new__` bypass to inject mocks);
+  `test_server.py` `FBT003` (stdlib/mock-call asserts).
+
+**Guardrail:** every suppression must carry a reasoning comment; scope to
+tests wherever the trigger is a pytest idiom; production linters stay strict.
+Do not re-add global relaxations for test-only concerns.
+
 ### [2026-07-30] Cross-platform audit findings
 
 **Context:** A comprehensive cross-platform audit was performed after the
