@@ -340,7 +340,7 @@ async def test_handle_connection_cancels_pending(
         await server._handle_connection(sock)
     leftover = set(asyncio.all_tasks()) - before
     assert not leftover  # child tasks are cancelled AND awaited before returning
-    await send_quit_task
+    send_quit_task.result()  # propagate any send error from the quit sender
 
     server._running = False
     block.set()
