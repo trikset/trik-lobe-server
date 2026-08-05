@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import lobe_server.model as model_mod
 from lobe_server.model import (
     ClassificationResult,
     ONNXImageModel,
@@ -141,7 +140,7 @@ def _make_tflite_interpreter(num_classes: int = 3, input_shape: list[int] | None
 def _tflite_patch(interpreter: MagicMock) -> Any:
     tflite_mock = MagicMock()
     tflite_mock.Interpreter.return_value = interpreter
-    return patch.object(model_mod, "tflite", tflite_mock)
+    return patch("lobe_server.model.tflite", tflite_mock)
 
 
 @contextmanager
