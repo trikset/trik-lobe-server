@@ -61,6 +61,7 @@ class LobeServer:
     async def _prediction_loop(self, sock: socket.socket) -> None:
         while self._running:
             prediction = await asyncio.to_thread(self._predict)
+            logger.info("Prediction: %s", prediction)
             await self._send_message(sock, prediction)
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
