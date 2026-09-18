@@ -83,6 +83,7 @@ class LobeServer:
             inference_s = time.monotonic() - t0
 
             payload = "-1" if prediction is None else prediction
+            logger.info("Prediction: %s", payload)
             await self._send_message(sock, payload)
 
             if self._formatter is not None:
