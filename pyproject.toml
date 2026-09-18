@@ -82,4 +82,5 @@ reportMissingImports = "none"
 [tool.vulture]
 # TypedDict string-key access is invisible to vulture — `index` is read via
 # `details["index"]`, which vulture cannot trace (false positive)
-ignore_names = ["index"]
+# `value` on ctypes.c_ulong is set, then consumed via the struct pointer
+ignore_names = ["index", "value"]

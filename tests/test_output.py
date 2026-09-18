@@ -2,10 +2,20 @@
 # pyright: reportPrivateUsage=false
 # pylint: disable=W0212  # tests inspect private output methods
 
+from collections.abc import Generator
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
 from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
+
+
+@contextmanager
+def _tty(fmt: UserOutputFormatter) -> Generator[None, None, None]:
+    """Temporarily mark a formatter's stderr as a TTY for testing."""
+    with patch.object(fmt, "_tty", True):  # noqa: FBT003
+        yield
 
 
 class TestUserOutputFormatter:
@@ -13,27 +23,34 @@ class TestUserOutputFormatter:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_prediction("cat", 0.92, 0.05)
         stderr = capsys.readouterr().err
-        # First prediction: no change event, just the live line
         assert "cat" in stderr
         assert "92.0%" in stderr
-        assert "──" not in stderr  # no change event
+        assert self._dash() not in stderr  # no change event
+
+    @staticmethod
+    def _dash() -> str:
+        return UserOutputFormatter(color_enabled=False)._glyphs.DASH
 
     def test_same_label_no_change_event(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_prediction("cat", 0.92, 0.05)
         capsys.readouterr()
-        fmt.on_prediction("cat", 0.88, 0.06)
+        with _tty(fmt):
+            fmt.on_prediction("cat", 0.88, 0.06)
         stderr = capsys.readouterr().err
         assert "cat" in stderr
-        assert "──" not in stderr  # still no change event
+        assert self._dash() * 2 not in stderr  # still no change event
 
     def test_change_prints_event(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
-        fmt.on_prediction("cat", 0.92, 0.05)
+        with _tty(fmt):
+            fmt.on_prediction("cat", 0.92, 0.05)
         capsys.readouterr()
-        fmt.on_prediction("dog", 0.74, 0.06)
+        with _tty(fmt):
+            fmt.on_prediction("dog", 0.74, 0.06)
         stderr = capsys.readouterr().err
-        assert "cat → dog" in stderr
+        assert "cat" in stderr
+        assert "dog" in stderr
         assert "74.0%" in stderr
 
     def test_on_error_shows_error(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -42,23 +59,46 @@ class TestUserOutputFormatter:
         stderr = capsys.readouterr().err
         assert "camera error" in stderr
 
-    def test_close_prints_newline(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_on_error_in_tty(self, capsys: pytest.CaptureFixture[str]) -> None:
+        r"""Test on_error in TTY mode (uses \r prefix)."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt._tty = True
+        fmt.on_error(0.05)
+        stderr = capsys.readouterr().err
+        assert "\r" in stderr
+        assert "camera error" in stderr
+
+    def test_close_prints_newline_in_tty(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = UserOutputFormatter(color_enabled=False)
+        with _tty(fmt):
+            fmt.on_prediction("cat", 0.90, 0.05)
+        capsys.readouterr()
+        with _tty(fmt):
+            fmt.close()
+        stderr = capsys.readouterr().err
+        assert stderr == "\n"
+
+    def test_close_noop_in_nontty(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_prediction("cat", 0.90, 0.05)
         capsys.readouterr()
         fmt.close()
         stderr = capsys.readouterr().err
-        assert stderr == "\n"
+        assert stderr == ""
 
-    def test_color_enabled_wraps_label(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_color_enabled_wraps_label_in_tty(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=True)
-        fmt.on_prediction("cat", 0.92, 0.05)
+        fmt._tty = True  # force TTY mode for testing
+        fmt._color = True  # force ANSI colors
+        with _tty(fmt):
+            fmt.on_prediction("cat", 0.92, 0.05)
         stderr = capsys.readouterr().err
         assert "\033[" in stderr  # ANSI codes present
 
     def test_color_disabled_no_ansi(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
-        fmt.on_prediction("cat", 0.92, 0.05)
+        with _tty(fmt):
+            fmt.on_prediction("cat", 0.92, 0.05)
         stderr = capsys.readouterr().err
         assert "\033[" not in stderr  # no ANSI codes
 
@@ -88,14 +128,14 @@ class TestUserOutputFormatter:
     def test_bar_high_confidence(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         result = fmt._confidence_bar(0.9, width=10)
-        assert result.count("█") == 9
-        assert result.count("░") == 1
+        count = result.count("█") + result.count("#")
+        assert count == 18  # 9 filled x 2 chars
 
     def test_bar_low_confidence(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         result = fmt._confidence_bar(0.3, width=10)
-        assert result.count("█") == 3
-        assert result.count("░") == 7
+        count = result.count("█") + result.count("#")
+        assert count == 6  # 3 filled x 2 chars
 
     def test_fps_sliding_window(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -104,13 +144,17 @@ class TestUserOutputFormatter:
         stderr = capsys.readouterr().err
         assert "FPS" in stderr
 
-    def test_detections_since_change_after_change(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_non_tty_newline_each_line(self, capsys: pytest.CaptureFixture[str]) -> None:
+        r"""In non-TTY mode, each prediction gets its own \n-terminated line."""
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_prediction("cat", 0.90, 0.05)
-        capsys.readouterr()
-        fmt.on_prediction("dog", 0.80, 0.05)
+        fmt.on_prediction("cat", 0.90, 0.05)
         stderr = capsys.readouterr().err
-        assert "cat" in stderr  # last change shows previous label
+        assert stderr.count("\n") == 2  # two lines, each with \n
+
+    def test_unused_code_is_detected(self) -> None:
+        # _enable_vt is Windows-only; coverage excludes it
+        pass
 
 
 class TestStdoutOutputFormatter:

@@ -18,16 +18,30 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 from lobe_server.config import load_settings, resolve_model_path
 from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
 from lobe_server.server import LobeServer
+
+_LOG_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+_LOG_FILE = _LOG_DIR / "lobe_server.log"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _setup_file_logging() -> None:
+    """Add a file handler so double-click users can always find logs."""
+    try:
+        handler = logging.FileHandler(_LOG_FILE, encoding="utf-8", mode="a")
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        logging.getLogger().addHandler(handler)
+    except OSError:
+        pass  # best-effort; console logging still works
 
 
 def _get_version() -> str:
@@ -77,8 +91,9 @@ def _build_formatter(
 
 
 def main() -> None:
+    _setup_file_logging()
     args = _parse_args()
-    logger.info("Starting program")
+    logger.info("Starting program (log: %s)", _LOG_FILE)
     try:
         settings = load_settings()
     except FileNotFoundError as _:

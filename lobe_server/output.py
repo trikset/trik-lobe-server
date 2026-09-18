@@ -6,10 +6,13 @@ Console output formatters for per-detection feedback.
 Two modes:
 - UserOutputFormatter — ANSI-colored live line + change events (stderr)
 - StdoutOutputFormatter — tab-separated pipe-friendly output (stdout)
+
+Auto-detects TTY, ANSI, and Unicode support for cross-platform robustness.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from collections import deque
@@ -18,13 +21,57 @@ _CONF_TIER_HIGH = 0.8
 _CONF_TIER_MID = 0.5
 _STDOUT_EVERY_DETECTION = 2
 
+_WIN = os.name == "nt"
+_ENCODING = sys.stderr.encoding or ""
+_HAS_UNICODE = _ENCODING.lower() in ("utf-8", "utf8", "utf-16le", "utf-16", "utf-32")
+
+
+class _Unicode:
+    BLOCK_FULL = "██"
+    BLOCK_EMPTY = "░░"
+    PIPE = "│"
+    ARROW_R = "→"
+    ARROW_PREV = "⤴"
+    DASH = "─"
+    CIRCLE_S = "⎡"
+    CIRCLE_E = "⎤"
+
+
+class _ASCII:
+    BLOCK_FULL = "##"
+    BLOCK_EMPTY = "··"
+    PIPE = "|"
+    ARROW_R = "->"
+    ARROW_PREV = "<-"
+    DASH = "-"
+    CIRCLE_S = "["
+    CIRCLE_E = "]"
+
+
+def _enable_vt() -> None:  # pragma: no cover (Windows-only)
+    """Enable ENABLE_VIRTUAL_TERMINAL_PROCESSING on Windows 10+."""
+    if not _WIN:
+        return
+    try:
+        import ctypes as _ct  # noqa: PLC0415
+
+        kernel32 = _ct.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE = -11
+        mode = _ct.c_ulong(0)
+        if kernel32.GetConsoleMode(handle, _ct.byref(mode)):
+            mode.value |= 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            kernel32.SetConsoleMode(handle, mode)
+    except Exception:  # noqa: BLE001,S110  # best-effort on any Windows version; may lack ctypes
+        pass  # Windows too old or not a console — ANSI won't work, proceed without it
+
 
 class UserOutputFormatter:
     r"""
-    ANSI-colored live terminal output, refreshed in-place via ``\r``.
+    Terminal output for human readers.
 
-    Prints a compact status line to stderr on every prediction. On label
-    change, prints a persistent event line above the live line.
+    Uses ANSI colors, Unicode glyphs, and a ``\r``-refreshed live line when
+    connected to a capable terminal. Falls back to plain text per-detection
+    lines when the terminal lacks Unicode, ANSI, or is not a TTY.
     """
 
     _COLOR_GREEN = "\033[92m"
@@ -34,12 +81,23 @@ class UserOutputFormatter:
     _COLOR_RESET = "\033[0m"
 
     def __init__(self, *, color_enabled: bool = True) -> None:
-        self._color = color_enabled
+        self._color = color_enabled and sys.stderr.isatty()
+        self._tty = sys.stderr.isatty()
+        self._glyphs = _Unicode if _HAS_UNICODE else _ASCII
+        if _WIN and self._color:  # pragma: no cover (Windows-only)
+            _enable_vt()
+
         self._prev_label: str | None = None
         self._total_count = 0
         self._change_t0 = time.monotonic()
         self._dets_since_change = 0
         self._inference_times: deque[float] = deque(maxlen=50)
+        self._first_output = True
+
+    def _w(self, text: str) -> None:
+        """Write text to stderr."""
+        sys.stderr.write(text)
+        sys.stderr.flush()
 
     def _c(self, code: str, text: str) -> str:
         """Wrap text in ANSI code if color is enabled."""
@@ -50,21 +108,21 @@ class UserOutputFormatter:
     def _confidence_tier(self, confidence: float) -> tuple[str, str]:
         """Return (ANSI_code, block_char) for a confidence level."""
         if confidence >= _CONF_TIER_HIGH:
-            return self._COLOR_GREEN, "█"
+            return self._COLOR_GREEN, self._glyphs.BLOCK_FULL
         if confidence >= _CONF_TIER_MID:
-            return self._COLOR_YELLOW, "█"
-        return self._COLOR_RED, "█"
+            return self._COLOR_YELLOW, self._glyphs.BLOCK_FULL
+        return self._COLOR_RED, self._glyphs.BLOCK_FULL
 
     def _confidence_bar(self, confidence: float, width: int = 10) -> str:
         """Build 10-block confidence bar (1 block = 10%)."""
         filled = round(confidence * width)
         empty = width - filled
         code, block = self._confidence_tier(confidence)
-        bar_str = block * filled + "░" * empty
+        bar_str = block * filled + self._glyphs.BLOCK_EMPTY * empty
         return self._c(code, bar_str)
 
     def on_prediction(self, label: str, confidence: float, timing_s: float) -> None:
-        """Handle one prediction result. May print to stderr."""
+        """Handle one prediction result. Writes to stderr."""
         self._total_count += 1
         self._inference_times.append(timing_s)
 
@@ -74,10 +132,11 @@ class UserOutputFormatter:
         change_event: str | None = None
         if self._prev_label is not None and label != self._prev_label:
             held_s = time.monotonic() - self._change_t0
+            g = self._glyphs
             change_event = (
-                f"── {self._prev_label} → {label}  "
+                f"{g.DASH * 2} {self._prev_label} {g.ARROW_R} {label}  "
                 f"{confidence * 100:.1f}%  "
-                f"(held {held_s:.1f}s, {self._dets_since_change} detections) ──"
+                f"(held {held_s:.1f}s, {self._dets_since_change} detections) {g.DASH * 2}"
             )
             self._change_t0 = time.monotonic()
             self._dets_since_change = 0
@@ -86,45 +145,62 @@ class UserOutputFormatter:
 
         self._dets_since_change += 1
 
-        # Build the live line
+        # Build output line
         pct = confidence * 100
         tier_code, _ = self._confidence_tier(confidence)
         label_display = self._c(self._COLOR_BOLD + tier_code, label)
         pct_display = self._c(tier_code, f"{pct:.1f}%")
         bar_display = self._confidence_bar(confidence)
 
+        g = self._glyphs
         last_change = ""
         if self._prev_label is not None:
-            last_change = f"⤴ {self._prev_label} ({self._dets_since_change * self.PREDICTION_INTERVAL:.1f}s ago)"
+            last_change = (
+                f"{g.ARROW_PREV} {self._prev_label} ({self._dets_since_change * self.PREDICTION_INTERVAL:.1f}s ago)"
+            )
 
         self._prev_label = label
 
         line = (
-            f"⎡ {label_display} ⎤  {pct_display}  {bar_display}  │  "
-            f"FPS {fps:.1f}  │  #{self._total_count}  │  {last_change}"
+            f"{g.CIRCLE_S} {label_display} {g.CIRCLE_E}  "
+            f"{pct_display}  {bar_display}  {g.PIPE}  "
+            f"FPS {fps:.1f}  {g.PIPE}  #{self._total_count}  {g.PIPE}  {last_change}"
         )
 
-        # Print change event first (persistent), then the live line (overwrites)
-        file = sys.stderr
         if change_event:
-            file.write(f"\n{change_event}\n")
-        file.write(f"\r{line}")
-        file.flush()
+            self._w(f"\n{change_event}\n")
+
+        if self._tty:
+            self._w(f"\r{line}")
+        elif self._first_output:
+            self._w(line.rstrip() + "\n")
+            self._first_output = False
+        else:
+            self._w(line.rstrip() + "\n")
 
     def on_error(self, timing_s: float) -> None:
-        """Camera failure — still show the error in the live line."""
+        """Camera failure: show error in the output."""
         self._total_count += 1
         self._inference_times.append(timing_s)
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
+        g = self._glyphs
 
-        line = f"⎡ {'---'} ⎤  {'---'}  │  FPS {fps:.1f}  │  #{self._total_count}  │  camera error"
-        sys.stderr.write(f"\r{line}")
+        line = (
+            f"{g.CIRCLE_S} --- {g.CIRCLE_E}  ---  {g.PIPE}  "
+            f"FPS {fps:.1f}  {g.PIPE}  #{self._total_count}  {g.PIPE}  camera error"
+        )
+
+        if self._tty:
+            sys.stderr.write(f"\r{line}")
+        else:
+            sys.stderr.write(line.rstrip() + "\n")
         sys.stderr.flush()
 
     def close(self) -> None:
         """Release the live line by printing a final newline."""
-        sys.stderr.write("\n")
-        sys.stderr.flush()
+        if self._tty:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
 
     PREDICTION_INTERVAL = 0.2  # used for time-since-change display
 
