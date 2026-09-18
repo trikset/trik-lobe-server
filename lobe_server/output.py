@@ -138,7 +138,7 @@ class UserOutputFormatter:
         self._last_width_check = now
         with contextlib.suppress(ValueError, OSError):
             cols = shutil.get_terminal_size().columns - 2
-            if cols >= 40:
+            if cols >= 40:  # noqa: PLR2004  # minimum terminal width for the box to fit
                 self._width = cols
 
     def set_context(self, context: str) -> None:
