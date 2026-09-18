@@ -62,7 +62,7 @@ class TestUserBasic:
         fmt._tty = True
         fmt.on_error(0.05)
         stderr = capsys.readouterr().err
-        assert "\033[3A" in stderr
+        assert "\033[4A" in stderr
 
     def test_close_releases(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -148,6 +148,24 @@ class TestUserAdvanced:
         fmt.on_prediction("cat", 0.90, 0.05)
         assert "Header" not in capsys.readouterr().err
 
+    def test_set_status_shows_badge(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """set_status() shows a badge on the dashboard top line."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_status("connecting")
+        fmt.on_prediction("cat", 0.90, 0.05)
+        stderr = capsys.readouterr().err
+        assert "connecting" in stderr
+
+    def test_set_status_none_hides_badge(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """set_status(None) removes the badge."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_status("reconnecting")
+        fmt.on_prediction("cat", 0.90, 0.05)
+        capsys.readouterr()
+        fmt.set_status(None)
+        fmt.on_prediction("cat", 0.90, 0.05)
+        assert "reconnecting" not in capsys.readouterr().err
+
     def test_panel_has_borders(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The btop-style panel should have corner characters."""
         fmt = UserOutputFormatter(color_enabled=False)
@@ -201,7 +219,7 @@ class TestUserAdvanced:
         with _tty(fmt):
             fmt.on_prediction("cat", 0.88, 0.06)
         stderr = capsys.readouterr().err
-        assert "\033[3A" in stderr  # cursor-up escape
+        assert "\033[4A" in stderr  # cursor-up escape
 
 
 class TestStdoutOutputFormatter:

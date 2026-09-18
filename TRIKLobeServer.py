@@ -98,9 +98,25 @@ def _build_formatter(
     return UserOutputFormatter(color_enabled=color_enabled)
 
 
+def _find_model_file(model_path: Path) -> str:
+    """Return the actual model filename (e.g. 'model.onnx') from the directory."""
+    try:
+        files = sorted(model_path.glob("*.tflite")) + sorted(model_path.glob("*.onnx"))
+        if files:
+            return files[0].name
+        sig = model_path / "signature.json"
+        if sig.exists():
+            import json  # noqa: PLC0415
+            with sig.open(encoding="utf-8-sig") as f:
+                return json.load(f).get("filename", "?")
+    except (OSError, ValueError, TypeError):
+        pass
+    return "?"
+
+
 def _build_context(model_path: Path, settings: Settings) -> str:
     """Build a context header shown at the top of user-mode output."""
-    model_name = model_path.name or "."
+    model_name = _find_model_file(model_path)
     if settings.photo_url:
         cam = f"URL {settings.photo_url}"
     elif settings.get_images_from_robot:

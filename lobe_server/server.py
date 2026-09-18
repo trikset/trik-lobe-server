@@ -185,14 +185,20 @@ class LobeServer:
                     self._settings.server_ip,
                     self._settings.server_port,
                 )
+                if self._formatter is not None:
+                    self._formatter.set_status("connecting")  # type: ignore[attr-defined]  # both formatters support set_status
                 sock = await self._connect_once()
                 logger.info("Connected")
+                if self._formatter is not None:
+                    self._formatter.set_status(None)
                 await self._handle_connection(sock)
             except Exception:
                 logger.exception("Connection error")
             finally:
                 if sock is not None:
                     sock.close()
+                if self._formatter is not None:
+                    self._formatter.set_status("reconnecting")  # type: ignore[attr-defined]
             if self._running:
                 logger.info("Reconnecting in %s seconds...", self.RECONNECT_DELAY)
                 await asyncio.sleep(self.RECONNECT_DELAY)
