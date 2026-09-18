@@ -27,23 +27,19 @@ _HAS_UNICODE = _ENCODING.lower() in ("utf-8", "utf8", "utf-16le", "utf-16", "utf
 
 
 class _Unicode:
-    BLOCK_FULL = "██"
-    BLOCK_EMPTY = "░░"
+    BLOCK_FULL = "█"
+    BLOCK_EMPTY = "░"
     PIPE = "│"
     ARROW_R = "→"
     DASH = "─"
-    CIRCLE_S = "⎡"
-    CIRCLE_E = "⎤"
 
 
 class _ASCII:
-    BLOCK_FULL = "##"
-    BLOCK_EMPTY = "··"
+    BLOCK_FULL = "#"
+    BLOCK_EMPTY = "·"
     PIPE = "|"
     ARROW_R = "->"
     DASH = "-"
-    CIRCLE_S = "["
-    CIRCLE_E = "]"
 
 
 def _enable_vt() -> None:  # pragma: no cover (Windows-only)
@@ -87,7 +83,6 @@ class UserOutputFormatter:
 
         self._prev_label: str | None = None
         self._total_count = 0
-        self._start_time = time.monotonic()
         self._change_t0 = time.monotonic()
         self._dets_since_change = 0
         self._inference_times: deque[float] = deque(maxlen=50)
@@ -125,15 +120,6 @@ class UserOutputFormatter:
         bar_str = block * filled + self._glyphs.BLOCK_EMPTY * empty
         return self._c(code, bar_str)
 
-    def _uptime_str(self) -> str:
-        """Format session uptime as a compact string."""
-        elapsed = time.monotonic() - self._start_time
-        mins, secs = divmod(int(elapsed), 60)
-        hours, mins = divmod(mins, 60)
-        if hours:
-            return f"\u2191 {hours}h {mins}m"
-        return f"\u2191 {mins}m {secs}s"
-
     def on_prediction(self, label: str, confidence: float, timing_s: float) -> None:
         """Handle one prediction result. Writes to stderr."""
         self._total_count += 1
@@ -170,9 +156,8 @@ class UserOutputFormatter:
         self._prev_label = label
 
         line = (
-            f"{g.CIRCLE_S} {label_display} {g.CIRCLE_E}  "
-            f"{pct_display}  {bar_display}  {g.PIPE}  "
-            f"FPS {fps:.1f}  {g.PIPE}  #{self._total_count}  {g.PIPE}  {self._uptime_str()}"
+            f"{label_display}  {pct_display}  {bar_display}  {g.PIPE}  "
+            f"FPS {fps:.1f}  {g.PIPE}  #{self._total_count}"
         )
 
         # On first output: print context header, then the first live line
@@ -203,7 +188,7 @@ class UserOutputFormatter:
         g = self._glyphs
 
         line = (
-            f"{g.CIRCLE_S} --- {g.CIRCLE_E}  ---  {g.PIPE}  "
+            f"---  ---  {g.PIPE}  "
             f"FPS {fps:.1f}  {g.PIPE}  #{self._total_count}  {g.PIPE}  camera error"
         )
 

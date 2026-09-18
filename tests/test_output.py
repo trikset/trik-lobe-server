@@ -2,7 +2,6 @@
 # pyright: reportPrivateUsage=false
 # pylint: disable=W0212  # tests inspect private output methods
 
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -136,13 +135,13 @@ class TestUserAdvanced:
         fmt = UserOutputFormatter(color_enabled=False)
         result = fmt._confidence_bar(0.9, width=10)
         count = result.count("█") + result.count("#")
-        assert count == 18  # 9 filled x 2 chars
+        assert count == 9  # 5 filled
 
     def test_bar_low_confidence(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         result = fmt._confidence_bar(0.3, width=10)
         count = result.count("█") + result.count("#")
-        assert count == 6  # 3 filled x 2 chars
+        assert count == 3  # 3 filled
 
     def test_fps_sliding_window(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -158,22 +157,6 @@ class TestUserAdvanced:
         fmt.on_prediction("cat", 0.90, 0.05)
         stderr = capsys.readouterr().err
         assert stderr.count("\n") == 2  # two lines, each with \n
-
-    def test_unused_code_is_detected(self) -> None:
-        pass
-
-    def test_uptime_shows_seconds(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        result = fmt._uptime_str()
-        assert "s" in result
-        assert "m" in result
-
-    def test_uptime_shows_hours(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        fmt._start_time = time.monotonic() - 7260  # 2 hours 1 minute
-        result = fmt._uptime_str()
-        assert "h" in result
-        assert "2h" in result
 
     def test_context_header_printed_on_first_output(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
