@@ -19,6 +19,8 @@ class Settings:
     camera_number: int = 0
     username: str = ""
     password: str = ""
+    output_mode: str = "user"
+    color_enabled: bool = True
 
 
 def _get_int(section: configparser.SectionProxy, key: str, default: int) -> int:
@@ -60,6 +62,13 @@ def load_settings(path: Path | None = None) -> Settings:
         msg = f"CAMERA_NUMBER must be non-negative: {camera_number}"
         raise ValueError(msg)
 
+    ui = config["UI"] if "UI" in config else config["Settings"]
+    output_mode = ui.get("OUTPUT_MODE", "user")
+    if output_mode not in ("user", "stdout"):
+        msg = f"Invalid OUTPUT_MODE in settings.ini: {output_mode!r}"
+        raise ValueError(msg)
+    color_enabled = ui.get("COLOR_ENABLED", "true").lower() == "true"
+
     return Settings(
         server_ip=s.get("SERVER_IP", "127.0.0.1"),
         my_hull_number=my_hull_number,
@@ -70,6 +79,8 @@ def load_settings(path: Path | None = None) -> Settings:
         camera_number=camera_number,
         username=s.get("USERNAME", ""),
         password=s.get("PASSWORD", ""),
+        output_mode=output_mode,
+        color_enabled=color_enabled,
     )
 
 

@@ -14,11 +14,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License."""
 
+import argparse
 import asyncio
 import logging
 import sys
 
 from lobe_server.config import load_settings, resolve_model_path
+from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
 from lobe_server.server import LobeServer
 
 logging.basicConfig(
@@ -28,12 +30,54 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _get_version() -> str:
+    try:
+        from importlib.metadata import version as _version  # noqa: PLC0415
+
+        return _version("trik-lobe-server")
+    except Exception:  # noqa: BLE001  # importlib.metadata can fail unpredictably in PyInstaller
+        return "0.0.0"
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="TRIK Lobe ML inference server")
+    parser.add_argument(
+        "-o",
+        "--output-mode",
+        choices=["user", "stdout"],
+        help="Output mode (overrides settings.ini)",
+    )
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase output verbosity (stackable: -v -v)",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_get_version()}",
+    )
+    return parser.parse_args()
+
+
 def _pause_for_user() -> None:
     if sys.stdin is not None and sys.stdin.isatty():
         input("Press any key to close the window...")
 
 
+def _build_formatter(
+    output_mode: str, *, color_enabled: bool, verbose: int
+) -> UserOutputFormatter | StdoutOutputFormatter:
+    if output_mode == "stdout":
+        return StdoutOutputFormatter(verbose=verbose)
+    return UserOutputFormatter(color_enabled=color_enabled)
+
+
 def main() -> None:
+    args = _parse_args()
     logger.info("Starting program")
     try:
         settings = load_settings()
@@ -42,10 +86,14 @@ def main() -> None:
         _pause_for_user()
         sys.exit(1)
 
+    output_mode = args.output_mode or settings.output_mode
+    color_enabled = not args.no_color and settings.color_enabled
+    formatter = _build_formatter(output_mode, color_enabled=color_enabled, verbose=args.verbose)
+
     model_path = resolve_model_path(settings)
     logger.info("Model path: %s", model_path)
 
-    server = LobeServer(settings, model_path)
+    server = LobeServer(settings, model_path, formatter=formatter)
     try:
         asyncio.run(server.run_forever())
     except KeyboardInterrupt:
