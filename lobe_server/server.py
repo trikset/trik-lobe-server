@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING
 
 from lobe_server.camera import CameraSource, create_camera
+from lobe_server.constants import PREDICTION_INTERVAL as _PI
 from lobe_server.model import load_model
 from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class LobeServer:
     KEEPALIVE_INTERVAL = 5  # robot sends every 3s; predictions also reset heartbeat timer
-    PREDICTION_INTERVAL = 0.2
+    PREDICTION_INTERVAL = _PI
     RECONNECT_DELAY = 3
     BUFFER_SIZE = 255
     RECV_TIMEOUT = 10  # robot sends keepalive every 3s; 10s = 3 missed + margin
@@ -85,15 +86,18 @@ class LobeServer:
             await self._send_message(sock, payload)
 
             if self._formatter is not None:
-                if prediction is None:
-                    self._formatter.on_error(timing_s=inference_s, top_labels=labels)
-                else:
-                    self._formatter.on_prediction(
-                        label=prediction,
-                        confidence=confidence if confidence is not None else 0.0,
-                        timing_s=inference_s,
-                        top_labels=labels,
-                    )
+                try:
+                    if prediction is None:
+                        self._formatter.on_error(timing_s=inference_s, top_labels=labels)
+                    else:
+                        self._formatter.on_prediction(
+                            label=prediction,
+                            confidence=confidence if confidence is not None else 0.0,
+                            timing_s=inference_s,
+                            top_labels=labels,
+                        )
+                except Exception:
+                    logger.exception("Formatter error (output suppressed, detection continues)")
 
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
