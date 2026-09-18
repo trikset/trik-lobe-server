@@ -816,49 +816,112 @@ maintained through rules — so rationale is the gold and must never be deleted.
   "Process improvement") rather than leaving the taxonomy stale. *(Rule
   preserved from the pre-compaction "On tool error" hook.)*
 
-### [2026-09-18] Console output per detection
+### [2026-09-18] Output module: evolution and final design
 
-**Context:** Server previously had zero per-detection output during normal
-operation. The user saw the startup banner, then silence until error or
-shutdown. No way to tell if the server was running, what it was seeing, or
-pipe results into external tools.
+**Context:** The initial per-detection output (PR #119) was a single ANSI line
+refreshed in-place via `\r`. The user experience review revealed:
 
-**Decision:** Two output formatters in a new `lobe_server/output.py` module:
+- No mode switching — everything should be visible at once
+- Terminal resize must be handled reactively
+- Screenshots must be regenerated when output format changes
+- Cross-platform: Unicode/ASCII fallback, ANSI fallback on Windows
 
-- **`UserOutputFormatter`** — prints an ANSI-colored live status line to
-  stderr, refreshed in-place via `\r`. Shows label, confidence (%), a 10-block
-  bar, FPS, detection count, and time since last label change. On label change,
-  prints a persistent event line above the live line. Color tiers: green >=80%,
-  yellow >=50%, red \<50%.
-- **`StdoutOutputFormatter`** — prints tab-separated fields to stdout for
-  piping. Verbosity levels: 0 = label + confidence on change only; 1 = add
-  timing; 2 = every detection.
+**Decision (evolution over three PRs):**
 
-Configurable via CLI flags in `TRIKLobeServer.py` (`-o`/`--output-mode`,
-`--no-color`, `-v`/`--verbose`, `--version`) and `settings.ini` `[UI]` section
-(`OUTPUT_MODE`, `COLOR_ENABLED`).
+1. **PR #119** — 1-line status (label + confidence + bar + FPS) refreshed via `\r`.
+1. **PR #119 (revision)** — btop-style 3-line box-drawing panel
+   (`╭─╮│╰─╯`) with cursor-up redraw (`\033[3A\033[J`). Change event lines
+   below the panel.
+1. **PR #121 (current)** — 4-line panel adding a compact stats bar below the
+   dashboard. Terminal width checked once per second (`_refresh_width`).
+   Connection health badge via `set_status()`.
+
+**Final design (4-line panel):**
+
+```
+╭─ label 92.4% ────────── fps:20.8 │ #1 │ Δ 0.0s ─╮
+│─██████████████████████████████░░─│
+│cat█████6  dog███░░4  bird█░░3    │
+╰──────────────────────────────────╯
+```
+
+- Stats bar: one line below the dashboard. Shows top-4 labels with compact
+  bars (width proportional to max count) and running count. No mode switching.
+- Color tiers: green ≥50% frequency, yellow ≥20%, red \<20% (separate from
+  confidence tiers green ≥80%, yellow ≥50%, red \<50%).
+- On label change: a persistent event line prints below the panel.
+- Connection health badge: yellow text on top line when `set_status()` is set.
+- Terminal width: re-checked every 1s in TTY mode via `_refresh_width()`.
+  Minimum 40 columns; default 72 columns (fits 80-col terminal).
 
 **Rationale:**
 
-- Zero new dependencies — stdlib only: `argparse`, ANSI escape codes, `\r`
-- Separate module (`lobe_server/output.py`) for testability: both formatters
-  accept parameters, use `sys.stderr`/`sys.stdout` directly, and avoid global
-  state
-- Color tiers give immediate confidence feedback without reading numbers;
-  `--no-color` supports terminals without ANSI (CI logs, headless)
-- `StdoutOutputFormatter` with `-v -v` matches `user` output frequency;
-  default (verbosity 0) is change-only to keep pipe volume low
+- One-line stats bar keeps everything visible without mode switching — the user
+  always sees both live detection and cumulative statistics.
+- 1-second width re-check is cheap (one `ioctl` syscall per frame) and catches
+  terminal resize within a second.
+- `shutil.get_terminal_size()` works on all three platforms.
 
 **Consequences:**
 
-- New module `lobe_server/output.py` (167 LOC, 2 formatters, 2 helper methods)
-- New `[UI]` config section in `settings.ini` with `OUTPUT_MODE` and
-  `COLOR_ENABLED` fields; `load_settings()` reads `[UI]` with fallback to
-  `[Settings]` for backward compat
-- Four new CLI arguments in `_parse_args()`; `_build_formatter()` routes
-  output mode to the matching formatter
-- Tests: `test_output.py` (99 lines, 2 test classes covering edge cases:
-  change events, confidence tiers, verbosity levels, camera errors, colors),
-  `test_entrypoint.py` (CLI parsing + formatter selection), `test_config.py`
-  (UI settings loading + invalid-`OUTPUT_MODE` validation)
-- Full mock-based coverage of both formatters
+- The screenshot render script (`render_screenshots.py`) must be updated when
+  the output format changes — the ANSI cursor-up sequences and line count must
+  match.
+- `_refresh_width()` is only called in TTY mode; non-TTY uses fixed 72-column.
+- 4-line panel is 4 rows in ~72 columns, fitting in any default terminal.
+- Stats bar content (`_stats_line`) uses a separate frequency-based color tier
+  from the confidence bar, to avoid visual confusion.
+
+#### Settings INI / CLI configuration
+
+| Source | Field | Values |
+|--------|-------|--------|
+| `settings.ini [UI]` | `OUTPUT_MODE` | `user` (default) or `stdout` |
+| `settings.ini [UI]` | `COLOR_ENABLED` | `true` (default) or `false` |
+| CLI `-o` / `--output-mode` | — | `user` or `stdout` (overrides INI) |
+| CLI `--no-color` | — | Disables ANSI color |
+| CLI `-v` / `--verbose` | — | Stackable, only in `stdout` mode |
+| CLI `--version` | — | Print version and exit |
+| CLI `--log-file` | — | Custom log file path (default `lobe_server.log`) |
+
+### [2026-09-18] Cross-platform output considerations
+
+**Context:** ANSI rendering differs across terminals and platforms. The console
+output formatter must work on Windows cmd/PowerShell, Linux xterm, and macOS
+Terminal.app — each with different Unicode support, ANSI support, and terminal
+width defaults.
+
+**Decisions:**
+
+| Consideration | Implementation | Tests |
+|---------------|---------------|-------|
+| Unicode glyphs | `_Unicode`/`_ASCII` switch based on `sys.stderr.encoding`. UTF-8 → Unicode, else ASCII | `test_ascii_glyphs` |
+| ANSI colors | `--no-color` flag + `COLOR_ENABLED` config. Color is auto-disabled if not a TTY | `test_disable_color_flag` |
+| Windows VT processing | `_enable_vt()` via `SetConsoleMode` with `ENABLE_VIRTUAL_TERMINAL_PROCESSING=0x0004` | Coverage OS-only |
+| Terminal width | `shutil.get_terminal_size()` at startup + every 1s in `_refresh_width()`. Default 72 cols, min 40 | `_refresh_width` test |
+| Non-TTY (systemd, nohup) | Buffered writes (`_buf` list), flushed on each `on_prediction`. No cursor control | `test_non_tty_initial_output` |
+| Broken pipe (stdout closed) | `contextlib.suppress(OSError)` around stdout writes | `test_broken_pipe` |
+| Change detection flash | `★` Unicode star (bold + color) on label changed within 1s. ASCII fallback `*` | `test_change_event_star` |
+
+### [2026-09-18] Screenshot generation dependency
+
+**Context:** The README includes screenshots (`screenshots-light.png`,
+`screenshots-dark.png`) showing live output. These must reflect the actual
+output format, or the README becomes misleading.
+
+**Decision:** The screenshot pipeline has two parts:
+
+1. `.tmp/gen_demo.py` — runs a fake prediction sequence through the formatter
+   and captures the ANSI output (encoding is preserved).
+1. `.tmp/render_screenshots.py` — parses the ANSI output, extracts the last
+   complete panel, and renders it as a PNG via Pillow with proper ANSI color
+   parsing.
+
+**Guardrail:** When the output format changes (line count, box-drawing
+characters, cursor-up sequence), BOTH scripts must be updated. The render
+script splits on `\033[4A\033[J` (the current cursor-up + clear sequence) and
+expects a 4-line panel matching the formatter's output.
+
+**Failure mode:** If the render script is not updated, the screenshots will
+show either (a) multiple overlaid frames (tall image), (b) the wrong number of
+lines, or (c) no visible text.
