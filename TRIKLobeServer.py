@@ -20,7 +20,7 @@ import logging
 import sys
 from pathlib import Path
 
-from lobe_server.config import load_settings, resolve_model_path
+from lobe_server.config import Settings, load_settings, resolve_model_path
 from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
 from lobe_server.server import LobeServer
 
@@ -90,6 +90,18 @@ def _build_formatter(
     return UserOutputFormatter(color_enabled=color_enabled)
 
 
+def _build_context(model_path: Path, settings: Settings) -> str:
+    """Build a context header shown at the top of user-mode output."""
+    model_name = model_path.name or "."
+    if settings.photo_url:
+        cam = f"URL {settings.photo_url}"
+    elif settings.get_images_from_robot:
+        cam = f"Robot {settings.server_ip}:8080"
+    else:
+        cam = f"Webcam #{settings.camera_number}"
+    return f"Model: {model_name}  │  Camera: {cam}  │  Server: {settings.server_ip}:{settings.server_port}"
+
+
 def main() -> None:
     _setup_file_logging()
     args = _parse_args()
@@ -107,6 +119,9 @@ def main() -> None:
 
     model_path = resolve_model_path(settings)
     logger.info("Model path: %s", model_path)
+
+    if isinstance(formatter, UserOutputFormatter):
+        formatter.set_context(_build_context(model_path, settings))
 
     server = LobeServer(settings, model_path, formatter=formatter)
     try:

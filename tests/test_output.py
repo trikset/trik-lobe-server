@@ -2,6 +2,7 @@
 # pyright: reportPrivateUsage=false
 # pylint: disable=W0212  # tests inspect private output methods
 
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -18,7 +19,9 @@ def _tty(fmt: UserOutputFormatter) -> Generator[None, None, None]:
         yield
 
 
-class TestUserOutputFormatter:
+class TestUserBasic:
+    """Core UserOutputFormatter tests: prediction, events, errors."""
+
     def test_first_prediction_no_change_event(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_prediction("cat", 0.92, 0.05)
@@ -125,6 +128,10 @@ class TestUserOutputFormatter:
         code, _block = fmt._confidence_tier(0.35)
         assert code == "\033[91m"
 
+
+class TestUserAdvanced:
+    """Advanced UserOutputFormatter tests: bars, fps, non-TTY, context."""
+
     def test_bar_high_confidence(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
         result = fmt._confidence_bar(0.9, width=10)
@@ -153,8 +160,36 @@ class TestUserOutputFormatter:
         assert stderr.count("\n") == 2  # two lines, each with \n
 
     def test_unused_code_is_detected(self) -> None:
-        # _enable_vt is Windows-only; coverage excludes it
         pass
+
+    def test_uptime_shows_seconds(self) -> None:
+        fmt = UserOutputFormatter(color_enabled=False)
+        result = fmt._uptime_str()
+        assert "s" in result
+        assert "m" in result
+
+    def test_uptime_shows_hours(self) -> None:
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt._start_time = time.monotonic() - 7260  # 2 hours 1 minute
+        result = fmt._uptime_str()
+        assert "h" in result
+        assert "2h" in result
+
+    def test_context_header_printed_on_first_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_context("Test context")
+        fmt.on_prediction("cat", 0.90, 0.05)
+        stderr = capsys.readouterr().err
+        assert "Test context" in stderr
+
+    def test_context_printed_once(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_context("Header")
+        fmt.on_prediction("cat", 0.90, 0.05)
+        capsys.readouterr()
+        fmt.on_prediction("cat", 0.90, 0.05)
+        stderr = capsys.readouterr().err
+        assert "Header" not in stderr
 
 
 class TestStdoutOutputFormatter:
