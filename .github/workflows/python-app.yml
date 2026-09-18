@@ -135,7 +135,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install opencode
-        run: npm install -g opencode-ai
+        run: |
+          npm install -g opencode-ai
+          echo "$(npm bin -g)" >> "$GITHUB_PATH"
       - name: Check for all tools
         uses: ./.github/actions/check-tools
         with:
