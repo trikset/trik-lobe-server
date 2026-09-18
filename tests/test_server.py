@@ -133,25 +133,28 @@ def test_predict_none(server: LobeServer, mock_camera: MagicMock, mock_model: Ma
 
 
 def test_predict_full_success(server: LobeServer) -> None:
-    label, conf = server._predict_full()
+    label, conf, labels = server._predict_full()
     assert label == "cat"
     assert conf == 0.924
+    assert labels is not None
 
 
 def test_predict_full_camera_failure(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     mock_camera.capture.return_value = None
-    label, conf = server._predict_full()
+    label, conf, labels = server._predict_full()
     assert label is None
     assert conf is None
+    assert labels is None
     mock_model.predict.assert_not_called()
 
 
 def test_predict_full_no_labels(server: LobeServer, mock_model: MagicMock) -> None:
     """When result.labels is empty, confidence defaults to 0.0."""
     mock_model.predict.return_value.labels = []
-    label, conf = server._predict_full()
+    label, conf, labels = server._predict_full()
     assert label == "cat"
     assert conf == 0.0
+    assert labels == []
 
 
 def test_shutdown(server: LobeServer) -> None:

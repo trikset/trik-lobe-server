@@ -61,14 +61,14 @@ class LobeServer:
             return "-1"
         return self._model.predict(im).prediction
 
-    def _predict_full(self) -> tuple[str | None, float | None]:
-        """Return (label, confidence) or (None, None) on camera failure."""
+    def _predict_full(self) -> tuple[str | None, float | None, list[tuple[str, float]] | None]:
+        """Return (label, confidence, labels) or (None, None, None) on camera failure."""
         im = self._camera.capture()
         if im is None:
-            return None, None
+            return None, None, None
         result = self._model.predict(im)
         confidence = result.labels[0][1] if result.labels else 0.0
-        return result.prediction, confidence
+        return result.prediction, confidence, result.labels
 
     async def _keepalive_loop(self, sock: socket.socket) -> None:
         while self._running:
@@ -78,7 +78,7 @@ class LobeServer:
     async def _prediction_loop(self, sock: socket.socket) -> None:
         while self._running:
             t0 = time.monotonic()
-            prediction, confidence = await asyncio.to_thread(self._predict_full)
+            prediction, confidence, labels = await asyncio.to_thread(self._predict_full)
             inference_s = time.monotonic() - t0
 
             payload = "-1" if prediction is None else prediction
@@ -86,12 +86,13 @@ class LobeServer:
 
             if self._formatter is not None:
                 if prediction is None:
-                    self._formatter.on_error(timing_s=inference_s)
+                    self._formatter.on_error(timing_s=inference_s, top_labels=labels)
                 else:
                     self._formatter.on_prediction(
                         label=prediction,
                         confidence=confidence if confidence is not None else 0.0,
                         timing_s=inference_s,
+                        top_labels=labels,
                     )
 
             await asyncio.sleep(self.PREDICTION_INTERVAL)
