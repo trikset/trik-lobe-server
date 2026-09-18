@@ -134,6 +134,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - name: Install opencode
         run: |
           npm install -g opencode-ai
