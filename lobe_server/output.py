@@ -126,6 +126,20 @@ class UserOutputFormatter:
         self._status: str | None = None
         self._stats: Counter[str] = Counter()
         self._buf: list[str] = []
+        self._last_width_check = 0.0
+
+    def _refresh_width(self) -> None:
+        """Re-check terminal width (may change on resize). Called once per frame."""
+        if not self._tty:
+            return
+        now = time.monotonic()
+        if now - self._last_width_check < 1.0:
+            return
+        self._last_width_check = now
+        with contextlib.suppress(ValueError, OSError):
+            cols = shutil.get_terminal_size().columns - 2
+            if cols >= 40:
+                self._width = cols
 
     def set_context(self, context: str) -> None:
         self._context = context
@@ -265,6 +279,7 @@ class UserOutputFormatter:
         top_labels: list[tuple[str, float]] | None = None,
     ) -> None:
         """Handle one prediction result."""
+        self._refresh_width()
         self._total_count += 1
         self._stats[label] += 1
         self._inference_times.append(timing_s)
