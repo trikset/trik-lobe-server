@@ -194,6 +194,6 @@ jobs:
           draft: true
           body_path: release-notes.md
           files: |
-            TRIKLobeServer-${{ github.ref_name }}-Windows.zip
-            TRIKLobeServer-${{ github.ref_name }}-Linux.tar.gz
-            TRIKLobeServer-${{ github.ref_name }}-macOS.tar.gz
+            pack/TRIKLobeServer-${{ github.ref_name }}-Windows.zip
+            pack/TRIKLobeServer-${{ github.ref_name }}-Linux.tar.gz
+            pack/TRIKLobeServer-${{ github.ref_name }}-macOS.tar.gz
