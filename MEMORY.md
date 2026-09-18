@@ -829,10 +829,10 @@ refreshed in-place via `\r`. The user experience review revealed:
 **Decision (evolution over three PRs):**
 
 1. **PR #119** — 1-line status (label + confidence + bar + FPS) refreshed via `\r`.
-2. **PR #119 (revision)** — btop-style 3-line box-drawing panel
+1. **PR #119 (revision)** — btop-style 3-line box-drawing panel
    (`╭─╮│╰─╯`) with cursor-up redraw (`\033[3A\033[J`). Change event lines
    below the panel.
-3. **PR #121 (current)** — 4-line panel adding a compact stats bar below the
+1. **PR #121 (current)** — 4-line panel adding a compact stats bar below the
    dashboard. Terminal width checked once per second (`_refresh_width`).
    Connection health badge via `set_status()`.
 
@@ -847,8 +847,8 @@ refreshed in-place via `\r`. The user experience review revealed:
 
 - Stats bar: one line below the dashboard. Shows top-4 labels with compact
   bars (width proportional to max count) and running count. No mode switching.
-- Color tiers: green ≥50% frequency, yellow ≥20%, red <20% (separate from
-  confidence tiers green ≥80%, yellow ≥50%, red <50%).
+- Color tiers: green ≥50% frequency, yellow ≥20%, red \<20% (separate from
+  confidence tiers green ≥80%, yellow ≥50%, red \<50%).
 - On label change: a persistent event line prints below the panel.
 - Connection health badge: yellow text on top line when `set_status()` is set.
 - Terminal width: re-checked every 1s in TTY mode via `_refresh_width()`.
@@ -913,7 +913,7 @@ output format, or the README becomes misleading.
 
 1. `.tmp/gen_demo.py` — runs a fake prediction sequence through the formatter
    and captures the ANSI output (encoding is preserved).
-2. `.tmp/render_screenshots.py` — parses the ANSI output, extracts the last
+1. `.tmp/render_screenshots.py` — parses the ANSI output, extracts the last
    complete panel, and renders it as a PNG via Pillow with proper ANSI color
    parsing.
 
