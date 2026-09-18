@@ -87,6 +87,26 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   install steps — verifies worker binaries and venv packages exist and logs
   versions, failing fast if a runner lost a tool (e.g. `zip`).
 
+### Release job known pitfalls
+
+The `release` job runs only on tag pushes (rare), so gaps surface late.
+Known issues from the v26.09.18 release:
+
+- **Missing `setup-uv`** — unlike `test` and `build` jobs, the `release` job
+  lacks `astral-sh/setup-uv@v7`. The "Check for all tools" step checks for
+  `uv` but fails because it's not on PATH. Fix: add the setup-uv step.
+- **`opencode` not on PATH** — `npm install -g opencode-ai` installs to a
+  global directory not in PATH when bash uses `--noprofile --norc`. Fix:
+  `echo "$(npm bin -g)" >> "$GITHUB_PATH"` after npm install.
+- **Packaging paths** — archives are created under `pack/` but must be
+  referenced with that prefix in both the `ls` verification and the release
+  action's `files:` patterns. The `test_release_docs.py` test strips the
+  prefix when checking README (users see basenames on GitHub).
+- **Tag signing** — GPG-signed tags show "Unverified" on GitHub unless the
+  public key was uploaded to GitHub → Settings → SSH and GPG keys *before*
+  the tag push. Delete and re-push the same tag to force re-verification
+  (signature is deterministic). Use `git tag -s` for signed tags.
+
 ### Runner notes
 
 - `windows-2019` and `macos-13` runners **no longer exist** on GitHub.
