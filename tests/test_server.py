@@ -288,6 +288,33 @@ async def test_prediction_loop_calls_formatter(
 
 
 @pytest.mark.asyncio
+async def test_run_forever_calls_set_status(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
+) -> None:
+    """run_forever calls formatter.set_status on connect/reconnect."""
+    formatter = MagicMock()
+    connect_fail = MagicMock()
+    connect_fail.side_effect = [ConnectionRefusedError, ConnectionRefusedError]
+
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("lobe_server.server.LobeServer._connect_once", connect_fail),
+        patch("lobe_server.server.asyncio.sleep", return_value=None),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+
+        async def stop_on_sleep(_seconds: float) -> None:
+            server.shutdown()
+
+        with patch.object(server, "RECONNECT_DELAY", 0.01), \
+             patch("lobe_server.server.asyncio.sleep", stop_on_sleep):
+            await server.run_forever()
+
+    assert formatter.set_status.call_count >= 2  # called on connect attempt + reconnect
+
+
+@pytest.mark.asyncio
 async def test_prediction_loop_calls_on_error_on_camera_failure(
     settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
 ) -> None:
@@ -419,6 +446,32 @@ async def test_run_forever_success(server: LobeServer) -> None:
         await server.run_forever()
 
     mock_sock.close.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_run_forever_success_sets_formatter_status(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
+) -> None:
+    """Successful connect triggers set_status(None) to clear the badge."""
+    formatter = MagicMock()
+    mock_sock = MagicMock()
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+
+    async def handle_and_stop(_sock: object) -> None:
+        server._running = False
+
+    with (
+        patch.object(server, "_connect_once", return_value=mock_sock),
+        patch.object(server, "_handle_connection", side_effect=handle_and_stop),
+    ):
+        await server.run_forever()
+
+    # Should have set "connecting", then None (connected), then "reconnecting" on close
+    assert formatter.set_status.call_count >= 2
 
 
 @pytest.mark.asyncio

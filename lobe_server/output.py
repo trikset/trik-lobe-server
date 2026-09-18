@@ -4,10 +4,8 @@
 Console output formatters for per-detection feedback.
 
 Two modes:
-- UserOutputFormatter — btop/htop-style dashboard with box-drawing (stderr)
+- UserOutputFormatter — btop-style dashboard + compact stats bar (stderr)
 - StdoutOutputFormatter — tab-separated pipe-friendly output (stdout)
-
-Auto-detects TTY, ANSI, and Unicode support for cross-platform robustness.
 """
 
 from __future__ import annotations
@@ -18,19 +16,21 @@ import re
 import shutil
 import sys
 import time
-from collections import deque
+from collections import Counter, deque
 
 _CONF_TIER_HIGH = 0.8
 _CONF_TIER_MID = 0.5
+_STATS_FREQ_HIGH = 0.5
+_STATS_FREQ_MID = 0.2
 _STDOUT_EVERY_DETECTION = 2
 _BOX_WIDTH = 72
 _MIN_BAR_WIDTH = 10
+_STATS_LINE_LABELS = 4  # labels shown on the compact stats bar
+_SHORT_LABEL_LEN = 4
 
 _WIN = os.name == "nt"
 _ENCODING = getattr(sys.stderr, "encoding", "") or ""
 _HAS_UNICODE = _ENCODING.lower() in ("utf-8", "utf8", "utf-16le", "utf-16", "utf-32")
-
-# Strip all ANSI escape sequences
 _ANSI_RE = re.compile(r"\033\[[0-9;]*[mK]")
 
 
@@ -61,26 +61,18 @@ class _ASCII:
 
 
 def _strip_ansi(text: str) -> str:
-    """Remove all ANSI escape sequences from a string."""
     return _ANSI_RE.sub("", text)
 
 
 def _visible_len(text: str) -> int:
-    """Length of text ignoring ANSI escape sequences."""
     return len(_strip_ansi(text))
 
 
 def _enable_vt() -> bool:  # pragma: no cover (Windows-only)
-    """
-    Enable ENABLE_VIRTUAL_TERMINAL_PROCESSING on Windows 10+.
-
-    Returns True if successful, False otherwise.
-    """
     if not _WIN:
         return True
     try:
         import ctypes as _ct  # noqa: PLC0415
-
         kernel32 = _ct.windll.kernel32  # type: ignore[attr-defined]
         handle = kernel32.GetStdHandle(-11)
         mode = _ct.c_ulong(0)
@@ -94,11 +86,12 @@ def _enable_vt() -> bool:  # pragma: no cover (Windows-only)
 
 
 class UserOutputFormatter:
-    r"""
-    btop/htop-style dashboard with box-drawing, colored bars, and top-N.
+    """
+    btop-style live dashboard (3 lines) + compact cumulative stats bar (1 line).
 
-    Prints a compact 3-line panel to stderr on every prediction. On label
-    change, appends a persistent event line below the panel.
+    The stats bar shows the top N labels with mini bars and counts. On label
+    change a persistent event line prints below the panel.
+    Connection status is shown as a badge on the top line.
     """
 
     _GREEN = "\033[92m"
@@ -116,10 +109,10 @@ class UserOutputFormatter:
         self._tty = sys.stderr.isatty()
         self._glyphs = _Unicode if _HAS_UNICODE else _ASCII
         self._width = _BOX_WIDTH
-        if _WIN and self._color and not _enable_vt():
-            self._color = False  # pragma: no cover  # ANSI not available on older Windows
+        if _WIN and self._color and not _enable_vt():  # pragma: no cover
+            self._color = False
         if self._tty:
-            with contextlib.suppress(ValueError, OSError):  # pragma: no cover (CI/headless terminal size)
+            with contextlib.suppress(ValueError, OSError):  # pragma: no cover
                 self._width = max(shutil.get_terminal_size().columns - 2, 40)
 
         self._prev_label: str | None = None
@@ -130,17 +123,34 @@ class UserOutputFormatter:
         self._first_output = True
         self._context: str | None = None
         self._last_change_time = 0.0
-        # Buffer non-TTY lines for batched writes
+        self._status: str | None = None
+        self._stats: Counter[str] = Counter()
         self._buf: list[str] = []
+        self._last_width_check = 0.0
+
+    def _refresh_width(self) -> None:
+        """Re-check terminal width (may change on resize). Called once per frame."""
+        if not self._tty:
+            return
+        now = time.monotonic()
+        if now - self._last_width_check < 1.0:
+            return
+        self._last_width_check = now
+        with contextlib.suppress(ValueError, OSError):
+            cols = shutil.get_terminal_size().columns - 2
+            if cols >= 40:  # noqa: PLR2004  # minimum terminal width for the box to fit
+                self._width = cols
 
     def set_context(self, context: str) -> None:
-        """Set context header shown above the dashboard on first output."""
         self._context = context
+
+    def set_status(self, status: str | None) -> None:
+        """Set a transient status shown as a badge on the top line."""
+        self._status = status
 
     # ---- helpers ----
 
     def _write(self, text: str) -> None:
-        """Write text to stderr, buffering in non-TTY mode."""
         if self._tty:
             sys.stderr.write(text)
             sys.stderr.flush()
@@ -148,7 +158,6 @@ class UserOutputFormatter:
             self._buf.append(text)
 
     def _flush_buf(self) -> None:
-        """Flush non-TTY buffer as a single write."""
         if self._buf:
             sys.stderr.write("".join(self._buf))
             self._buf = []
@@ -160,7 +169,6 @@ class UserOutputFormatter:
         return f"{code}{text}{self._RESET}"
 
     def _cb(self, code: str, text: str) -> str:
-        """Bold + color wrap."""
         if self._color:
             return self._c(self._BOLD, self._c(code, text))
         return f"*{text}*"
@@ -185,9 +193,9 @@ class UserOutputFormatter:
             parts.append(self._c(self._tier(conf), f"{lbl}({pct:.0f}%)"))
         return "  ".join(parts)
 
-    # ---- panel builders ----
+    # ---- dashboard panel (3 lines) ----
 
-    def _build_top_line(self, label: str, confidence: float, fps: float) -> str:  # pylint: disable=too-many-locals
+    def _dash_top(self, label: str, confidence: float, fps: float) -> str:  # pylint: disable=too-many-locals
         g = self._glyphs
         tier = self._tier(confidence)
         pct = self._c(tier, f"{confidence * 100:.1f}%")
@@ -201,19 +209,23 @@ class UserOutputFormatter:
 
         fps_str = f"fps:{fps:.1f}"
         cnt_str = f"#{self._total_count}"
-
         label_part = f" {lbl}  {pct} "
+
+        status_part = ""
+        if self._status:
+            status_part = f"  {g.PIPE}  {self._c(self._BOLD + self._YELLOW, self._status)}"
+
         metrics = f" {fps_str}  {g.PIPE}  {cnt_str}"
-        if self._prev_label is not None:
+        if self._prev_label is not None and not self._status:
             held = time.monotonic() - self._change_t0
             metrics += f"  {g.PIPE}  \u0394 {held:.1f}s"
 
         label_len = _visible_len(label_part)
-        gap = max(2, self._width - 4 - label_len - _visible_len(metrics))
+        gap = max(2, self._width - 4 - label_len - _visible_len(metrics) - _visible_len(status_part))
 
-        return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics} {g.DASH}{g.CORNER_TR}"
+        return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics}{status_part} {g.DASH}{g.CORNER_TR}"
 
-    def _build_mid_line(self, confidence: float, labels: list[tuple[str, float]] | None) -> str:
+    def _dash_mid(self, confidence: float, labels: list[tuple[str, float]] | None) -> str:
         g = self._glyphs
         inner_w = self._width - 4
         bar_w = inner_w
@@ -221,20 +233,41 @@ class UserOutputFormatter:
         if labels and len(labels) > 1:
             top_str = f"  {g.PIPE}  {self._top_n(labels[:2])}"
             bar_w = max(_MIN_BAR_WIDTH, inner_w - _visible_len(top_str))
-        bar_str = self._bar(confidence, bar_w)
-        return f"{g.PIPE}{g.DASH}{bar_str}{top_str}{g.DASH}{g.PIPE}"
+        return f"{g.PIPE}{g.DASH}{self._bar(confidence, bar_w)}{top_str}{g.DASH}{g.PIPE}"
 
-    def _build_bot_line(self) -> str:
+    def _pct_bar(self, ratio: float, width: int) -> str:
+        """Compact bar for the stats line — colored by frequency tier."""
+        filled = round(ratio * width)
+        empty = max(0, width - filled)
+        code = self._GREEN if ratio >= _STATS_FREQ_HIGH else (self._YELLOW if ratio >= _STATS_FREQ_MID else self._RED)
+        return self._c(code, self._glyphs.BLOCK_FULL * filled + self._glyphs.BLOCK_EMPTY * empty)
+
+    # ---- stats bar (1 line, below dashboard) ----
+
+    def _stats_line(self) -> str:
+        """Compact 1-line stats bar: top N labels with mini bars + counts."""
+        g = self._glyphs
+        sorted_s = sorted(self._stats.items(), key=lambda x: -x[1])
+        if not sorted_s:
+            return f"{g.PIPE}{'  (no data)'.ljust(self._width - 4)}{g.PIPE}"
+
+        inner_w = self._width - 4
+        slots = _STATS_LINE_LABELS
+        max_c = sorted_s[0][1]
+        parts: list[str] = []
+        for lbl, count in sorted_s[:slots]:
+            ratio = count / max_c
+            per_slot = min((inner_w - 2) // slots, 16)
+            short = lbl if len(lbl) <= _SHORT_LABEL_LEN else lbl[:3] + "."
+            bar_w = per_slot - len(short) - 6
+            bar_w = max(bar_w, 2)
+            bar_str = self._pct_bar(ratio, bar_w)
+            parts.append(f"{short}{bar_str}{count}")
+        return f"{g.PIPE}{'  '.join(parts).ljust(inner_w)}{g.PIPE}"
+
+    def _build_bot(self) -> str:
         g = self._glyphs
         return f"{g.CORNER_BL}{g.DASH * (self._width - 2)}{g.CORNER_BR}"
-
-    def _build_panel(
-        self, label: str, confidence: float, fps: float, labels: list[tuple[str, float]] | None
-    ) -> str:
-        top = self._build_top_line(label, confidence, fps)
-        mid = self._build_mid_line(confidence, labels)
-        bot = self._build_bot_line()
-        return f"{top}\n{mid}\n{bot}"
 
     # ---- main api ----
 
@@ -245,8 +278,10 @@ class UserOutputFormatter:
         timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,
     ) -> None:
-        """Handle one prediction result. Writes the btop dashboard to stderr."""
+        """Handle one prediction result."""
+        self._refresh_width()
         self._total_count += 1
+        self._stats[label] += 1
         self._inference_times.append(timing_s)
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
 
@@ -254,9 +289,7 @@ class UserOutputFormatter:
         if self._prev_label is not None and label != self._prev_label:
             held_s = time.monotonic() - self._change_t0
             g = self._glyphs
-            top_str = ""
-            if top_labels:
-                top_str = f"  |  {self._top_n(top_labels)}"
+            top_str = f"  |  {self._top_n(top_labels)}" if top_labels else ""
             change_event = (
                 f"{g.DASH * 2} {self._prev_label} {g.ARROW_R} {label}  "
                 f"{confidence * 100:.1f}%  "
@@ -272,20 +305,24 @@ class UserOutputFormatter:
         self._dets_since_change += 1
         self._prev_label = label
 
-        panel = self._build_panel(label, confidence, fps, top_labels)
+        panel = "\n".join([
+            self._dash_top(label, confidence, fps),
+            self._dash_mid(confidence, top_labels),
+            self._stats_line(),
+            self._build_bot(),
+        ])
 
         if self._first_output:
             self._first_output = False
             g = self._glyphs
             if self._context:
                 self._write(f"\n{self._context}\n{g.DASH * self._width}\n")
-            if self._tty:
-                self._write(f"{panel}\n")
-            else:
-                self._write(f"{panel}\n")
-                self._flush_buf()
-        elif self._tty:
-            self._write(f"\033[3A\033[J{panel}")
+            self._write(f"{panel}\n")
+            self._flush_buf()
+            return
+
+        if self._tty:
+            self._write(f"\033[4A\033[J{panel}\n")
         else:
             self._write(f"\n{panel}")
             self._flush_buf()
@@ -300,7 +337,6 @@ class UserOutputFormatter:
         top_labels: list[tuple[str, float]] | None = None,  # noqa: ARG002  # pylint: disable=unused-argument
     ) -> None:
         # pylint: disable=too-many-locals
-        """Camera failure: show error in the dashboard."""
         self._total_count += 1
         self._inference_times.append(timing_s)
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
@@ -317,17 +353,17 @@ class UserOutputFormatter:
         top = f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics} {g.DASH}{g.CORNER_TR}"
         bar_chars = self._c(self._RED, self._glyphs.BLOCK_FULL * _MIN_BAR_WIDTH)
         mid = f"{g.PIPE}{g.DASH}{bar_chars}  camera error{g.DASH}{g.PIPE}"
-        bot = f"{g.CORNER_BL}{g.DASH * (self._width - 2)}{g.CORNER_BR}"
-        panel = f"{top}\n{mid}\n{bot}"
+        panel = "\n".join([top, mid, self._stats_line(), self._build_bot()])  # noqa: FLY002
 
+        if self._first_output:
+            self._first_output = False
         if self._tty:
-            self._write(f"\033[3A\033[J{panel}")
+            self._write(f"\033[4A\033[J{panel}\n")
         else:
             self._write(f"\n{panel}")
             self._flush_buf()
 
     def close(self) -> None:
-        """Release the display by moving below the panel."""
         self._flush_buf()
         if self._tty:
             sys.stderr.write("\n\n\033[J")
@@ -335,32 +371,23 @@ class UserOutputFormatter:
 
 
 class StdoutOutputFormatter:
-    """
-    Tab-separated output for piping, printed to stdout.
-
-    Verbosity levels (``-v`` / ``-vv``):
-        0 — label + confidence on label change
-        1 — label + confidence + timing on label change
-        2 — label + confidence + timing on every detection
-    """
+    """Tab-separated output for piping. Verbosity: 0=change;1=+timing;2=every."""
 
     def __init__(self, verbose: int = 0) -> None:
         self._verbose = verbose
         self._prev_label: str | None = None
         self._total_count = 0
 
+    def set_status(self, status: str | None) -> None:
+        """No-op — stdout mode has no dashboard to display status on."""
+
     def on_prediction(
-        self,
-        label: str,
-        confidence: float,
-        timing_s: float,
+        self, label: str, confidence: float, timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,  # noqa: ARG002  # pylint: disable=unused-argument
     ) -> None:
-        """Handle one prediction result. May print to stdout."""
         self._total_count += 1
         is_change = self._prev_label is not None and label != self._prev_label
         self._prev_label = label
-
         if self._verbose >= _STDOUT_EVERY_DETECTION or is_change or self._total_count == 1:
             timing_ms = round(timing_s * 1000)
             with contextlib.suppress(OSError):
@@ -371,11 +398,10 @@ class StdoutOutputFormatter:
                 sys.stdout.flush()
 
     def on_error(self, timing_s: float, top_labels: list[tuple[str, float]] | None = None) -> None:  # noqa: ARG002  # pylint: disable=unused-argument
-        """Camera failure. Suppressed unless verbose."""
         if self._verbose >= 1:
             timing_ms = round(timing_s * 1000)
             with contextlib.suppress(OSError):
                 print(f"-1\t0.000\t{timing_ms}ms", file=sys.stdout)  # noqa: T201
 
     def close(self) -> None:
-        """No-op — stdout needs no newline release."""
+        pass
