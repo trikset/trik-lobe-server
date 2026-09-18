@@ -323,6 +323,26 @@ async def test_prediction_loop_no_formatter_still_sends(
 
 
 @pytest.mark.asyncio
+async def test_prediction_loop_continues_on_formatter_error(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    """Formatters that raise should not break the detection loop."""
+    sock, reader = real_sock_pair
+    formatter = MagicMock()
+    formatter.on_prediction.side_effect = RuntimeError("boom")
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+    server._running = True
+
+    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
+    assert data == b"8:data:cat"  # detection still sent despite formatter error
+
+
+@pytest.mark.asyncio
 async def test_handle_connection_closes_formatter(
     settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
 ) -> None:

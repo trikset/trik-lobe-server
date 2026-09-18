@@ -34,10 +34,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _setup_file_logging() -> None:
+def _setup_file_logging(log_path: Path | None = None) -> None:
     """Add a file handler so double-click users can always find logs."""
+    target = log_path or _LOG_FILE
     try:
-        handler = logging.FileHandler(_LOG_FILE, encoding="utf-8", mode="a")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(str(target), encoding="utf-8", mode="a")
         handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
         logging.getLogger().addHandler(handler)
     except OSError:
@@ -74,6 +76,12 @@ def _parse_args() -> argparse.Namespace:
         action="version",
         version=f"%(prog)s {_get_version()}",
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to log file (default: lobe_server.log next to executable)",
+    )
     return parser.parse_args()
 
 
@@ -103,9 +111,10 @@ def _build_context(model_path: Path, settings: Settings) -> str:
 
 
 def main() -> None:
-    _setup_file_logging()
     args = _parse_args()
-    logger.info("Starting program (log: %s)", _LOG_FILE)
+    log_file = Path(args.log_file) if args.log_file else _LOG_FILE
+    _setup_file_logging(log_file)
+    logger.info("Starting program (log: %s)", log_file)
     try:
         settings = load_settings()
     except FileNotFoundError as _:
