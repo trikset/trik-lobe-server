@@ -106,3 +106,36 @@ def test_resolve_model_path_frozen() -> None:
     ):
         result = resolve_model_path(settings)
     assert result == Path("C:\\fake\\server.exe").parent.resolve()
+
+
+def test_load_settings_ui_section_parsed(ini_path: Path) -> None:
+    content = dedent("""\
+        [Settings]
+        SERVER_IP=127.0.0.1
+        [UI]
+        OUTPUT_MODE=stdout
+        COLOR_ENABLED=false
+    """)
+    ini_path.write_text(content, encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.output_mode == "stdout"
+    assert s.color_enabled is False
+
+
+def test_load_settings_ui_defaults_when_missing(ini_path: Path) -> None:
+    ini_path.write_text("[Settings]\nSERVER_IP=127.0.0.1\n", encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.output_mode == "user"
+    assert s.color_enabled is True
+
+
+def test_load_settings_invalid_output_mode(ini_path: Path) -> None:
+    content = dedent("""\
+        [Settings]
+        SERVER_IP=127.0.0.1
+        [UI]
+        OUTPUT_MODE=invalid
+    """)
+    ini_path.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"OUTPUT_MODE"):
+        load_settings(ini_path)

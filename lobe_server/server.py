@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 import socket
+import time
 from typing import TYPE_CHECKING
 
 from lobe_server.camera import CameraSource, create_camera
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from lobe_server.config import Settings
+    from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +31,18 @@ class LobeServer:
     CONNECTION_RETRY_DELAY = 0.1
     CONNECTION_ERROR_LIMIT = 3  # consecutive OSErrors before declaring the socket dead
 
-    def __init__(self, settings: Settings, model_path: Path) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        model_path: Path,
+        formatter: UserOutputFormatter | StdoutOutputFormatter | None = None,
+    ) -> None:
         self._settings = settings
         self._model = load_model(str(model_path))
         self._camera: CameraSource = create_camera(settings, settings.server_ip)
         self._lock = asyncio.Lock()
         self._running = False
+        self._formatter = formatter
 
     async def _send(self, sock: socket.socket, msg: str) -> None:
         data = format_message(msg)
@@ -53,6 +61,15 @@ class LobeServer:
             return "-1"
         return self._model.predict(im).prediction
 
+    def _predict_full(self) -> tuple[str | None, float | None, list[tuple[str, float]] | None]:
+        """Return (label, confidence, labels) or (None, None, None) on camera failure."""
+        im = self._camera.capture()
+        if im is None:
+            return None, None, None
+        result = self._model.predict(im)
+        confidence = result.labels[0][1] if result.labels else 0.0
+        return result.prediction, confidence, result.labels
+
     async def _keepalive_loop(self, sock: socket.socket) -> None:
         while self._running:
             await self._send(sock, "keepalive")
@@ -60,8 +77,24 @@ class LobeServer:
 
     async def _prediction_loop(self, sock: socket.socket) -> None:
         while self._running:
-            prediction = await asyncio.to_thread(self._predict)
-            await self._send_message(sock, prediction)
+            t0 = time.monotonic()
+            prediction, confidence, labels = await asyncio.to_thread(self._predict_full)
+            inference_s = time.monotonic() - t0
+
+            payload = "-1" if prediction is None else prediction
+            await self._send_message(sock, payload)
+
+            if self._formatter is not None:
+                if prediction is None:
+                    self._formatter.on_error(timing_s=inference_s, top_labels=labels)
+                else:
+                    self._formatter.on_prediction(
+                        label=prediction,
+                        confidence=confidence if confidence is not None else 0.0,
+                        timing_s=inference_s,
+                        top_labels=labels,
+                    )
+
             await asyncio.sleep(self.PREDICTION_INTERVAL)
 
     async def _reader(self, sock: socket.socket) -> None:
@@ -127,6 +160,8 @@ class LobeServer:
         for t in pending:
             t.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        if self._formatter is not None:
+            self._formatter.close()
 
     async def _connect_once(self) -> socket.socket:
         sock = socket.socket()

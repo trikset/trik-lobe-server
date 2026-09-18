@@ -815,3 +815,50 @@ maintained through rules — so rationale is the gold and must never be deleted.
   error is new, add it to the Root cause analysis section (AGENTS.md
   "Process improvement") rather than leaving the taxonomy stale. *(Rule
   preserved from the pre-compaction "On tool error" hook.)*
+
+### [2026-09-18] Console output per detection
+
+**Context:** Server previously had zero per-detection output during normal
+operation. The user saw the startup banner, then silence until error or
+shutdown. No way to tell if the server was running, what it was seeing, or
+pipe results into external tools.
+
+**Decision:** Two output formatters in a new `lobe_server/output.py` module:
+
+- **`UserOutputFormatter`** — prints an ANSI-colored live status line to
+  stderr, refreshed in-place via `\r`. Shows label, confidence (%), a 10-block
+  bar, FPS, detection count, and time since last label change. On label change,
+  prints a persistent event line above the live line. Color tiers: green >=80%,
+  yellow >=50%, red \<50%.
+- **`StdoutOutputFormatter`** — prints tab-separated fields to stdout for
+  piping. Verbosity levels: 0 = label + confidence on change only; 1 = add
+  timing; 2 = every detection.
+
+Configurable via CLI flags in `TRIKLobeServer.py` (`-o`/`--output-mode`,
+`--no-color`, `-v`/`--verbose`, `--version`) and `settings.ini` `[UI]` section
+(`OUTPUT_MODE`, `COLOR_ENABLED`).
+
+**Rationale:**
+
+- Zero new dependencies — stdlib only: `argparse`, ANSI escape codes, `\r`
+- Separate module (`lobe_server/output.py`) for testability: both formatters
+  accept parameters, use `sys.stderr`/`sys.stdout` directly, and avoid global
+  state
+- Color tiers give immediate confidence feedback without reading numbers;
+  `--no-color` supports terminals without ANSI (CI logs, headless)
+- `StdoutOutputFormatter` with `-v -v` matches `user` output frequency;
+  default (verbosity 0) is change-only to keep pipe volume low
+
+**Consequences:**
+
+- New module `lobe_server/output.py` (167 LOC, 2 formatters, 2 helper methods)
+- New `[UI]` config section in `settings.ini` with `OUTPUT_MODE` and
+  `COLOR_ENABLED` fields; `load_settings()` reads `[UI]` with fallback to
+  `[Settings]` for backward compat
+- Four new CLI arguments in `_parse_args()`; `_build_formatter()` routes
+  output mode to the matching formatter
+- Tests: `test_output.py` (99 lines, 2 test classes covering edge cases:
+  change events, confidence tiers, verbosity levels, camera errors, colors),
+  `test_entrypoint.py` (CLI parsing + formatter selection), `test_config.py`
+  (UI settings loading + invalid-`OUTPUT_MODE` validation)
+- Full mock-based coverage of both formatters

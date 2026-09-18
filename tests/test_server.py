@@ -31,6 +31,7 @@ def mock_model() -> MagicMock:
     model = MagicMock()
     prediction = MagicMock()
     prediction.prediction = "cat"
+    prediction.labels = [("cat", 0.924)]
     model.predict.return_value = prediction
     return model
 
@@ -131,6 +132,31 @@ def test_predict_none(server: LobeServer, mock_camera: MagicMock, mock_model: Ma
     mock_model.predict.assert_not_called()
 
 
+def test_predict_full_success(server: LobeServer) -> None:
+    label, conf, labels = server._predict_full()
+    assert label == "cat"
+    assert conf == 0.924
+    assert labels is not None
+
+
+def test_predict_full_camera_failure(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
+    mock_camera.capture.return_value = None
+    label, conf, labels = server._predict_full()
+    assert label is None
+    assert conf is None
+    assert labels is None
+    mock_model.predict.assert_not_called()
+
+
+def test_predict_full_no_labels(server: LobeServer, mock_model: MagicMock) -> None:
+    """When result.labels is empty, confidence defaults to 0.0."""
+    mock_model.predict.return_value.labels = []
+    label, conf, labels = server._predict_full()
+    assert label == "cat"
+    assert conf == 0.0
+    assert labels == []
+
+
 def test_shutdown(server: LobeServer) -> None:
     assert server._running is False
     server._running = True
@@ -227,6 +253,96 @@ async def test_handle_connection(running_server: LobeServer, real_sock_pair: _So
 
 
 def test_load_model(settings: Settings) -> None:
+    mock_img_model = MagicMock()
+
+    with patch("lobe_server.server.load_model", return_value=mock_img_model):
+        server = _make_server(settings, mock_img_model, MagicMock())
+    assert server._model is mock_img_model
+
+
+def test_formatter_passed_to_server(settings: Settings) -> None:
+    formatter = MagicMock()
+    with (
+        patch("lobe_server.server.load_model", return_value=MagicMock()),
+        patch("lobe_server.server.create_camera", return_value=MagicMock()),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+    assert server._formatter is formatter
+
+
+@pytest.mark.asyncio
+async def test_prediction_loop_calls_formatter(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, _reader = real_sock_pair
+    formatter = MagicMock()
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+    server._running = True
+
+    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    formatter.on_prediction.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_prediction_loop_calls_on_error_on_camera_failure(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, _reader = real_sock_pair
+    mock_camera.capture.return_value = None
+    formatter = MagicMock()
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+    server._running = True
+
+    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    formatter.on_error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_prediction_loop_no_formatter_still_sends(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock())
+    server._running = True
+
+    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
+    assert data == b"8:data:cat"
+
+
+@pytest.mark.asyncio
+async def test_handle_connection_closes_formatter(
+    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock, real_sock_pair: _SockPair
+) -> None:
+    sock, reader = real_sock_pair
+    formatter = MagicMock()
+    with (
+        patch("lobe_server.server.load_model", return_value=mock_model),
+        patch("lobe_server.server.create_camera", return_value=mock_camera),
+    ):
+        server = LobeServer(settings, MagicMock(), formatter=formatter)
+    server._running = True
+
+    async def send_quit() -> None:
+        await asyncio.sleep(0.2)
+        await asyncio.get_running_loop().sock_sendall(reader, b"9:data:quit")
+
+    with patch.object(socket.socket, "getsockname", return_value=("127.0.0.1", 8889)):
+        await asyncio.gather(server._handle_connection(sock), send_quit())
+    server._running = False
+    formatter.close.assert_called_once()
     mock_img_model = MagicMock()
 
     with patch("lobe_server.server.load_model", return_value=mock_img_model):
