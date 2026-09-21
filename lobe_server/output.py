@@ -24,6 +24,7 @@ _STATS_FREQ_HIGH = 0.5
 _STATS_FREQ_MID = 0.2
 _STDOUT_EVERY_DETECTION = 2
 _BOX_WIDTH = 72
+_MAX_WIDTH = 120  # cap to prevent panel wrapping on huge terminal buffers
 _MIN_BAR_WIDTH = 10
 _STATS_LINE_LABELS = 4  # labels shown on the compact stats bar
 _SHORT_LABEL_LEN = 4
@@ -109,11 +110,16 @@ class UserOutputFormatter:
         self._tty = sys.stderr.isatty()
         self._glyphs = _Unicode if _HAS_UNICODE else _ASCII
         self._width = _BOX_WIDTH
-        if _WIN and self._color and not _enable_vt():  # pragma: no cover
-            self._color = False
+        self._raw_width = _BOX_WIDTH
+        self._vt_ok = True
+        if _WIN:  # pragma: no cover
+            self._vt_ok = _enable_vt()
+            if self._color and not self._vt_ok:
+                self._color = False
         if self._tty:
             with contextlib.suppress(ValueError, OSError):  # pragma: no cover
-                self._width = max(shutil.get_terminal_size().columns - 2, 40)
+                self._raw_width = max(shutil.get_terminal_size().columns - 2, 40)
+                self._width = min(self._raw_width, _MAX_WIDTH)
 
         self._prev_label: str | None = None
         self._total_count = 0
@@ -139,7 +145,13 @@ class UserOutputFormatter:
         with contextlib.suppress(ValueError, OSError):
             cols = shutil.get_terminal_size().columns - 2
             if cols >= 40:  # noqa: PLR2004  # minimum terminal width for the box to fit
-                self._width = cols
+                self._raw_width = cols
+                self._width = min(cols, _MAX_WIDTH)
+
+    def _diagnostic(self) -> str:
+        """Compact terminal diagnostic: Wraw→capped+encoding+VT+COL."""
+        enc = (getattr(sys.stderr, "encoding", "") or "?").upper().replace("-", "")
+        return "+".join([f"W{self._raw_width}>{self._width}", enc, f"VT{int(self._vt_ok)}", f"COL{int(self._color)}"])
 
     def set_context(self, context: str) -> None:
         self._context = context
@@ -221,9 +233,18 @@ class UserOutputFormatter:
             metrics += f"  {g.PIPE}  \u0394 {held:.1f}s"
 
         label_len = _visible_len(label_part)
-        gap = max(2, self._width - 4 - label_len - _visible_len(metrics) - _visible_len(status_part))
-
-        return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics}{status_part} {g.DASH}{g.CORNER_TR}"
+        diag = self._diagnostic()
+        diag_len = _visible_len(diag)
+        inner_w = self._width - 4
+        # left side: label, right side: metrics + status + diagnostic
+        right_part = f"{metrics}{status_part}"
+        right_len = _visible_len(right_part)
+        # If room for diagnostic + separators, include it
+        if label_len + right_len + diag_len + 4 <= inner_w:
+            gap = max(1, inner_w - label_len - right_len - diag_len - 2)
+            return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{right_part} {diag} {g.DASH}{g.CORNER_TR}"
+        gap = max(1, inner_w - label_len - right_len)
+        return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{right_part} {g.DASH}{g.CORNER_TR}"
 
     def _dash_mid(self, confidence: float, labels: list[tuple[str, float]] | None) -> str:
         g = self._glyphs
