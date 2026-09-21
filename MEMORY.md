@@ -33,9 +33,16 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   `data:quit` for shutdown, and `keepalive` every 3s from the robot —
   hardcoded in `trikNetwork/src/connection.cpp`, never negotiated.
 - `_reader` is the sole health monitor: breaks on empty recv or `RECV_TIMEOUT`
-  (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
-  outbound-only — death detection is the reader's job. Full strategy and the
-  `_send` guardrail are in "Connection health detection strategy".
+   (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
+   outbound-only — death detection is the reader's job. Full strategy and the
+   `_send` guardrail are in "Connection health detection strategy".
+- **Network interfaces**: `LobeServer` is a TCP client only — it never listens
+  on any port. Outgoing connections to `ROBOT_IP:ROBOT_PORT` are routed by the
+  OS through whichever interface(s) can reach that IP. If the host has multiple
+  interfaces (WiFi + Ethernet), no configuration is needed beyond a reachable
+  `ROBOT_IP`. There is no `bind` or `listen` — the "server" in the name refers
+  to its role as an inference server for the connected system, not a network
+  server.
 
 ## CI quirks
 

@@ -32,7 +32,7 @@ def test_load_settings_full(ini_path: Path) -> None:
     ini_path.write_text(_SAMPLE, encoding="utf-8")
     s = load_settings(ini_path)
     assert s.robot_ip == "192.168.1.10"
-    assert s.robot_hull == 5
+    assert s.my_hull_number == 5
     assert s.robot_port == 9999
     assert s.robot_video_port == 8081
     assert s.model_path == "C:\\models\\lobe"
@@ -43,7 +43,7 @@ def test_load_settings_minimal(ini_path: Path) -> None:
     ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\n", encoding="utf-8")
     s = load_settings(ini_path)
     assert s.robot_ip == "127.0.0.1"
-    assert s.robot_hull == 2
+    assert s.my_hull_number == 2
     assert s.robot_port == 8889
     assert s.robot_video_port == 8080
 
@@ -62,7 +62,7 @@ def test_load_settings_not_found() -> None:
         ("[Settings]\nROBOT_PORT=99999\n", r"ROBOT_PORT"),
         ("[Settings]\nROBOT_VIDEO_PORT=0\n", r"ROBOT_VIDEO_PORT"),
         ("[Settings]\nROBOT_VIDEO_PORT=70000\n", r"ROBOT_VIDEO_PORT"),
-        ("[Settings]\nROBOT_HULL=-1\n", r"ROBOT_HULL"),
+        ("[Settings]\nMY_HULL_NUMBER=-1\n", r"MY_HULL_NUMBER"),
     ],
 )
 def test_load_settings_validation_error(ini_path: Path, ini_content: str, match: str) -> None:
@@ -91,7 +91,7 @@ def test_load_settings_backward_compat_old_names(ini_path: Path) -> None:
     ini_path.write_text(content, encoding="utf-8")
     s = load_settings(ini_path)
     assert s.robot_ip == "10.0.0.1"
-    assert s.robot_hull == 7
+    assert s.my_hull_number == 7
     assert s.robot_port == 7777
     assert not s.camera_source  # empty means auto from ROBOT_IP
 

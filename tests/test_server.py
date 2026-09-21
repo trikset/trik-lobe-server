@@ -21,7 +21,7 @@ _SockPair = tuple[socket.socket, socket.socket]
 def settings() -> Settings:
     return Settings(
         robot_ip="127.0.0.1",
-        robot_hull=3,
+        my_hull_number=3,
         robot_port=8889,
     )
 

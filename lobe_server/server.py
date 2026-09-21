@@ -152,7 +152,7 @@ class LobeServer:
 
     async def _handle_connection(self, sock: socket.socket) -> None:
         port = sock.getsockname()[1]
-        hull = self._settings.robot_hull
+        hull = self._settings.my_hull_number
         await self._send(sock, make_command("register", port, hull))
         await self._send(sock, make_command("self", hull))
 

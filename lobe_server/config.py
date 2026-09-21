@@ -16,7 +16,7 @@ class Settings:
     robot_ip: str = "127.0.0.1"
     robot_port: int = 8889
     robot_video_port: int = 8080
-    robot_hull: int = 2
+    my_hull_number: int = 2
     model_path: str = ""
     camera_source: str = ""
     output_mode: str = "user"
@@ -54,13 +54,13 @@ def _fallback_port(s: configparser.SectionProxy) -> int:
 
 
 def _fallback_hull(s: configparser.SectionProxy) -> int:
-    """Read ROBOT_HULL with MY_HULL_NUMBER as backward-compat fallback."""
-    hull = _get_int(s, "ROBOT_HULL", 0)
+    """Read MY_HULL_NUMBER (this instance's identity) with ROBOT_HULL as backward-compat fallback."""
+    hull = _get_int(s, "MY_HULL_NUMBER", 0)
     if hull:
         return hull
-    old = _get_int(s, "MY_HULL_NUMBER", 2)
-    if old != 2:  # noqa: PLR2004  # backward-compat: user had a custom MY_HULL_NUMBER
-        _deprecated(s, "MY_HULL_NUMBER", "ROBOT_HULL")
+    old = _get_int(s, "ROBOT_HULL", 2)
+    if old != 2:  # noqa: PLR2004  # backward-compat: user had a custom ROBOT_HULL
+        _deprecated(s, "ROBOT_HULL", "MY_HULL_NUMBER")
     return old
 
 
@@ -109,9 +109,9 @@ def load_settings(path: Path | None = None) -> Settings:
         msg = f"ROBOT_VIDEO_PORT out of range (1-{_MAX_PORT}): {robot_video_port}"
         raise ValueError(msg)
 
-    robot_hull = _fallback_hull(s)
-    if robot_hull <= 0:
-        msg = f"ROBOT_HULL must be positive: {robot_hull}"
+    my_hull_number = _fallback_hull(s)
+    if my_hull_number <= 0:
+        msg = f"MY_HULL_NUMBER must be positive: {my_hull_number}"
         raise ValueError(msg)
 
     camera_source = _fallback_camera_source(s)
@@ -127,7 +127,7 @@ def load_settings(path: Path | None = None) -> Settings:
         robot_ip=robot_ip,
         robot_port=robot_port,
         robot_video_port=robot_video_port,
-        robot_hull=robot_hull,
+        my_hull_number=my_hull_number,
         model_path=s.get("MODEL_PATH", ""),
         camera_source=camera_source,
         output_mode=output_mode,
