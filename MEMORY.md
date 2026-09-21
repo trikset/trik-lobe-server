@@ -943,5 +943,62 @@ script splits on `\033[4A\033[J` (the current cursor-up + clear sequence) and
 expects a 4-line panel matching the formatter's output.
 
 **Failure mode:** If the render script is not updated, the screenshots will
-show either (a) multiple overlaid frames (tall image), (b) the wrong number of
-lines, or (c) no visible text.
+show either (a) multiple overlaid frames (tall image), (b) the wrong number
+of lines, or (c) no visible text.
+
+### [2026-09-18] Camera source redesign: unified CAMERA_SOURCE
+
+**Context:** Users were confused by 3 separate camera config fields
+(`GET_IMAGES_FROM_ROBOT`, `PHOTO_URL`, `CAMERA_NUMBER`) that are mutually
+exclusive. The robot streams video on multiple ports (video1=8080,
+video2=8081, video3=8082) — users had no way to select which port to use.
+
+**Decision:** Replace the 3 fields with a single `CAMERA_SOURCE` field. The
+dispatch logic in `create_camera()`:
+
+1. **Empty + `ROBOT_IP` set** → auto-construct robot camera URL:
+   `http://{ROBOT_IP}:{ROBOT_VIDEO_PORT}/?action=snapshot`
+2. **Empty + no `ROBOT_IP`** → fallback to first USB camera (`0`)
+3. **`http://` or `https://`** → URL camera with auth from `CAMERA_USER`/`CAMERA_PASS`
+4. **`rtsp://`** → RTSP stream via OpenCV `VideoCapture` (cross-platform, RTSP
+   support is bundled with cv2 wheels on all 3 platforms)
+5. **Numeric string** → USB camera by index (`cv2.VideoCapture(int(src))`)
+6. **Device path** (e.g. `/dev/video0`) → USB camera by device path
+
+Device path handling is platform-specific but OpenCV abstracts it: on Windows,
+`cv2.VideoCapture("0")` opens DirectShow camera 0; on Linux, `/dev/video0`
+works as a path string.
+
+**Lazy cv2 import:** `WebcamCamera` imports `cv2` inside `__init__` to avoid
+loading 50MB native DLLs when using URL or robot camera — this pattern is
+preserved. RTSP also goes through `WebcamCamera`, so cv2 is only loaded when
+actually needed.
+
+**Consequences:**
+- `GET_IMAGES_FROM_ROBOT`, `PHOTO_URL`, `CAMERA_NUMBER`, `USERNAME`,
+  `PASSWORD` config keys are deprecated. Read as fallbacks with startup log
+  if `CAMERA_SOURCE` is absent.
+- `RobotCamera.__init__` accepts `port` parameter (default `ROBOT_VIDEO_PORT`)
+- `WebcamCamera.__init__` accepts `int | str`
+- `create_camera()` signature simplified — no more `server_ip` parameter
+  (it reads from `settings.robot_ip`)
+
+### [2026-09-18] Config rename: SERVER_IP/SERVER_PORT → ROBOT_IP/ROBOT_PORT
+
+**Context:** Users didn't understand which port `SERVER_PORT` referred to.
+The name sounds like "this app's own port" but it's actually the TCP port of
+**the robot** where predictions are sent.
+
+**Decision:** Rename `SERVER_IP` → `ROBOT_IP` and `SERVER_PORT` → `ROBOT_PORT`.
+Add new `ROBOT_VIDEO_PORT` (default 8080). Keep old names as backward-compat
+fallbacks in `load_settings()` with a startup deprecation log. `MY_HULL_NUMBER`
+stays as-is — the lobe-server emulates a TRIK robot in the protocol layer, and
+the hull number is the emulated robot's identity.
+
+**CLI flags added:**
+```
+--robot-robot-ip IP        Robot IP (default from settings.ini)
+--robot-port PORT           Robot TCP port for predictions
+--robot-video-port PORT     Robot MJPEG video port (default 8080)
+--camera-source SOURCE      Camera source specifier
+```
