@@ -13,15 +13,12 @@ from lobe_server.config import load_settings, resolve_model_path
 _SAMPLE = dedent(
     """\
     [Settings]
-    SERVER_IP=192.168.1.10
-    MY_HULL_NUMBER=5
-    SERVER_PORT=9999
+    ROBOT_IP=192.168.1.10
+    ROBOT_HULL=5
+    ROBOT_PORT=9999
+    ROBOT_VIDEO_PORT=8081
     MODEL_PATH=C:\\models\\lobe
-    PHOTO_URL=http://camera.local/snapshot
-    GET_IMAGES_FROM_ROBOT=False
-    CAMERA_NUMBER=1
-    USERNAME=user
-    PASSWORD=pass
+    CAMERA_SOURCE=0
     """
 )
 
@@ -34,23 +31,21 @@ def ini_path(tmp_path: Path) -> Path:
 def test_load_settings_full(ini_path: Path) -> None:
     ini_path.write_text(_SAMPLE, encoding="utf-8")
     s = load_settings(ini_path)
-    assert s.server_ip == "192.168.1.10"
+    assert s.robot_ip == "192.168.1.10"
     assert s.my_hull_number == 5
-    assert s.server_port == 9999
+    assert s.robot_port == 9999
+    assert s.robot_video_port == 8081
     assert s.model_path == "C:\\models\\lobe"
-    assert s.photo_url == "http://camera.local/snapshot"
-    assert s.get_images_from_robot is False
-    assert s.camera_number == 1
-    assert s.username == "user"
-    assert s.password == "pass"
+    assert s.camera_source == "0"
 
 
 def test_load_settings_minimal(ini_path: Path) -> None:
-    ini_path.write_text("[Settings]\nSERVER_IP=127.0.0.1\n", encoding="utf-8")
+    ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\n", encoding="utf-8")
     s = load_settings(ini_path)
-    assert s.server_ip == "127.0.0.1"
+    assert s.robot_ip == "127.0.0.1"
     assert s.my_hull_number == 2
-    assert s.server_port == 8889
+    assert s.robot_port == 8889
+    assert s.robot_video_port == 8080
 
 
 def test_load_settings_not_found() -> None:
@@ -62,11 +57,12 @@ def test_load_settings_not_found() -> None:
     ("ini_content", "match"),
     [
         ("[Other]\nfoo=1\n", r"Settings"),
-        ("[Settings]\nMY_HULL_NUMBER=abc\n", r"MY_HULL_NUMBER"),
-        ("[Settings]\nSERVER_PORT=70000\n", r"SERVER_PORT"),
-        ("[Settings]\nSERVER_PORT=0\n", r"SERVER_PORT"),
-        ("[Settings]\nMY_HULL_NUMBER=0\n", r"MY_HULL_NUMBER"),
-        ("[Settings]\nCAMERA_NUMBER=-1\n", r"CAMERA_NUMBER"),
+        ("[Settings]\nROBOT_PORT=abc\n", r"Invalid"),
+        ("[Settings]\nROBOT_PORT=70000\n", r"ROBOT_PORT"),
+        ("[Settings]\nROBOT_PORT=99999\n", r"ROBOT_PORT"),
+        ("[Settings]\nROBOT_VIDEO_PORT=0\n", r"ROBOT_VIDEO_PORT"),
+        ("[Settings]\nROBOT_VIDEO_PORT=70000\n", r"ROBOT_VIDEO_PORT"),
+        ("[Settings]\nMY_HULL_NUMBER=-1\n", r"MY_HULL_NUMBER"),
     ],
 )
 def test_load_settings_validation_error(ini_path: Path, ini_content: str, match: str) -> None:
@@ -81,6 +77,47 @@ def test_load_settings_default_path() -> None:
         pytest.raises(FileNotFoundError, match=r"settings\.ini"),
     ):
         load_settings()
+
+
+def test_load_settings_backward_compat_old_names(ini_path: Path) -> None:
+    """Old config keys (SERVER_IP, MY_HULL_NUMBER, SERVER_PORT) still work."""
+    content = dedent("""\
+        [Settings]
+        SERVER_IP=10.0.0.1
+        MY_HULL_NUMBER=7
+        SERVER_PORT=7777
+        GET_IMAGES_FROM_ROBOT=true
+    """)
+    ini_path.write_text(content, encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.robot_ip == "10.0.0.1"
+    assert s.my_hull_number == 7
+    assert s.robot_port == 7777
+    assert not s.camera_source  # empty means auto from ROBOT_IP
+
+
+def test_load_settings_backward_compat_photo_url(ini_path: Path) -> None:
+    """Old PHOTO_URL sets camera_source to URL."""
+    content = dedent("""\
+        [Settings]
+        SERVER_IP=127.0.0.1
+        PHOTO_URL=http://cam.local/snap
+    """)
+    ini_path.write_text(content, encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.camera_source == "http://cam.local/snap"
+
+
+def test_load_settings_backward_compat_camera_number(ini_path: Path) -> None:
+    """Old CAMERA_NUMBER sets camera_source to index string."""
+    content = dedent("""\
+        [Settings]
+        SERVER_IP=127.0.0.1
+        CAMERA_NUMBER=2
+    """)
+    ini_path.write_text(content, encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.camera_source == "2"
 
 
 def test_resolve_model_path_custom() -> None:
@@ -111,7 +148,7 @@ def test_resolve_model_path_frozen() -> None:
 def test_load_settings_ui_section_parsed(ini_path: Path) -> None:
     content = dedent("""\
         [Settings]
-        SERVER_IP=127.0.0.1
+        ROBOT_IP=127.0.0.1
         [UI]
         OUTPUT_MODE=stdout
         COLOR_ENABLED=false
@@ -123,7 +160,7 @@ def test_load_settings_ui_section_parsed(ini_path: Path) -> None:
 
 
 def test_load_settings_ui_defaults_when_missing(ini_path: Path) -> None:
-    ini_path.write_text("[Settings]\nSERVER_IP=127.0.0.1\n", encoding="utf-8")
+    ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\n", encoding="utf-8")
     s = load_settings(ini_path)
     assert s.output_mode == "user"
     assert s.color_enabled is True
@@ -132,7 +169,7 @@ def test_load_settings_ui_defaults_when_missing(ini_path: Path) -> None:
 def test_load_settings_invalid_output_mode(ini_path: Path) -> None:
     content = dedent("""\
         [Settings]
-        SERVER_IP=127.0.0.1
+        ROBOT_IP=127.0.0.1
         [UI]
         OUTPUT_MODE=invalid
     """)
