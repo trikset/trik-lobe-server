@@ -2,6 +2,7 @@
 # pyright: reportPrivateUsage=false
 # pylint: disable=W0212  # tests inspect private output methods
 
+import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -211,7 +212,7 @@ class TestUserAdvanced:
         assert "★" in stderr
 
     def test_tty_redraw_multiple(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Multiple predictions in TTY mode use cursor-up redraw."""
+        """Multiple predictions in TTY: each redraws in-place."""
         fmt = UserOutputFormatter(color_enabled=False)
         with _tty(fmt):
             fmt.on_prediction("cat", 0.90, 0.05)
@@ -220,6 +221,41 @@ class TestUserAdvanced:
             fmt.on_prediction("cat", 0.88, 0.06)
         stderr = capsys.readouterr().err
         assert "\033[4A" in stderr  # cursor-up escape
+
+    def test_width_caps_at_120(self) -> None:
+        """When terminal reports huge buffer width, formatter caps no higher than 120."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        with (
+            patch.object(fmt, "_tty", True),  # noqa: FBT003
+            patch("shutil.get_terminal_size", return_value=os.terminal_size((300, 24))),
+        ):
+            fmt._refresh_width()
+        assert fmt._raw_width == 298  # 300 - 2 (stderr margin)
+        assert fmt._width == 120
+
+    def test_diagnostic_shows_capped_width(self) -> None:
+        """Diagnostic string shows raw to capped width mapping."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        with (
+            patch.object(fmt, "_tty", True),  # noqa: FBT003
+            patch("shutil.get_terminal_size", return_value=os.terminal_size((300, 24))),
+        ):
+            fmt._refresh_width()
+        diag = fmt._diagnostic()
+        assert "W298" in diag
+        assert ">120" in diag
+
+    def test_diagnostic_on_top_line(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Diagnostic appears on top line when room allows, omitted otherwise."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        with (
+            patch.object(fmt, "_tty", True),  # noqa: FBT003
+            patch("shutil.get_terminal_size", return_value=os.terminal_size((150, 24))),
+        ):
+            fmt._refresh_width()
+        fmt.on_prediction("cat", 0.90, 0.05)
+        stderr = capsys.readouterr().err
+        assert "W148" in stderr  # 150 - 2 = 148 raw, capped to 120
 
 
 class TestStdoutOutputFormatter:
