@@ -20,9 +20,9 @@ _SockPair = tuple[socket.socket, socket.socket]
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
-        server_ip="127.0.0.1",
-        my_hull_number=3,
-        server_port=8889,
+        robot_ip="127.0.0.1",
+        robot_hull=3,
+        robot_port=8889,
     )
 
 
@@ -413,7 +413,7 @@ async def test_connect_once(server: LobeServer) -> None:
     mock_sock.setblocking.assert_called_once_with(False)  # noqa: FBT003
     mock_loop.sock_connect.assert_called_once_with(
         mock_sock,
-        (server._settings.server_ip, server._settings.server_port),
+        (server._settings.robot_ip, server._settings.robot_port),
     )
 
 

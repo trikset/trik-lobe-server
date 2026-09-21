@@ -40,7 +40,7 @@ class LobeServer:
     ) -> None:
         self._settings = settings
         self._model = load_model(str(model_path))
-        self._camera: CameraSource = create_camera(settings, settings.server_ip)
+        self._camera: CameraSource = create_camera(settings)
         self._lock = asyncio.Lock()
         self._running = False
         self._formatter = formatter
@@ -152,7 +152,7 @@ class LobeServer:
 
     async def _handle_connection(self, sock: socket.socket) -> None:
         port = sock.getsockname()[1]
-        hull = self._settings.my_hull_number
+        hull = self._settings.robot_hull
         await self._send(sock, make_command("register", port, hull))
         await self._send(sock, make_command("self", hull))
 
@@ -172,7 +172,7 @@ class LobeServer:
         sock = socket.socket()
         sock.setblocking(False)  # noqa: FBT003
         loop = asyncio.get_running_loop()
-        await loop.sock_connect(sock, (self._settings.server_ip, self._settings.server_port))
+        await loop.sock_connect(sock, (self._settings.robot_ip, self._settings.robot_port))
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return sock
 
@@ -183,8 +183,8 @@ class LobeServer:
             try:
                 logger.info(
                     "Connecting to %s:%s",
-                    self._settings.server_ip,
-                    self._settings.server_port,
+                    self._settings.robot_ip,
+                    self._settings.robot_port,
                 )
                 if self._formatter is not None:
                     self._formatter.set_status("connecting")  # type: ignore[attr-defined]  # both formatters support set_status

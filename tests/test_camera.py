@@ -146,29 +146,56 @@ def test_webcam_camera_fail() -> None:
 
 def test_factory_url() -> None:
     settings = Settings(
-        photo_url="http://example.com/snapshot",
-        username="u",
-        password="p",
+        camera_source="http://example.com/snapshot",
     )
-    assert isinstance(create_camera(settings, "127.0.0.1"), UrlCamera)
+    assert isinstance(create_camera(settings), UrlCamera)
 
 
 def test_factory_robot() -> None:
     settings = Settings(
-        photo_url="",
-        get_images_from_robot=True,
+        camera_source="",
+        robot_ip="192.168.1.10",
     )
-    assert isinstance(create_camera(settings, "192.168.1.10"), RobotCamera)
+    assert isinstance(create_camera(settings), RobotCamera)
 
 
 def test_factory_webcam() -> None:
     settings = Settings(
-        photo_url="",
-        get_images_from_robot=False,
-        camera_number=2,
+        camera_source="2",
     )
     with patch.object(WebcamCamera, "__init__", return_value=None):
-        cam = create_camera(settings, "127.0.0.1")
+        cam = create_camera(settings)
+    assert isinstance(cam, WebcamCamera)
+
+
+def test_factory_rtsp() -> None:
+    """RTSP source creates WebcamCamera via OpenCV."""
+    settings = Settings(camera_source="rtsp://camera:554/stream")
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = create_camera(settings)
+    assert isinstance(cam, WebcamCamera)
+
+
+def test_factory_device_path() -> None:
+    """Device path source (e.g. /dev/video0) creates WebcamCamera."""
+    settings = Settings(camera_source="/dev/video0")
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = create_camera(settings)
+    assert isinstance(cam, WebcamCamera)
+
+
+def test_factory_auto_robot() -> None:
+    """Empty source + robot_ip creates RobotCamera."""
+    settings = Settings(camera_source="", robot_ip="10.0.0.1")
+    cam = create_camera(settings)
+    assert isinstance(cam, RobotCamera)
+
+
+def test_factory_auto_usb() -> None:
+    """Empty source + no robot_ip creates WebcamCamera 0."""
+    settings = Settings(camera_source="", robot_ip="")
+    with patch.object(WebcamCamera, "__init__", return_value=None):
+        cam = create_camera(settings)
     assert isinstance(cam, WebcamCamera)
 
 
@@ -192,7 +219,7 @@ def test_webcam_camera_init_not_opened() -> None:
     mock_cv2.VideoCapture.return_value = mock_capture
     mock_capture.isOpened.return_value = False
 
-    with patch.dict("sys.modules", {"cv2": mock_cv2}), pytest.raises(RuntimeError, match=r"Camera #5"):
+    with patch.dict("sys.modules", {"cv2": mock_cv2}), pytest.raises(RuntimeError, match=r"Camera source 5"):
         WebcamCamera(5)
 
 

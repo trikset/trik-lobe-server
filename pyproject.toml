@@ -78,6 +78,7 @@ typeCheckingMode = "strict"
 reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
+exclude = ["trik-lobe-server/**", ".tmp/**", "node_modules"]
 
 [tool.vulture]
 # TypedDict string-key access is invisible to vulture — `index` is read via

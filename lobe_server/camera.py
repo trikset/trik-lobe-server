@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_FAILURE_COOLDOWN = 2.0  # skip HTTP fetch for this long after a failure
+_FAILURE_COOLDOWN = 2.0
 
 
 def _within_cooldown(last_failure: float | None) -> bool:
@@ -32,7 +32,7 @@ class CameraSource(ABC):
 
 
 class UrlCamera(CameraSource):
-    def __init__(self, url: str, username: str = "", password: str = "") -> None:  # nosec B107  # empty-string default, not a secret
+    def __init__(self, url: str, username: str = "", password: str = "") -> None:  # nosec B107
         self._url = url
         self._auth: tuple[str, str] | None = None
         if username and password:
@@ -57,8 +57,8 @@ class UrlCamera(CameraSource):
 
 
 class RobotCamera(CameraSource):
-    def __init__(self, server_ip: str) -> None:
-        self._url = f"http://{server_ip}:8080/?action=snapshot"
+    def __init__(self, server_ip: str, port: int = 8080) -> None:
+        self._url = f"http://{server_ip}:{port}/?action=snapshot"
         self._last_failure: float | None = None
 
     def capture(self) -> Image.Image | None:
@@ -79,13 +79,13 @@ class RobotCamera(CameraSource):
 
 
 class WebcamCamera(CameraSource):
-    def __init__(self, camera_number: int) -> None:
-        import cv2 as _cv2  # noqa: PLC0415  # lazy: 50+ MB native DLLs, only WebcamCamera needs it
+    def __init__(self, source: int | str) -> None:
+        import cv2 as _cv2  # noqa: PLC0415
 
         self._cv2 = _cv2
-        self._camera = _cv2.VideoCapture(camera_number)
+        self._camera = _cv2.VideoCapture(source)
         if not self._camera.isOpened():
-            msg = f"Camera #{camera_number} not found or busy. Check CAMERA_NUMBER in settings.ini."
+            msg = f"Camera source {source!r} not found or busy. Check CAMERA_SOURCE in settings.ini."
             raise RuntimeError(msg)
 
     def capture(self) -> Image.Image | None:
@@ -100,9 +100,21 @@ class WebcamCamera(CameraSource):
         self._camera.release()
 
 
-def create_camera(settings: Settings, server_ip: str) -> CameraSource:
-    if settings.photo_url:
-        return UrlCamera(settings.photo_url, settings.username, settings.password)
-    if settings.get_images_from_robot:
-        return RobotCamera(server_ip)
-    return WebcamCamera(settings.camera_number)
+def create_camera(settings: Settings) -> CameraSource:
+    src = (settings.camera_source or "").strip()
+
+    if not src:
+        if settings.robot_ip:
+            return RobotCamera(settings.robot_ip, settings.robot_video_port)
+        return WebcamCamera(0)
+
+    if src.startswith(("http://", "https://")):
+        return UrlCamera(src)
+
+    if src.startswith("rtsp://"):
+        return WebcamCamera(src)
+
+    try:
+        return WebcamCamera(int(src))
+    except ValueError:
+        return WebcamCamera(src)

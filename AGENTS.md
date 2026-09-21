@@ -108,6 +108,10 @@ configurations, update this section and the referenced config files
 - The `v*` tag triggers the `release` job (3 platform binaries + DRAFT release
   with LLM-generated notes) — details: MEMORY.md CI quirks + `release-notes` skill
 - **Review/edit the draft notes**, then publish manually — never auto-published
+- **Never delete or re-push an existing tag without explicit user permission** — 
+  tags represent published releases; deleting destroys notes, artifacts, URLs
+- **Do not push release tags unless prompted** — release workflows auto-trigger
+  on tag push; only create/push tags when the user explicitly asks for a release
 
 ## Pre-commit hooks
 
