@@ -33,9 +33,9 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   `data:quit` for shutdown, and `keepalive` every 3s from the robot —
   hardcoded in `trikNetwork/src/connection.cpp`, never negotiated.
 - `_reader` is the sole health monitor: breaks on empty recv or `RECV_TIMEOUT`
-   (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
-   outbound-only — death detection is the reader's job. Full strategy and the
-   `_send` guardrail are in "Connection health detection strategy".
+  (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
+  outbound-only — death detection is the reader's job. Full strategy and the
+  `_send` guardrail are in "Connection health detection strategy".
 - **Network interfaces**: `LobeServer` is a TCP client only — it never listens
   on any port. Outgoing connections to `ROBOT_IP:ROBOT_PORT` are routed by the
   OS through whichever interface(s) can reach that IP. If the host has multiple
@@ -965,12 +965,12 @@ dispatch logic in `create_camera()`:
 
 1. **Empty + `ROBOT_IP` set** → auto-construct robot camera URL:
    `http://{ROBOT_IP}:{ROBOT_VIDEO_PORT}/?action=snapshot`
-2. **Empty + no `ROBOT_IP`** → fallback to first USB camera (`0`)
-3. **`http://` or `https://`** → URL camera with auth from `CAMERA_USER`/`CAMERA_PASS`
-4. **`rtsp://`** → RTSP stream via OpenCV `VideoCapture` (cross-platform, RTSP
+1. **Empty + no `ROBOT_IP`** → fallback to first USB camera (`0`)
+1. **`http://` or `https://`** → URL camera with auth from `CAMERA_USER`/`CAMERA_PASS`
+1. **`rtsp://`** → RTSP stream via OpenCV `VideoCapture` (cross-platform, RTSP
    support is bundled with cv2 wheels on all 3 platforms)
-5. **Numeric string** → USB camera by index (`cv2.VideoCapture(int(src))`)
-6. **Device path** (e.g. `/dev/video0`) → USB camera by device path
+1. **Numeric string** → USB camera by index (`cv2.VideoCapture(int(src))`)
+1. **Device path** (e.g. `/dev/video0`) → USB camera by device path
 
 Device path handling is platform-specific but OpenCV abstracts it: on Windows,
 `cv2.VideoCapture("0")` opens DirectShow camera 0; on Linux, `/dev/video0`
@@ -982,6 +982,7 @@ preserved. RTSP also goes through `WebcamCamera`, so cv2 is only loaded when
 actually needed.
 
 **Consequences:**
+
 - `GET_IMAGES_FROM_ROBOT`, `PHOTO_URL`, `CAMERA_NUMBER`, `USERNAME`,
   `PASSWORD` config keys are deprecated. Read as fallbacks with startup log
   if `CAMERA_SOURCE` is absent.
@@ -1003,6 +1004,7 @@ stays as-is — the lobe-server emulates a TRIK robot in the protocol layer, and
 the hull number is the emulated robot's identity.
 
 **CLI flags added:**
+
 ```
 --robot-robot-ip IP        Robot IP (default from settings.ini)
 --robot-port PORT           Robot TCP port for predictions
