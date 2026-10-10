@@ -132,17 +132,39 @@ def _build_context(model_path: Path, settings: Settings) -> str:
     return f"Model: {model_name}  │  Camera: {cam}  │  Robot: {settings.robot_ip}:{settings.robot_port}"
 
 
+def _load_settings_or_exit() -> Settings:
+    """Load settings with graceful error handling."""
+    try:
+        return load_settings()
+    except FileNotFoundError:
+        logger.exception("settings.ini not found")
+        _pause_for_user()
+        sys.exit(1)
+    except ValueError:
+        logger.exception("settings.ini has invalid values")
+        _pause_for_user()
+        sys.exit(1)
+
+
+def _create_server_or_exit(
+    settings: Settings, model_path: Path,
+    formatter: UserOutputFormatter | StdoutOutputFormatter,
+) -> LobeServer:
+    """Create server with graceful error handling on model load failure."""
+    try:
+        return LobeServer(settings, model_path, formatter=formatter)
+    except (RuntimeError, FileNotFoundError):
+        logger.exception("Failed to create server (check model file)")
+        _pause_for_user()
+        sys.exit(1)
+
+
 def main() -> None:
     args = _parse_args()
     log_file = Path(args.log_file) if args.log_file else _LOG_FILE
     _setup_file_logging(log_file)
     logger.info("Starting program (log: %s)", log_file)
-    try:
-        settings = load_settings()
-    except FileNotFoundError:
-        logger.exception("settings.ini not found")
-        _pause_for_user()
-        sys.exit(1)
+    settings = _load_settings_or_exit()
 
     if args.output_mode:
         settings.output_mode = args.output_mode
@@ -164,7 +186,8 @@ def main() -> None:
     if isinstance(formatter, UserOutputFormatter):
         formatter.set_context(_build_context(model_path, settings))
 
-    server = LobeServer(settings, model_path, formatter=formatter)
+    server = _create_server_or_exit(settings, model_path, formatter)
+
     try:
         asyncio.run(server.run_forever())
     except KeyboardInterrupt:
