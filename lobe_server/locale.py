@@ -16,7 +16,10 @@ simple English — only user-visible strings are translated.
 from __future__ import annotations
 
 import gettext
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 _RU: dict[str, str] = {
     # --- model.py ---
@@ -189,8 +192,8 @@ def detect_locale() -> str:
             code = lang.split("_")[0].split(".")[0]
             if code in ("ru", "es", "en"):
                 return code
-    except Exception:  # noqa: BLE001,S110
-        pass
+    except Exception:  # noqa: BLE001  # intentional — locale detection must never crash
+        logger.debug("Could not detect locale from environment, falling back to 'en'")
     return "en"
 
 
