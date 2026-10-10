@@ -30,7 +30,7 @@ def _get_int(section: configparser.SectionProxy, key: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
-        msg = f"Invalid {key} in settings.ini: {raw!r}"
+        msg = _("Invalid {key} in settings.ini: {raw!r}").format(key=key, raw=raw)
         raise ValueError(msg) from None
 
 
@@ -38,7 +38,7 @@ def _deprecated(section: configparser.SectionProxy, old: str, fallback: str) -> 
     """Read old key as fallback, log deprecation warning."""
     val = section.get(old)
     if val is not None:
-        logger.warning("settings.ini: %s is deprecated — use %s instead", old, fallback)
+        logger.warning(_("settings.ini: {old} is deprecated \u2014 use {new} instead").format(old=old, new=fallback))
     return val
 
 
@@ -87,13 +87,13 @@ def load_settings(path: Path | None = None) -> Settings:
         path = Path("settings.ini")
 
     if not path.exists():
-        msg = f"settings.ini not found at {path.resolve()}"
+        msg = _("settings.ini not found at {path}").format(path=path.resolve())
         raise FileNotFoundError(msg)
 
     config = configparser.ConfigParser()
     config.read(str(path), encoding="utf8")
     if "Settings" not in config:
-        msg = f"settings.ini at {path.resolve()} is missing the [Settings] section."
+        msg = _("settings.ini at {path} is missing the [Settings] section.").format(path=path.resolve())
         raise ValueError(msg)
     s = config["Settings"]
 
@@ -101,17 +101,17 @@ def load_settings(path: Path | None = None) -> Settings:
 
     robot_port = _fallback_port(s)
     if not 1 <= robot_port <= _MAX_PORT:
-        msg = f"ROBOT_PORT out of range (1-{_MAX_PORT}): {robot_port}"
+        msg = _("ROBOT_PORT out of range (1-{max}): {port}").format(max=_MAX_PORT, port=robot_port)
         raise ValueError(msg)
 
     robot_video_port = _get_int(s, "ROBOT_VIDEO_PORT", 8080)
     if not 1 <= robot_video_port <= _MAX_PORT:
-        msg = f"ROBOT_VIDEO_PORT out of range (1-{_MAX_PORT}): {robot_video_port}"
+        msg = _("ROBOT_VIDEO_PORT out of range (1-{max}): {port}").format(max=_MAX_PORT, port=robot_video_port)
         raise ValueError(msg)
 
     my_hull_number = _fallback_hull(s)
     if my_hull_number <= 0:
-        msg = f"MY_HULL_NUMBER must be positive: {my_hull_number}"
+        msg = _("MY_HULL_NUMBER must be positive: {hull}").format(hull=my_hull_number)
         raise ValueError(msg)
 
     camera_source = _fallback_camera_source(s)
@@ -119,7 +119,7 @@ def load_settings(path: Path | None = None) -> Settings:
     ui = config["UI"] if "UI" in config else config["Settings"]
     output_mode = ui.get("OUTPUT_MODE", "user")
     if output_mode not in ("user", "stdout"):
-        msg = f"Invalid OUTPUT_MODE in settings.ini: {output_mode!r}"
+        msg = _("Invalid OUTPUT_MODE in settings.ini: {mode!r}").format(mode=output_mode)
         raise ValueError(msg)
     color_enabled = ui.get("COLOR_ENABLED", "true").lower() == "true"
 

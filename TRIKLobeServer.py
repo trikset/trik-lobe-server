@@ -99,7 +99,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _pause_for_user() -> None:
     if sys.stdin is not None and sys.stdin.isatty():
-        input("Press any key to close the window...")
+        input(_("Press any key to close the window..."))
 
 
 def _build_formatter(
@@ -142,11 +142,11 @@ def _load_settings_or_exit() -> Settings:
     try:
         return load_settings()
     except FileNotFoundError:
-        logger.exception("settings.ini not found")
+        logger.exception(_("settings.ini not found"))
         _pause_for_user()
         sys.exit(1)
     except ValueError:
-        logger.exception("settings.ini has invalid values")
+        logger.exception(_("settings.ini has invalid values"))
         _pause_for_user()
         sys.exit(1)
 
@@ -159,7 +159,7 @@ def _create_server_or_exit(
     try:
         return LobeServer(settings, model_path, formatter=formatter)
     except (RuntimeError, FileNotFoundError):
-        logger.exception("Failed to create server (check model file)")
+        logger.exception(_("Failed to create server (check model file)"))
         _pause_for_user()
         sys.exit(1)
 
@@ -197,10 +197,10 @@ def main() -> None:
     try:
         asyncio.run(server.run_forever())
     except KeyboardInterrupt:
-        logger.info("Shutting down...")
+        logger.info(_("Shutting down..."))
     finally:
         server.close()
-        logger.info("Press any key to close the window...")
+        logger.info(_("Press any key to close the window..."))
         _pause_for_user()
 
 

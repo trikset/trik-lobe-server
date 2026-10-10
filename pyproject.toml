@@ -44,6 +44,8 @@ show_missing = true
 
 [tool.ruff]
 line-length = 120
+# `_` is installed as a builtin by setup_locale() (gettext), so ruff must not flag it as undefined
+builtins = ["_"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -72,6 +74,7 @@ extension-pkg-allow-list = ["cv2", "onnxruntime", "ai_edge_litert"]
 
 [tool.pylint.MASTER]
 ignore = [".venv"]
+additional-builtins = "_"  # `_` is a gettext builtin installed by setup_locale()
 
 [tool.basedpyright]
 typeCheckingMode = "strict"
@@ -84,4 +87,6 @@ exclude = ["trik-lobe-server/**", ".tmp/**", ".venv/**", "node_modules"]
 # TypedDict string-key access is invisible to vulture — `index` is read via
 # `details["index"]`, which vulture cannot trace (false positive)
 # `value` on ctypes.c_ulong is set, then consumed via the struct pointer
-ignore_names = ["index", "value"]
+# `_english_translations` — pytest autouse fixture, wired up by pytest itself,
+# so vulture sees it as unused (false positive)
+ignore_names = ["index", "value", "_english_translations"]
