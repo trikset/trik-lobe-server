@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block commits on main (except merge commits from PR squash).
+# Install: ln -sf ../../scripts/pre-commit-main-block .git/hooks/pre-commit
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$BRANCH" = "main" ]; then
+  echo "ERROR: Direct commits to main are forbidden."
+  echo "  Create a feature branch first: git switch --create feat/<name>"
+  exit 1
+fi
