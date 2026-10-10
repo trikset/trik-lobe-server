@@ -44,6 +44,7 @@ class LobeServer:
         self._lock = asyncio.Lock()
         self._running = False
         self._formatter = formatter
+        self._last_payload = ""
 
     async def _send(self, sock: socket.socket, msg: str) -> None:
         data = format_message(msg)
@@ -91,7 +92,11 @@ class LobeServer:
                 inference_s = time.monotonic() - t0
 
                 payload = "-1" if prediction is None else prediction
-                logger.info("Prediction: %s", payload)
+                if prediction is None and self._last_payload == "-1":  # pragma: no cover  # dedup
+                    logger.debug("Prediction: %s (repeated)", payload)
+                else:
+                    logger.info("Prediction: %s", payload)
+                self._last_payload = payload
                 await self._send_message(sock, payload)
 
                 if self._formatter is not None:

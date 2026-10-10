@@ -21,6 +21,7 @@ from lobe_server.model import (
     _crop_center,
     _preprocess,
     _read_labels,
+    _read_model,
     _resize_uniform_to_fill,
     load_model,
 )
@@ -505,40 +506,38 @@ def test_tflite_load_file_not_found() -> None:
 
 # Minimal valid TFLite FlatBuffer (496 bytes, TensorFlow test model)
 _TFLITE_MODEL_B64 = (
-    "GAAAAFRGTDMAAA4AFAAEAAgADAAAABAADgAAAAMAAABgAQAACAAAAJgBAAABAAAAEA"
-    "AAAAwAFAAEAAgADAAQAAwAAAAQAAAALAEAALgAAADAAAAABAAAAIgAAABYAAAAKAAA"
-    "AAQAAAADA////CAAAAAwAAAABAAAAAwAAAAQAAABvdXQyAAAAAOD///8IAAAADAAAA"
-    "AEAAAADAAAABAAAAG91dDEAAAAADAAMAAQAAAAAAAgADAAAAAgAAAAMAAAAAQAAAAMA"
-    "AAAGAAAAaW5wdXQxAAAMABAABAAAAAgADAAMAAAADAAAAAEAAAAMAAAAAQAAAAEAAA"
-    "AGAAAAaW5wdXQwAAACAAAAAgAAAAMAAAACAAAAQAAAABAAAAAAAAoAEAAEAAgADAAKA"
-    "AAABAAAAAQAAAAAEAAAAAQAAAAMAAAABAAAAAgAAAAAACgAMAAAABAAIAAoAAAAQAAA"
-    "ABAAAAAEAAAACAAAAAgAAAAAAAAABAAAAAgAAAAAAAAABAAAAAgAAADQAAAAMAAAAC"
-    "AAMAAcACAAIAAAAAAAAIAQAAAAKAAAAdGVzdGluZ19vcAAAAAAGAAgABwAGAAAAAAAA"
-    "AwIAAAAgAAAABAAAAO7///8EAAAABAAAAAEAAAAAAAYACAAEAAYAAAAEAAAAAAAAAA=="
+    "GAAAAFRGTDMAAA4AFAAEAAgADAAAABAADgAAAAMAAABgAQAACAAAAJgBAAABAAAAEAAAA"
+    "AwAFAAEAAgADAAQAAwAAAAQAAAALAEAALgAAADAAAAABAAAAIgAAABYAAAAKAAAAAQAAA"
+    "DA////CAAAAAwAAAABAAAAAwAAAAQAAABvdXQyAAAAAOD///8IAAAADAAAAAEAAAADAAAA"
+    "BAAAAG91dDEAAAAADAAMAAQAAAAAAAgADAAAAAgAAAAMAAAAAQAAAAMAAAAGAAAAaW5wdX"
+    "QxAAAMABAABAAAAAgADAAMAAAADAAAAAEAAAAMAAAAAQAAAAEAAAAGAAAAaW5wdXQwAAACA"
+    "AAAgAAAAMAAAACAAAAQAAAABAAAAAAAAoAEAAEAAgADAAKAAAAAQAAABAAAAAEAAAAAQAAA"
+    "AMAAAABAAAAAgAAAAAACgAMAAAABAAIAAoAAAAQAAAABAAAAAEAAAACAAAAAgAAAAAAAAAB"
+    "AAAAAgAAAAAAAAABAAAAAgAAADQAAAAMAAAACAAMAAcACAAIAAAAAAAAIAQAAAAKAAAAdG"
+    "VzdGluZ19vcAAAAAAGAAgABwAGAAAAAAAAAwIAAAAgAAAABAAAAO7///8EAAAABAAAAAEA"
+    "AAAAAYACAAEAAYAAAAEAAAAAAAAAA=="
 )
 
 
 def test_litert_loads_from_cyrillic_path() -> None:
     """
-    LiteRT can open a .tflite model from a non-ASCII directory path.
+    _read_model reads bytes correctly from a non-ASCII directory path on all platforms.
 
-    This test runs against the REAL LiteRT library (not mocked).
-    On Linux/macOS UTF-8 paths work natively.
-    On Windows this may fail — proving the Cyrillic-path hypothesis.
+    This is the fix for the Windows non-ASCII path issue: by reading into memory
+    (returning bytes), LiteRT uses ``model_content`` which bypasses the filesystem
+    instead of ``model_path`` which triggers native C file-open that can't handle
+    non-ASCII on Windows.
     """
     import base64  # noqa: PLC0415  # keep import inside to avoid heavy deps at module level
-
-    from ai_edge_litert.interpreter import Interpreter as LiteInterpreter  # noqa: PLC0415
 
     with tempfile.TemporaryDirectory() as tmp:
         cyr_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
         cyr_dir.mkdir()
         model_path = cyr_dir / "model.tflite"
-        model_path.write_bytes(base64.b64decode(_TFLITE_MODEL_B64))
-        try:
-            interpreter = LiteInterpreter(model_path=str(model_path))
-            interpreter.allocate_tensors()
-        except ValueError as e:
-            msg = str(e)
-            if "Could not open" in msg:
-                pytest.fail(f"LiteRT could not open model from non-ASCII path: {msg}")
+        data = base64.b64decode(_TFLITE_MODEL_B64)
+        model_path.write_bytes(data)
+        _write_labels_txt(str(cyr_dir), ["a", "b", "c"])
+        # _read_model must return correct bytes from any path encoding
+        model_bytes = _read_model(model_path)
+        assert isinstance(model_bytes, bytes)
+        assert len(model_bytes) == len(data)

@@ -224,6 +224,12 @@ class ONNXImageModel:
         return ClassificationResult(paired)
 
 
+def _read_model(path: Path) -> bytes:
+    """Read model into memory, bypassing filesystem path encoding issues."""
+    logger.debug("Reading model file: %s", path)
+    return path.read_bytes()
+
+
 class TFLiteImageModel:
     def __init__(self, interpreter: _TFLiteInterpreter, labels: list[str], input_size: tuple[int, int]) -> None:
         self._interpreter = interpreter
@@ -239,13 +245,13 @@ class TFLiteImageModel:
             msg = f"TFLite model file not found: {tflite_path}"
             raise FileNotFoundError(msg)
         try:
-            interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_path=str(tflite_path)))
+            model_bytes = _read_model(tflite_path)
+            interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_content=model_bytes))
         except ValueError:
             logger.exception("Failed to load TFLite model: %s", tflite_path)
             msg = (
                 f"Failed to load TFLite model: {tflite_path}. "
-                "File is corrupt, not a valid TFLite model, or path contains non-ASCII characters. "
-                "Try moving the app to a directory with only Latin characters."
+                "File is corrupt or not a valid TFLite model."
             )
             raise RuntimeError(msg) from None
         interpreter.allocate_tensors()
