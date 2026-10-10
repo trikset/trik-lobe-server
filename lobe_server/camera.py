@@ -85,7 +85,9 @@ class WebcamCamera(CameraSource):
         self._cv2 = _cv2
         self._camera = _cv2.VideoCapture(source)
         if not self._camera.isOpened():
-            msg = f"Camera source {source!r} not found or busy. Check CAMERA_SOURCE in settings.ini."
+            msg = _("Camera source {source!r} not found or busy. Check CAMERA_SOURCE in settings.ini.").format(
+                source=source
+            )
             raise RuntimeError(msg)
 
     def capture(self) -> Image.Image | None:
