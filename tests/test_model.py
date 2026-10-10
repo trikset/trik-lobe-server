@@ -430,6 +430,41 @@ def test_load_model_unicode_path() -> None:
     assert model._labels == ["a", "b", "c"]
 
 
+def test_load_model_tflite_unicode_path() -> None:
+    """TFLite model in Cyrillic directory loads successfully."""
+    tflite_mock = MagicMock()
+    tflite_mock.Interpreter.return_value = _make_tflite_interpreter()
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model.tflite", tflite_mock),
+    ):
+        model_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
+        model_dir.mkdir()
+        (model_dir / "model.tflite").write_bytes(b"fake tflite")
+        _write_labels_txt(str(model_dir), ["a", "b", "c"])
+        model = load_model(str(model_dir))
+
+    assert isinstance(model, TFLiteImageModel)
+    assert model._labels == ["a", "b", "c"]
+
+
+def test_load_model_unicode_path_prefers_onnx() -> None:
+    """Cyrillic directory with both .onnx and .tflite — ONNX is preferred."""
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        model_dir = Path(tmp) / "кириллица"
+        model_dir.mkdir()
+        (model_dir / "model.onnx").write_bytes(b"fake onnx")
+        (model_dir / "model.tflite").write_bytes(b"fake tflite")
+        _write_labels_txt(str(model_dir), ["a", "b"])
+        model = load_model(str(model_dir))
+
+    assert isinstance(model, ONNXImageModel)  # ONNX preferred over TFLite
+
+
 def test_tflite_load_valueerror_caught() -> None:
     """LiteRT ValueError is caught, logged, and re-raised as RuntimeError with context."""
     tflite_mock = MagicMock()
