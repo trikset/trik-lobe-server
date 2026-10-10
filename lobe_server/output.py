@@ -270,7 +270,7 @@ class UserOutputFormatter:
         g = self._glyphs
         sorted_s = sorted(self._stats.items(), key=lambda x: -x[1])
         if not sorted_s:
-            return f"{g.PIPE}{'  (no data)'.ljust(self._width - 4)}{g.PIPE}"
+            return f"{g.PIPE}{_('  (no data)').ljust(self._width - 4)}{g.PIPE}"
 
         inner_w = self._width - 4
         slots = _STATS_LINE_LABELS
@@ -314,7 +314,7 @@ class UserOutputFormatter:
             change_event = (
                 f"{g.DASH * 2} {self._prev_label} {g.ARROW_R} {label}  "
                 f"{confidence * 100:.1f}%  "
-                f"(held {held_s:.1f}s, {self._dets_since_change} detections)"
+                f"{_('(held {time:.1f}s, {count} detections)').format(time=held_s, count=self._dets_since_change)}"
                 f"{top_str} {g.DASH * 2}"
             )
             self._change_t0 = time.monotonic()
@@ -373,7 +373,7 @@ class UserOutputFormatter:
 
         top = f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics} {g.DASH}{g.CORNER_TR}"
         bar_chars = self._c(self._RED, self._glyphs.BLOCK_FULL * _MIN_BAR_WIDTH)
-        mid = f"{g.PIPE}{g.DASH}{bar_chars}  camera error{g.DASH}{g.PIPE}"
+        mid = f"{g.PIPE}{g.DASH}{bar_chars}{_('  camera error')}{g.DASH}{g.PIPE}"
         panel = "\n".join([top, mid, self._stats_line(), self._build_bot()])  # noqa: FLY002
 
         if self._first_output:

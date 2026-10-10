@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from lobe_server.config import Settings, load_settings, resolve_model_path
+from lobe_server.locale import setup_locale
 from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
 from lobe_server.server import LobeServer
 
@@ -89,12 +90,16 @@ def _parse_args() -> argparse.Namespace:
         "--camera-source", type=str, default=None,
         help="Camera source (empty=auto from robot, URL, rtsp://, device index or path)",
     )
+    parser.add_argument(
+        "--lang", type=str, default=None, choices=["en", "ru", "es"],
+        help="Override language (default: auto-detect)",
+    )
     return parser.parse_args()
 
 
 def _pause_for_user() -> None:
     if sys.stdin is not None and sys.stdin.isatty():
-        input("Press any key to close the window...")
+        input(_("Press any key to close the window..."))
 
 
 def _build_formatter(
@@ -137,11 +142,11 @@ def _load_settings_or_exit() -> Settings:
     try:
         return load_settings()
     except FileNotFoundError:
-        logger.exception("settings.ini not found")
+        logger.exception(_("settings.ini not found"))
         _pause_for_user()
         sys.exit(1)
     except ValueError:
-        logger.exception("settings.ini has invalid values")
+        logger.exception(_("settings.ini has invalid values"))
         _pause_for_user()
         sys.exit(1)
 
@@ -154,13 +159,14 @@ def _create_server_or_exit(
     try:
         return LobeServer(settings, model_path, formatter=formatter)
     except (RuntimeError, FileNotFoundError):
-        logger.exception("Failed to create server (check model file)")
+        logger.exception(_("Failed to create server (check model file)"))
         _pause_for_user()
         sys.exit(1)
 
 
 def main() -> None:
     args = _parse_args()
+    setup_locale(args.lang)
     log_file = Path(args.log_file) if args.log_file else _LOG_FILE
     _setup_file_logging(log_file)
     logger.info("Starting program (log: %s)", log_file)
@@ -191,10 +197,10 @@ def main() -> None:
     try:
         asyncio.run(server.run_forever())
     except KeyboardInterrupt:
-        logger.info("Shutting down...")
+        logger.info(_("Shutting down..."))
     finally:
         server.close()
-        logger.info("Press any key to close the window...")
+        logger.info(_("Press any key to close the window..."))
         _pause_for_user()
 
 

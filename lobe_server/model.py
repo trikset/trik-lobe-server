@@ -102,7 +102,7 @@ def load_model(path: str | Path) -> ImageModel:
     if filename:
         model_file = model_path / filename
         if not model_file.exists():
-            msg = f"Model file specified in signature.json not found: {model_file}"
+            msg = _("Model file specified in signature.json not found: {path}").format(path=model_file)
             raise FileNotFoundError(msg)
         ext = model_file.suffix.lower()
         if ext == ".tflite":
@@ -111,7 +111,7 @@ def load_model(path: str | Path) -> ImageModel:
         if ext == ".onnx":
             logger.info("Loading model: %s", model_file)
             return ONNXImageModel.load(model_path, filename)
-        msg = f"Unknown model format in signature.json filename: {ext}"
+        msg = _("Unknown model format in signature.json filename: {ext}").format(ext=ext)
         raise ValueError(msg)
 
     tflite_files = sorted(model_path.glob("*.tflite"))
@@ -124,7 +124,7 @@ def load_model(path: str | Path) -> ImageModel:
         logger.info("Loading model: %s", model_path / onnx_files[0].name)
         return ONNXImageModel.load(model_path, onnx_files[0].name)
 
-    msg = f"No model found at {model_path}. Need a .tflite or .onnx file."
+    msg = _("No model found at {path}. Need a .tflite or .onnx file.").format(path=model_path)
     raise FileNotFoundError(msg)
 
 
@@ -134,7 +134,7 @@ def _read_labels(model_path: Path) -> list[str]:
         labels = labels_path.read_text(encoding="utf-8-sig").strip().splitlines()
         labels = [ln for ln in labels if ln]
         if not labels:
-            msg = f"labels.txt at {model_path} is empty."
+            msg = _("labels.txt at {path} is empty.").format(path=model_path)
             raise ValueError(msg)
         return labels
 
@@ -144,10 +144,12 @@ def _read_labels(model_path: Path) -> list[str]:
             sig = json.load(f)
         if "classes" in sig and "Label" in sig["classes"]:
             return sig["classes"]["Label"]
-        msg = f"signature.json at {model_path} is missing 'classes.Label'."
+        msg = _("signature.json at {path} is missing 'classes.Label'.").format(path=model_path)
         raise ValueError(msg)
 
-    msg = f"No labels found at {model_path}. Provide labels.txt or signature.json with classes.Label."
+    msg = _("No labels found at {path}. Provide labels.txt or signature.json with classes.Label.").format(
+        path=model_path
+    )
     raise FileNotFoundError(msg)
 
 
@@ -172,15 +174,14 @@ class ONNXImageModel:
     def load(cls, model_path: str | Path, filename: str = "model.onnx") -> ONNXImageModel:
         onnx_path = Path(model_path) / filename
         if not onnx_path.exists():
-            msg = f"ONNX model file not found: {onnx_path}"
+            msg = _("ONNX model file not found: {path}").format(path=onnx_path)
             raise FileNotFoundError(msg)
         try:
             session = cast("_ONNXSession", _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]))
         except Exception:
             logger.exception("Failed to load ONNX model: %s", onnx_path)
-            msg = (
-                f"Failed to load ONNX model: {onnx_path}. "
-                "File is corrupt or not a valid ONNX model."
+            msg = _("Failed to load ONNX model: {path}. File is corrupt or not a valid ONNX model.").format(
+                path=onnx_path
             )
             raise RuntimeError(msg) from None
 
@@ -193,9 +194,9 @@ class ONNXImageModel:
             dims = dims[1:]
         if len(dims) == _TENSOR_3D:
             if dims[0] in (1, 3):
-                _, h, w = dims
+                _unused, h, w = dims
             else:
-                h, w, _ = dims
+                h, w, _unused = dims
         elif len(dims) == _TENSOR_2D:
             h, w = dims
         else:
@@ -217,7 +218,9 @@ class ONNXImageModel:
         raw = output[0]
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
         if len(self._labels) != len(confidences):
-            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            msg = _("Model returned {n_classes} classes but labels have {n_labels}").format(
+                n_classes=len(confidences), n_labels=len(self._labels)
+            )
             raise ValueError(msg)
         paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
@@ -242,23 +245,22 @@ class TFLiteImageModel:
     def load(cls, model_path: str | Path, filename: str = "model.tflite") -> TFLiteImageModel:
         tflite_path = Path(model_path) / filename
         if not tflite_path.exists():
-            msg = f"TFLite model file not found: {tflite_path}"
+            msg = _("TFLite model file not found: {path}").format(path=tflite_path)
             raise FileNotFoundError(msg)
         try:
             model_bytes = _read_model(tflite_path)
             interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_content=model_bytes))
         except ValueError:
             logger.exception("Failed to load TFLite model: %s", tflite_path)
-            msg = (
-                f"Failed to load TFLite model: {tflite_path}. "
-                "File is corrupt or not a valid TFLite model."
+            msg = _("Failed to load TFLite model: {path}. File is corrupt or not a valid TFLite model.").format(
+                path=tflite_path
             )
             raise RuntimeError(msg) from None
         interpreter.allocate_tensors()
 
         input_details = interpreter.get_input_details()[0]
         shape: list[int] = list(input_details["shape"])
-        _, h, w, _ = shape
+        _unused, h, w, _unused = shape
         input_size = (h, w)
 
         labels = _read_labels(Path(model_path))
@@ -272,7 +274,9 @@ class TFLiteImageModel:
         raw = self._interpreter.get_tensor(self._output_index)
         confidences = raw[0].tolist() if raw.ndim > 1 else raw.tolist()
         if len(self._labels) != len(confidences):
-            msg = f"Model returned {len(confidences)} classes but labels have {len(self._labels)}"
+            msg = _("Model returned {n_classes} classes but labels have {n_labels}").format(
+                n_classes=len(confidences), n_labels=len(self._labels)
+            )
             raise ValueError(msg)
         paired = list(zip(self._labels, confidences, strict=True))
         paired.sort(key=lambda x: x[1], reverse=True)
