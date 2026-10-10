@@ -21,6 +21,7 @@ from lobe_server.model import (
     _crop_center,
     _preprocess,
     _read_labels,
+    _read_model,
     _resize_uniform_to_fill,
     load_model,
 )
@@ -428,3 +429,115 @@ def test_load_model_unicode_path() -> None:
 
     assert isinstance(model, ONNXImageModel)
     assert model._labels == ["a", "b", "c"]
+
+
+def test_load_model_tflite_unicode_path() -> None:
+    """TFLite model in Cyrillic directory loads successfully."""
+    tflite_mock = MagicMock()
+    tflite_mock.Interpreter.return_value = _make_tflite_interpreter()
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model.tflite", tflite_mock),
+    ):
+        model_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
+        model_dir.mkdir()
+        (model_dir / "model.tflite").write_bytes(b"fake tflite")
+        _write_labels_txt(str(model_dir), ["a", "b", "c"])
+        model = load_model(str(model_dir))
+
+    assert isinstance(model, TFLiteImageModel)
+    assert model._labels == ["a", "b", "c"]
+
+
+def test_load_model_unicode_path_prefers_onnx() -> None:
+    """Cyrillic directory with both .onnx and .tflite — ONNX is preferred."""
+    session = _make_onnx_session(3)
+    with (
+        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        tempfile.TemporaryDirectory() as tmp,
+    ):
+        model_dir = Path(tmp) / "кириллица"
+        model_dir.mkdir()
+        (model_dir / "model.onnx").write_bytes(b"fake onnx")
+        (model_dir / "model.tflite").write_bytes(b"fake tflite")
+        _write_labels_txt(str(model_dir), ["a", "b"])
+        model = load_model(str(model_dir))
+
+    assert isinstance(model, ONNXImageModel)  # ONNX preferred over TFLite
+
+
+def test_tflite_load_valueerror_caught() -> None:
+    """LiteRT ValueError is caught, logged, and re-raised as RuntimeError with context."""
+    tflite_mock = MagicMock()
+    tflite_mock.Interpreter.side_effect = ValueError("model allocation is null/empty")
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model.tflite", tflite_mock),
+    ):
+        (Path(tmp) / "model.tflite").write_bytes(b"garbage")
+        _write_labels_txt(tmp, ["a", "b"])
+        with pytest.raises(RuntimeError, match=r"model\.tflite"):
+            TFLiteImageModel.load(Path(tmp), "model.tflite")
+
+
+def test_onnx_load_inference_error_caught() -> None:
+    """ONNX InferenceSession error is caught, logged, re-raised as RuntimeError."""
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model._ort.InferenceSession", side_effect=ValueError("Unsupported model")),
+    ):
+        (Path(tmp) / "model.onnx").write_bytes(b"garbage")
+        _write_labels_txt(tmp, ["a", "b"])
+        with pytest.raises(RuntimeError, match=r"model\.onnx"):
+            ONNXImageModel.load(Path(tmp), "model.onnx")
+
+
+def test_onnx_load_file_not_found() -> None:
+    """ONNXImageModel.load raises FileNotFoundError when file missing."""
+    with tempfile.TemporaryDirectory() as tmp, pytest.raises(FileNotFoundError, match=r"model\.onnx"):
+        ONNXImageModel.load(Path(tmp), "model.onnx")
+
+
+def test_tflite_load_file_not_found() -> None:
+    """TFLiteImageModel.load raises FileNotFoundError when file missing."""
+    with tempfile.TemporaryDirectory() as tmp, pytest.raises(FileNotFoundError, match=r"model\.tflite"):
+        TFLiteImageModel.load(Path(tmp), "model.tflite")
+
+
+# Minimal valid TFLite FlatBuffer (496 bytes, TensorFlow test model)
+_TFLITE_MODEL_B64 = (
+    "GAAAAFRGTDMAAA4AFAAEAAgADAAAABAADgAAAAMAAABgAQAACAAAAJgBAAABAAAAEAAAA"
+    "AwAFAAEAAgADAAQAAwAAAAQAAAALAEAALgAAADAAAAABAAAAIgAAABYAAAAKAAAAAQAAA"
+    "DA////CAAAAAwAAAABAAAAAwAAAAQAAABvdXQyAAAAAOD///8IAAAADAAAAAEAAAADAAAA"
+    "BAAAAG91dDEAAAAADAAMAAQAAAAAAAgADAAAAAgAAAAMAAAAAQAAAAMAAAAGAAAAaW5wdX"
+    "QxAAAMABAABAAAAAgADAAMAAAADAAAAAEAAAAMAAAAAQAAAAEAAAAGAAAAaW5wdXQwAAACA"
+    "AAAgAAAAMAAAACAAAAQAAAABAAAAAAAAoAEAAEAAgADAAKAAAAAQAAABAAAAAEAAAAAQAAA"
+    "AMAAAABAAAAAgAAAAAACgAMAAAABAAIAAoAAAAQAAAABAAAAAEAAAACAAAAAgAAAAAAAAAB"
+    "AAAAAgAAAAAAAAABAAAAAgAAADQAAAAMAAAACAAMAAcACAAIAAAAAAAAIAQAAAAKAAAAdG"
+    "VzdGluZ19vcAAAAAAGAAgABwAGAAAAAAAAAwIAAAAgAAAABAAAAO7///8EAAAABAAAAAEA"
+    "AAAAAYACAAEAAYAAAAEAAAAAAAAAA=="
+)
+
+
+def test_litert_loads_from_cyrillic_path() -> None:
+    """
+    _read_model reads bytes correctly from a non-ASCII directory path on all platforms.
+
+    This is the fix for the Windows non-ASCII path issue: by reading into memory
+    (returning bytes), LiteRT uses ``model_content`` which bypasses the filesystem
+    instead of ``model_path`` which triggers native C file-open that can't handle
+    non-ASCII on Windows.
+    """
+    import base64  # noqa: PLC0415  # keep import inside to avoid heavy deps at module level
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cyr_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
+        cyr_dir.mkdir()
+        model_path = cyr_dir / "model.tflite"
+        data = base64.b64decode(_TFLITE_MODEL_B64)
+        model_path.write_bytes(data)
+        _write_labels_txt(str(cyr_dir), ["a", "b", "c"])
+        # _read_model must return correct bytes from any path encoding
+        model_bytes = _read_model(model_path)
+        assert isinstance(model_bytes, bytes)
+        assert len(model_bytes) == len(data)

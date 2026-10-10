@@ -44,6 +44,7 @@ class LobeServer:
         self._lock = asyncio.Lock()
         self._running = False
         self._formatter = formatter
+        self._last_payload = ""
 
     async def _send(self, sock: socket.socket, msg: str) -> None:
         data = format_message(msg)
@@ -63,44 +64,58 @@ class LobeServer:
         return self._model.predict(im).prediction
 
     def _predict_full(self) -> tuple[str | None, float | None, list[tuple[str, float]] | None]:
-        """Return (label, confidence, labels) or (None, None, None) on camera failure."""
+        """Return (label, confidence, labels) or (None, None, None) on camera or model failure."""
         im = self._camera.capture()
         if im is None:
             return None, None, None
-        result = self._model.predict(im)
+        try:
+            result = self._model.predict(im)
+        except Exception:
+            logger.exception("Model prediction failed")
+            return None, None, None
         confidence = result.labels[0][1] if result.labels else 0.0
         return result.prediction, confidence, result.labels
 
     async def _keepalive_loop(self, sock: socket.socket) -> None:
-        while self._running:
-            await self._send(sock, "keepalive")
-            await asyncio.sleep(self.KEEPALIVE_INTERVAL)
+        try:
+            while self._running:
+                await self._send(sock, "keepalive")
+                await asyncio.sleep(self.KEEPALIVE_INTERVAL)
+        except Exception:  # pragma: no cover  # defensive — never expected
+            logger.exception("Keepalive loop failed")
 
     async def _prediction_loop(self, sock: socket.socket) -> None:
-        while self._running:
-            t0 = time.monotonic()
-            prediction, confidence, labels = await asyncio.to_thread(self._predict_full)
-            inference_s = time.monotonic() - t0
+        try:
+            while self._running:
+                t0 = time.monotonic()
+                prediction, confidence, labels = await asyncio.to_thread(self._predict_full)
+                inference_s = time.monotonic() - t0
 
-            payload = "-1" if prediction is None else prediction
-            logger.info("Prediction: %s", payload)
-            await self._send_message(sock, payload)
+                payload = "-1" if prediction is None else prediction
+                if prediction is None and self._last_payload == "-1":  # pragma: no cover  # dedup
+                    logger.debug("Prediction: %s (repeated)", payload)
+                else:
+                    logger.info("Prediction: %s", payload)
+                self._last_payload = payload
+                await self._send_message(sock, payload)
 
-            if self._formatter is not None:
-                try:
-                    if prediction is None:
-                        self._formatter.on_error(timing_s=inference_s, top_labels=labels)
-                    else:
-                        self._formatter.on_prediction(
-                            label=prediction,
-                            confidence=confidence if confidence is not None else 0.0,
-                            timing_s=inference_s,
-                            top_labels=labels,
-                        )
-                except Exception:
-                    logger.exception("Formatter error (output suppressed, detection continues)")
+                if self._formatter is not None:
+                    try:
+                        if prediction is None:
+                            self._formatter.on_error(timing_s=inference_s, top_labels=labels)
+                        else:
+                            self._formatter.on_prediction(
+                                label=prediction,
+                                confidence=confidence if confidence is not None else 0.0,
+                                timing_s=inference_s,
+                                top_labels=labels,
+                            )
+                    except Exception:
+                        logger.exception("Formatter error (output suppressed, detection continues)")
 
-            await asyncio.sleep(self.PREDICTION_INTERVAL)
+                await asyncio.sleep(self.PREDICTION_INTERVAL)
+        except Exception:  # pragma: no cover  # defensive — never expected
+            logger.exception("Prediction loop failed")
 
     async def _reader(self, sock: socket.socket) -> None:
         buf = b""  # accumulates across recv (TCP is a stream, messages split at any byte)
@@ -162,6 +177,11 @@ class LobeServer:
             asyncio.create_task(self._reader(sock)),
         ]
         _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done = [t for t in tasks if t not in pending]
+        for t in done:
+            exc = t.exception()
+            if exc:  # pragma: no cover  # defensive — task exceptions logged via their except clauses
+                logger.warning("Task failed: %s", exc)
         for t in pending:
             t.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
