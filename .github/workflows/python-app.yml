@@ -129,40 +129,31 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
-      - name: Install opencode
-        run: |
-          npm install -g opencode-ai
-          echo "$(npm bin -g)" >> "$GITHUB_PATH"
       - name: Check for all tools
         uses: ./.github/actions/check-tools
         with:
-          binaries: uv git gh node npm zip tar opencode
+          binaries: uv git gh zip tar
           uv-packages: python
       - name: Download binaries
         uses: actions/download-artifact@v8
         with:
           path: artifacts
-      - name: Determine previous release tag
+      - name: Extract title and body from signed tag
+        id: notes
         shell: bash
         run: |
-          prev="$(gh release list --limit 10 --json tagName --jq '.[].tagName' 2>/dev/null \
-            | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)"
-          echo "PREV_TAG=${prev:-v1.0.0}" >> "$GITHUB_ENV"
-      - name: Generate release notes
-        run: |
-          opencode run --agent build --auto \
-            "Load the release-notes skill. Generate notes for tag ${GITHUB_REF_NAME}. Previous release: ${PREV_TAG}."
-      - name: Verify release notes were written
-        shell: bash
-        run: |
-          test -s release-notes.md || { echo "::error::release-notes.md missing or empty"; exit 1; }
-          head -5 release-notes.md
+          git fetch origin tag ${{ github.ref_name }} --no-tags
+          git for-each-ref refs/tags/${{ github.ref_name }} --format='%(contents)' > .release-tag-text.md
+          sed -n '1p' .release-tag-text.md > .release-tag-title.md
+          sed -n '2,$p' .release-tag-text.md > .release-tag-body.md
+          if [ ! -s .release-tag-title.md ]; then
+            echo "::error::Tag ${{ github.ref_name }} has an empty message; write the release notes via git tag -F first"
+            exit 1
+          fi
+          echo "title: $(cat .release-tag-title.md)"
       - name: List artifacts
         shell: bash
         run: find artifacts -type f | sort
@@ -192,7 +183,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           draft: true
-          body_path: release-notes.md
+          body_path: .release-tag-body.md
           files: |
             pack/TRIKLobeServer-${{ github.ref_name }}-Windows.zip
             pack/TRIKLobeServer-${{ github.ref_name }}-Linux.tar.gz

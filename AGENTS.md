@@ -104,9 +104,11 @@ configurations, update this section and the referenced config files
 
 - Gates: 0 open PRs, 0 security alerts, green main CI
 - Version = zero-filled date: set `pyproject.toml` to `YY.MM.DD` on the release
-  branch (`YY.MM.DD.dev0` on main); commit, tag `vYY.MM.DD`, push the tag
+  branch (`YY.MM.DD.dev0` on main); commit the version bump
+- **Generate release notes** via the `release-notes` skill, then embed them into
+  the tag message: `git tag -s -F release-notes.md vYY.MM.DD`
 - The `v*` tag triggers the `release` job (3 platform binaries + DRAFT release
-  with LLM-generated notes) — details: MEMORY.md CI quirks + `release-notes` skill
+  created from the tag message) — details: MEMORY.md CI quirks
 - **Review/edit the draft notes**, then publish manually — never auto-published
 - **Never delete or re-push an existing tag without explicit user permission** —
   tags represent published releases; deleting destroys notes, artifacts, URLs
