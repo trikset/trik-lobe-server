@@ -68,8 +68,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-latest]
+        include:
+          - os: ubuntu-latest
+            container: quay.io/pypa/manylinux_2_28_x86_64
+          - os: windows-2022
+          - os: macos-latest
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     env:
       SCRIPT_NAME: TRIKLobeServer
 
