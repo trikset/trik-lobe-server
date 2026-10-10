@@ -171,7 +171,18 @@ class ONNXImageModel:
     @classmethod
     def load(cls, model_path: str | Path, filename: str = "model.onnx") -> ONNXImageModel:
         onnx_path = Path(model_path) / filename
-        session = cast("_ONNXSession", _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]))
+        if not onnx_path.exists():
+            msg = f"ONNX model file not found: {onnx_path}"
+            raise FileNotFoundError(msg)
+        try:
+            session = cast("_ONNXSession", _ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]))
+        except Exception:
+            logger.exception("Failed to load ONNX model: %s", onnx_path)
+            msg = (
+                f"Failed to load ONNX model: {onnx_path}. "
+                "File is corrupt or not a valid ONNX model."
+            )
+            raise RuntimeError(msg) from None
 
         input_meta = session.get_inputs()[0]
         input_name: str = input_meta.name
@@ -224,7 +235,19 @@ class TFLiteImageModel:
     @classmethod
     def load(cls, model_path: str | Path, filename: str = "model.tflite") -> TFLiteImageModel:
         tflite_path = Path(model_path) / filename
-        interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_path=str(tflite_path)))
+        if not tflite_path.exists():
+            msg = f"TFLite model file not found: {tflite_path}"
+            raise FileNotFoundError(msg)
+        try:
+            interpreter = cast("_TFLiteInterpreter", tflite.Interpreter(model_path=str(tflite_path)))
+        except ValueError:
+            logger.exception("Failed to load TFLite model: %s", tflite_path)
+            msg = (
+                f"Failed to load TFLite model: {tflite_path}. "
+                "File is corrupt, not a valid TFLite model, or path contains non-ASCII characters. "
+                "Try moving the app to a directory with only Latin characters."
+            )
+            raise RuntimeError(msg) from None
         interpreter.allocate_tensors()
 
         input_details = interpreter.get_input_details()[0]

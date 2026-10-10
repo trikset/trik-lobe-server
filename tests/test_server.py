@@ -157,6 +157,15 @@ def test_predict_full_no_labels(server: LobeServer, mock_model: MagicMock) -> No
     assert labels == []
 
 
+def test_predict_full_model_crash(server: LobeServer, mock_model: MagicMock) -> None:
+    """When model.predict() raises, _predict_full returns (None, None, None)."""
+    mock_model.predict.side_effect = RuntimeError("Model failed")
+    label, conf, labels = server._predict_full()
+    assert label is None
+    assert conf is None
+    assert labels is None
+
+
 def test_shutdown(server: LobeServer) -> None:
     assert server._running is False
     server._running = True

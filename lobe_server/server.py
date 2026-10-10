@@ -63,11 +63,15 @@ class LobeServer:
         return self._model.predict(im).prediction
 
     def _predict_full(self) -> tuple[str | None, float | None, list[tuple[str, float]] | None]:
-        """Return (label, confidence, labels) or (None, None, None) on camera failure."""
+        """Return (label, confidence, labels) or (None, None, None) on camera or model failure."""
         im = self._camera.capture()
         if im is None:
             return None, None, None
-        result = self._model.predict(im)
+        try:
+            result = self._model.predict(im)
+        except Exception:
+            logger.exception("Model prediction failed")
+            return None, None, None
         confidence = result.labels[0][1] if result.labels else 0.0
         return result.prediction, confidence, result.labels
 

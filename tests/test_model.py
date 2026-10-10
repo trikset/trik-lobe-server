@@ -428,3 +428,41 @@ def test_load_model_unicode_path() -> None:
 
     assert isinstance(model, ONNXImageModel)
     assert model._labels == ["a", "b", "c"]
+
+
+def test_tflite_load_valueerror_caught() -> None:
+    """LiteRT ValueError is caught, logged, and re-raised as RuntimeError with context."""
+    tflite_mock = MagicMock()
+    tflite_mock.Interpreter.side_effect = ValueError("model allocation is null/empty")
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model.tflite", tflite_mock),
+    ):
+        (Path(tmp) / "model.tflite").write_bytes(b"garbage")
+        _write_labels_txt(tmp, ["a", "b"])
+        with pytest.raises(RuntimeError, match=r"model\.tflite"):
+            TFLiteImageModel.load(Path(tmp), "model.tflite")
+
+
+def test_onnx_load_inference_error_caught() -> None:
+    """ONNX InferenceSession error is caught, logged, re-raised as RuntimeError."""
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        patch("lobe_server.model._ort.InferenceSession", side_effect=ValueError("Unsupported model")),
+    ):
+        (Path(tmp) / "model.onnx").write_bytes(b"garbage")
+        _write_labels_txt(tmp, ["a", "b"])
+        with pytest.raises(RuntimeError, match=r"model\.onnx"):
+            ONNXImageModel.load(Path(tmp), "model.onnx")
+
+
+def test_onnx_load_file_not_found() -> None:
+    """ONNXImageModel.load raises FileNotFoundError when file missing."""
+    with tempfile.TemporaryDirectory() as tmp, pytest.raises(FileNotFoundError, match=r"model\.onnx"):
+        ONNXImageModel.load(Path(tmp), "model.onnx")
+
+
+def test_tflite_load_file_not_found() -> None:
+    """TFLiteImageModel.load raises FileNotFoundError when file missing."""
+    with tempfile.TemporaryDirectory() as tmp, pytest.raises(FileNotFoundError, match=r"model\.tflite"):
+        TFLiteImageModel.load(Path(tmp), "model.tflite")
