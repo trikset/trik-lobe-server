@@ -83,10 +83,11 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   green yet carry a stale body or old assets. Check: notes structure (deps
   table, contributors, compare link), all 3 versioned assets, and the inner
   `.bin` name.
-- The release flow builds 3 platform binaries and creates a DRAFT release with
-  LLM-generated notes (via the `release-notes` skill); versions are zero-filled
-  dates (`26.08.03` ↔ tag `v26.08.03`). Each platform ships as one archive —
-  `-Windows.zip`, `-Linux.tar.gz`, `-macOS.tar.gz` — bundling the versioned
+- The release flow builds 3 platform binaries and creates a DRAFT release from
+  the tag message (notes prepared via the `release-notes` skill and embedded
+  with `git tag -s -F`); versions are zero-filled dates (`26.08.03`), tag
+  `v26.08.03`. Each platform ships as one archive — `-Windows.zip`,
+  `-Linux.tar.gz`, `-macOS.tar.gz` — bundling the versioned binary and
   binary (`*.exe` / `*.bin`) + `settings.ini` at the root. Drafts require
   maintainer review — never auto-publish. Skill frontmatter is preserved via
   `mdformat-frontmatter`.
@@ -101,10 +102,7 @@ Known issues from the v26.09.18 release:
 
 - **Missing `setup-uv`** — unlike `test` and `build` jobs, the `release` job
   lacks `astral-sh/setup-uv@v7`. The "Check for all tools" step checks for
-  `uv` but fails because it's not on PATH. Fix: add the setup-uv step.
-- **`opencode` not on PATH** — `npm install -g opencode-ai` installs to a
-  global directory not in PATH when bash uses `--noprofile --norc`. Fix:
-  `echo "$(npm bin -g)" >> "$GITHUB_PATH"` after npm install.
+  `uv` but fails because it's not on PATH. Fix: add the setup-uv step (done).
 - **Packaging paths** — archives are created under `pack/` but must be
   referenced with that prefix in both the `ls` verification and the release
   action's `files:` patterns. The `test_release_docs.py` test strips the
