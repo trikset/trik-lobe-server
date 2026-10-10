@@ -501,3 +501,44 @@ def test_tflite_load_file_not_found() -> None:
     """TFLiteImageModel.load raises FileNotFoundError when file missing."""
     with tempfile.TemporaryDirectory() as tmp, pytest.raises(FileNotFoundError, match=r"model\.tflite"):
         TFLiteImageModel.load(Path(tmp), "model.tflite")
+
+
+# Minimal valid TFLite FlatBuffer (496 bytes, TensorFlow test model)
+_TFLITE_MODEL_B64 = (
+    "GAAAAFRGTDMAAA4AFAAEAAgADAAAABAADgAAAAMAAABgAQAACAAAAJgBAAABAAAAEA"
+    "AAAAwAFAAEAAgADAAQAAwAAAAQAAAALAEAALgAAADAAAAABAAAAIgAAABYAAAAKAAA"
+    "AAQAAAADA////CAAAAAwAAAABAAAAAwAAAAQAAABvdXQyAAAAAOD///8IAAAADAAAA"
+    "AEAAAADAAAABAAAAG91dDEAAAAADAAMAAQAAAAAAAgADAAAAAgAAAAMAAAAAQAAAAMA"
+    "AAAGAAAAaW5wdXQxAAAMABAABAAAAAgADAAMAAAADAAAAAEAAAAMAAAAAQAAAAEAAA"
+    "AGAAAAaW5wdXQwAAACAAAAAgAAAAMAAAACAAAAQAAAABAAAAAAAAoAEAAEAAgADAAKA"
+    "AAABAAAAAQAAAAAEAAAAAQAAAAMAAAABAAAAAgAAAAAACgAMAAAABAAIAAoAAAAQAAA"
+    "ABAAAAAEAAAACAAAAAgAAAAAAAAABAAAAAgAAAAAAAAABAAAAAgAAADQAAAAMAAAAC"
+    "AAMAAcACAAIAAAAAAAAIAQAAAAKAAAAdGVzdGluZ19vcAAAAAAGAAgABwAGAAAAAAAA"
+    "AwIAAAAgAAAABAAAAO7///8EAAAABAAAAAEAAAAAAAYACAAEAAYAAAAEAAAAAAAAAA=="
+)
+
+
+def test_litert_loads_from_cyrillic_path() -> None:
+    """
+    LiteRT can open a .tflite model from a non-ASCII directory path.
+
+    This test runs against the REAL LiteRT library (not mocked).
+    On Linux/macOS UTF-8 paths work natively.
+    On Windows this may fail — proving the Cyrillic-path hypothesis.
+    """
+    import base64  # noqa: PLC0415  # keep import inside to avoid heavy deps at module level
+
+    from ai_edge_litert.interpreter import Interpreter as LiteInterpreter  # noqa: PLC0415
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cyr_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
+        cyr_dir.mkdir()
+        model_path = cyr_dir / "model.tflite"
+        model_path.write_bytes(base64.b64decode(_TFLITE_MODEL_B64))
+        try:
+            interpreter = LiteInterpreter(model_path=str(model_path))
+            interpreter.allocate_tensors()
+        except ValueError as e:
+            msg = str(e)
+            if "Could not open" in msg:
+                pytest.fail(f"LiteRT could not open model from non-ASCII path: {msg}")
