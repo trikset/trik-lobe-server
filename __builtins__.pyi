@@ -1,0 +1,3 @@
+# Extra builtins installed at runtime by lobe_server.locale.setup_locale().
+# Without this stub, basedpyright flags `_()` as undefined in strict mode.
+def _(message: str) -> str: ...
