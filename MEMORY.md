@@ -72,8 +72,16 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   hand-creating an equivalent dep PR — manual and auto PRs overlap.
 - `python-app.yml` is the single workflow file. It runs `test` on all events
   (PR, main-push, tag-push, dispatch — tag runs are rare and catch worker
-  drift); `build` on non-PR pushes; `version-check` + `release` only on `v*`
-  tags. The `release` job overrides permissions to `contents: write`.
+  drift); `build` also on all events — **it MUST run on PRs**: a build that
+  only runs on main-push validates nothing before merge and delivers red CI
+  to main (2026-10-11 regression: the manylinux container build was gated to
+  non-PR events and broke main twice). `version-check` + `release` only on
+  `v*` tags. The `release` job overrides permissions to `contents: write`.
+- Manylinux build quirk: `quay.io/pypa/manylinux_2_28_x86_64` ships a
+  statically-linked CPython (`/opt/python`, `Py_ENABLE_SHARED=0`) that breaks
+  PyInstaller ("Python was built without a shared library"). The `build` job
+  sets `UV_PYTHON_PREFERENCE: only-managed` so uv uses its own
+  python-build-standalone interpreter (shared lib) instead of the container's.
 - `gh` CLI in GitHub Actions needs `GH_TOKEN: ${{ github.token }}` explicitly —
   it is not auto-injected.
 - `softprops/action-gh-release` reuses an existing release for a tag. When
