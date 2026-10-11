@@ -16,6 +16,7 @@ import time
 from typing import ClassVar, NoReturn
 
 sys.path.insert(0, "")
+from lobe_server.locale import setup_locale
 from lobe_server.output import UserOutputFormatter
 
 
@@ -67,6 +68,7 @@ class FruitDemo:
 
 
 def main() -> None:
+    setup_locale()  # install _() builtin so formatter can translate strings
     parser = argparse.ArgumentParser(description="Fruit classifier live dashboard demo")
     parser.add_argument(
         "--unlimit",
