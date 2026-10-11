@@ -134,8 +134,7 @@ class UserOutputFormatter:
         self._buf: list[str] = []
         self._last_width_check = 0.0
         self._last_title: str | None = None
-        if self._tty:
-            self._update_title()
+        self._update_title()
 
     def _refresh_width(self) -> None:
         """Re-check terminal width (may change on resize). Called once per frame."""
