@@ -219,6 +219,13 @@ example).
 - Windows, macOS, and Linux — CI tests all three; when code/tests touch OS
   APIs (sockets, files, processes), consider platform differences (see
   TESTING.md); local tests on one OS don't prove the others
+- **OS compatibility baseline is a product decision, documented in README
+  ("Системные требования")**. It is the authoritative source — never change a
+  supported OS/arch/floor without updating it, and never claim compatibility
+  that the baseline does not state. Runtime dependencies pin the floors
+  (onnxruntime/LiteRT wheels dictate glibc and macOS versions, Python pins
+  Windows): a dependency bump can shift the baseline — re-verify the wheels'
+  platform tags and update README + MEMORY.md accordingly.
 
 ### Tooling assumptions
 

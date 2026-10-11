@@ -1017,3 +1017,38 @@ the hull number is the emulated robot's identity.
 --robot-video-port PORT     Robot MJPEG video port (default 8080)
 --camera-source SOURCE      Camera source specifier
 ```
+
+### [2026-10-11] Documented OS compatibility baseline
+
+**Context:** Users hit "which OS can run this?" and the answer was implied,
+not stated. Linux got a manylinux_2_28 glibc floor; macOS and Windows had no
+documented floor at all.
+
+**Decision:** Document a single authoritative OS compatibility baseline in
+README ("Системные требования") as a **product decision**:
+
+| OS | Arch | Floor |
+|----|------|-------|
+| Linux | x86_64 | glibc ≥ 2.28 (manylinux_2_28: Ubuntu 20.04+, Debian 11+, RHEL 8+, Fedora 31+) |
+| macOS | arm64 | macOS 14 (Sonoma) |
+| Windows | x86_64 | Windows 10 22H2+ |
+
+Floors are **dictated by runtime wheel availability**, not build choices:
+
+- Linux: `onnxruntime` manylinux_2_28 wheel → glibc 2.28 floor (build inside
+  `quay.io/pypa/manylinux_2_28_x86_64` matches it).
+- macOS: `onnxruntime` ships only `macosx_14_0_arm64` and `ai_edge_litert`
+  only `macosx_12_0_arm64` — **no x86_64/universal2 wheels exist for either**.
+  Intel Macs are therefore unsupported by architecture; Sonoma is the floor
+  because onnxruntime's dylib demands ≥ 14 (LiteRT alone would allow 12 —
+  a "TFLite-only" build could lower the floor, currently not worth it).
+- Windows: `onnxruntime` has win_amd64 + win_arm64, `ai_edge_litert` only
+  win_amd64 → Windows-on-ARM unsupported until LiteRT ships win_arm64.
+
+**Consequences:** README is the authoritative baseline; never change a
+supported OS/arch/floor without updating it, and never claim compatibility the
+baseline doesn't state (AGENTS.md rule). A dependency bump (onnxruntime /
+LiteRT / Python) can shift floors — re-verify wheel platform tags on bump.
+Undeliverable options rejected: universal macOS binary (no x86_64 wheels),
+old-runtime downgrade for Intel Macs (EOL security, missing ops),
+paywalled signing (notarization $99/yr, code-sign certs).
