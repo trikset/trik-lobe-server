@@ -20,14 +20,14 @@ from lobe_server.locale import setup_locale
 from lobe_server.output import UserOutputFormatter
 
 
-def _fruit_sequence(label_ix: int) -> list[tuple[str, float]]:
-    """Top-3 labels around the given index with declining confidence."""
-    labels = ["Apple", "Banana", "Cherry", "Dewberry"]
-    return [(labels[(label_ix + i) % 4], max(0.95 - i * 0.18, 0.01)) for i in range(3)]
-
-
 class FruitDemo:
-    """Generates a realistic prediction stream for visual QA of the dashboard."""
+    """Generates a realistic prediction stream for visual QA of the dashboard.
+
+    Emits three types of events:
+    - High‑conf detection (normal)
+    - Low‑conf / uncertain (simulates no clear label)
+    - Error (simulates camera / model failure)
+    """
 
     LABELS: ClassVar[list[str]] = ["Apple", "Banana", "Cherry", "Dewberry"]
 
@@ -36,6 +36,8 @@ class FruitDemo:
         self._running = True
         self._label_ix = 0
         self._same = 0
+        self._phase = "high"
+        self._phase_countdown = 0
         signal.signal(signal.SIGINT, self._signal)
         signal.signal(signal.SIGTERM, self._signal)
 
@@ -44,18 +46,55 @@ class FruitDemo:
         self._fmt.close()
         raise SystemExit(0)
 
+    def _top(self, ix: int, base: float = 0.95) -> list[tuple[str, float]]:
+        """Top‑3 labels with declining confidence from *base*."""
+        return [(self.LABELS[(ix + i) % 4], max(base - i * 0.18, 0.01)) for i in range(3)]
+
     def step(self) -> None:
-        """Emit one prediction frame and sleep to simulate 10-17 FPS."""
+        """Emit one prediction frame with varying confidence levels."""
+        # Manage phases
+        self._phase_countdown -= 1
+        if self._phase_countdown <= 0:
+            # Pick a new phase
+            r = random.random()
+            if r < 0.15:          # 15% chance: error burst
+                self._phase = "error"
+                self._phase_countdown = int(random.uniform(1, 3))
+            elif r < 0.30:        # 15% chance: low‑conf uncertainty
+                self._phase = "low"
+                self._phase_countdown = int(random.uniform(3, 7))
+            else:                  # 70% chance: normal high‑conf detection
+                self._phase = "high"
+                self._phase_countdown = int(random.uniform(8, 16))
+                self._label_ix = (self._label_ix + 1) % 4
+                self._same = 0
+
+        timing = 0.028 + random.uniform(0, 0.015)
+        sleep_s = 1.0 / (10 + random.uniform(0, 7))
+
+        if self._phase == "error":
+            self._fmt.on_error(timing, self._top(self._label_ix, 0.1))
+            time.sleep(sleep_s)
+            return
+
+        if self._phase == "low":
+            # All labels have similar low confidence — model is uncertain
+            low_base = 0.1 + random.uniform(0, 0.15)
+            label = self.LABELS[self._label_ix]
+            conf = round(low_base + random.uniform(0, 0.08), 3)
+            self._fmt.on_prediction(label, conf, timing, self._top(self._label_ix, low_base))
+            time.sleep(sleep_s)
+            return
+
+        # High‑conf normal detection
         if self._same >= 8 + int(random.uniform(0, 7)):
             self._label_ix = (self._label_ix + 1) % 4
             self._same = 0
-
         label = self.LABELS[self._label_ix]
         conf = round(0.95 - random.uniform(0, 0.12), 3)
-        timing = 0.028 + random.uniform(0, 0.015)
-        self._fmt.on_prediction(label, conf, timing, _fruit_sequence(self._label_ix))
+        self._fmt.on_prediction(label, conf, timing, self._top(self._label_ix, 0.95))
         self._same += 1
-        time.sleep(1.0 / (10 + random.uniform(0, 7)))
+        time.sleep(sleep_s)
 
     def run(self, duration: float | None) -> None:
         """Run predictions for *duration* seconds (None = forever)."""
@@ -79,6 +118,7 @@ def main() -> None:
     args = parser.parse_args()
 
     fmt = UserOutputFormatter(color_enabled=not args.no_color)
+    fmt.set_context("fruit_classifier.onnx  |  USB @ 640x480  |  Ctrl+C to stop")
     if not args.no_color and not fmt._tty:
         print("Note: color disabled (stderr is not a TTY)", file=sys.stderr)
 

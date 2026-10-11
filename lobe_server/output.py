@@ -46,6 +46,8 @@ class _Unicode:
     CORNER_BL = "╰"
     CORNER_BR = "╯"
     STAR = "★"
+    TJUNCTION_L = "├"  # ├
+    TJUNCTION_R = "┤"  # ┤
 
 
 class _ASCII:
@@ -59,6 +61,8 @@ class _ASCII:
     CORNER_BL = "+"
     CORNER_BR = "+"
     STAR = "*"
+    TJUNCTION_L = "|"  # fallback to plain pipe
+    TJUNCTION_R = "|"
 
 
 def _strip_ansi(text: str) -> str:
@@ -102,6 +106,8 @@ class UserOutputFormatter:
     _RESET = "\033[0m"
     _DIM = "\033[2m"
     _BLUE = "\033[94m"
+    _PURPLE = "\033[95m"
+    _GREY = "\033[90m"
 
     PREDICTION_INTERVAL = 0.2
 
@@ -111,6 +117,7 @@ class UserOutputFormatter:
         self._glyphs = _Unicode if _HAS_UNICODE else _ASCII
         self._width = _BOX_WIDTH
         self._raw_width = _BOX_WIDTH
+        self._lines = 24  # default terminal height
         self._vt_ok = True
         if _WIN:  # pragma: no cover
             self._vt_ok = _enable_vt()
@@ -118,8 +125,10 @@ class UserOutputFormatter:
                 self._color = False
         if self._tty:
             with contextlib.suppress(ValueError, OSError):  # pragma: no cover
-                self._raw_width = max(shutil.get_terminal_size().columns - 2, 40)
+                ts = shutil.get_terminal_size()
+                self._raw_width = max(ts.columns - 2, 40)
                 self._width = min(self._raw_width, _MAX_WIDTH)
+                self._lines = max(ts.lines, 10)
 
         self._prev_label: str | None = None
         self._total_count = 0
@@ -134,6 +143,9 @@ class UserOutputFormatter:
         self._buf: list[str] = []
         self._last_width_check = 0.0
         self._last_title: str | None = None
+        # Ring buffer of recent predictions: deque of (index, label, confidence, fps, timing_s,
+        # is_change, prev_label) — oldest first, newest last.
+        self._history: deque[tuple[int, str, float, float, float, bool, str | None]] = deque(maxlen=50)
         self._update_title()
 
     def _refresh_width(self) -> None:
@@ -145,7 +157,9 @@ class UserOutputFormatter:
             return
         self._last_width_check = now
         with contextlib.suppress(ValueError, OSError):
-            cols = shutil.get_terminal_size().columns - 2
+            ts = shutil.get_terminal_size()
+            self._lines = max(ts.lines, 10)
+            cols = ts.columns - 2
             if cols >= 40:  # noqa: PLR2004  # minimum terminal width for the box to fit
                 self._raw_width = cols
                 self._width = min(cols, _MAX_WIDTH)
@@ -220,83 +234,141 @@ class UserOutputFormatter:
             parts.append(self._c(self._tier(conf), f"{lbl}({pct:.0f}%)"))
         return "  ".join(parts)
 
-    # ---- dashboard panel (3 lines) ----
+    # ── btop‑style meter (htop inspired) ─────────────────────────
 
-    def _dash_top(self, label: str, confidence: float, fps: float) -> str:  # pylint: disable=too-many-locals
+    def _meter(self, confidence: float, text: str, bar_max: int, total_width: int) -> str:
+        """htop-style meter: [|||  text] — bar fills up to bar_max within total_width."""
+        filled = round(confidence * bar_max)
+        bar = self._glyphs.BLOCK_FULL * filled
+        rest_w = max(0, total_width - filled)
+        txt = text[:rest_w]
+        rest = self._glyphs.BLOCK_EMPTY * max(0, rest_w - len(txt))
+        code = self._tier(confidence)
+        return f"[{self._c(code, bar)}{txt}{rest}]"
+
+    def _box_line(self, content: str) -> str:
+        """│  content  │ — pads to _width by visible length (ANSI‑safe)."""
+        g = self._glyphs
+        vis = _visible_len(content)
+        pad = max(0, self._width - 2 - vis)
+        return f"{g.PIPE}{content}{' ' * pad}{g.PIPE}"
+
+    def _build_current(self, label: str, confidence: float, fps: float,
+                       top_labels: list[tuple[str, float]] | None) -> list[str]:
+        """Current detection box — stacked bar with all labels, colored legend."""
         g = self._glyphs
         tier = self._tier(confidence)
-        pct = self._c(tier, f"{confidence * 100:.1f}%")
-
         is_fresh = self._last_change_time and time.monotonic() - self._last_change_time < 1.0
-        lbl = (
+        lbl_display = (
             self._c(self._BOLD + tier, f"{g.STAR} {label}")
             if is_fresh and self._color
             else self._cb(tier, label)
         )
-
-        fps_str = f"fps:{fps:.1f}"
-        cnt_str = f"#{self._total_count}"
-        label_part = f" {lbl}  {pct} "
-
-        status_part = ""
-        if self._status:
-            status_part = f"  {g.PIPE}  {self._c(self._BOLD + self._YELLOW, self._status)}"
-
-        metrics = f" {fps_str}  {g.PIPE}  {cnt_str}"
-        if self._prev_label is not None and not self._status:
+        inner = self._width - 2
+        lines: list[str] = [
+            f"{g.CORNER_TL}{g.DASH} Current {g.DASH * (inner - 10)}{g.CORNER_TR}",
+        ]
+        # ── label + metrics on one line (metrics right‑aligned) ──
+        metrics = f"fps:{fps:.0f}  #{self._total_count}"
+        if self._prev_label is not None:
             held = time.monotonic() - self._change_t0
-            metrics += f"  {g.PIPE}  \u0394 {held:.1f}s"
+            metrics += f"  \u0394 {held:.1f}s"
+        label_content = f" {lbl_display} "
+        metrics_str = f" {metrics} "
+        pad = max(1, self._width - 2 - _visible_len(label_content) - _visible_len(metrics_str))
+        lines.append(self._box_line(f"{label_content}{' ' * pad}{metrics_str}"))
 
-        label_len = _visible_len(label_part)
-        inner_w = self._width - 4
-        right_part = f"{metrics}{status_part}"
-        right_len = _visible_len(right_part)
-        gap = max(1, inner_w - label_len - right_len - 1)
-        return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{right_part} {g.DASH}{g.CORNER_TR}"
+        # ── legend: colored labels with percentages ──
+        all_labels = top_labels or [(label, confidence)]
+        label_map = {l: c for l, c in all_labels}
+        label_map[label] = max(label_map.get(label, 0), confidence)
+        sorted_lbls = sorted(label_map.items(), key=lambda x: -x[1])
+        bar_colors = [self._GREEN, self._BLUE, self._PURPLE, self._DIM]
+        legend = "  ".join(
+            f"{self._c(bar_colors[min(i, len(bar_colors)-1)], f'{lbl}({c*100:.0f}%)')}"
+            for i, (lbl, c) in enumerate(sorted_lbls[:4])
+        )
+        lines.append(self._box_line(f"  {legend}  "))
 
-    def _dash_mid(self, confidence: float, labels: list[tuple[str, float]] | None) -> str:
+        # ── separator ──
+        lines.append(f"{g.TJUNCTION_L}{g.DASH} History {g.DASH * (inner - 10)}{g.TJUNCTION_R}")
+        return lines
+
+    def _build_history(self, max_rows: int) -> list[str]:
+        """Process‑list style history with fixed column widths — bar first."""
         g = self._glyphs
-        inner_w = self._width - 4
-        bar_w = inner_w
-        top_str = ""
-        if labels and len(labels) > 1:
-            top_str = f"  {g.PIPE}  {self._top_n(labels[:2])}"
-            bar_w = max(_MIN_BAR_WIDTH, inner_w - _visible_len(top_str))
-        return f"{g.PIPE}{g.DASH}{self._bar(confidence, bar_w)}{top_str}{g.DASH}{g.PIPE}"
+        lines: list[str] = []
+        inner = self._width - 2
 
-    def _pct_bar(self, ratio: float, width: int) -> str:
-        """Compact bar for the stats line — colored by frequency tier."""
-        filled = round(ratio * width)
-        empty = max(0, width - filled)
-        code = self._GREEN if ratio >= _STATS_FREQ_HIGH else (self._YELLOW if ratio >= _STATS_FREQ_MID else self._RED)
-        return self._c(code, self._glyphs.BLOCK_FULL * filled + self._glyphs.BLOCK_EMPTY * empty)
+        # Fixed column widths (in characters)
+        COL_PCT = 5    # " 89%"
+        COL_NUM = 4    # " 35"
+        COL_LBL = 10   # "  Cherry  " (left)
+        COL_EVT = 3    # " →" or "   "
+        SP = 1         # space between columns
+        fixed = COL_PCT + COL_NUM + COL_LBL + COL_EVT + SP * 4
+        bar_w = max(10, min(inner - fixed, 50))  # cap bar at 50 to avoid overbloat
 
-    # ---- stats bar (1 line, below dashboard) ----
+        # Column header aligned to data columns
+        header = (
+            f"{'Bar':<{bar_w}}"
+            f"{'%':>{COL_PCT}} "
+            f"{'#':>{COL_NUM}} "
+            f"{'Label':<{COL_LBL}} "
+            f"{'Evt':>{COL_EVT}}"
+        )
+        lines.append(self._box_line(header))
 
-    def _stats_line(self) -> str:
-        """Compact 1-line stats bar: top N labels with mini bars + counts."""
+        for entry in reversed(list(self._history)[-max_rows:]):
+            idx, lbl, conf, _fps, _timing, is_change, prev_lbl = entry
+            tier = self._tier(conf)
+            # Bar (colored)
+            filled = round(conf * bar_w)
+            bar_color = self._c(tier, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
+            # Percentage (same color as bar)
+            pct = self._c(tier, f"{conf*100:.0f}%".rjust(COL_PCT))
+            # Number (same color as bar)
+            num = self._c(tier, f"{idx}".rjust(COL_NUM))
+            # Label
+            label = f"  {lbl:<8}"[:COL_LBL]
+            # Event marker
+            evt = f" {g.ARROW_R}" if is_change else "   "
+            row = f"{bar_color} {pct} {num} {label} {evt}"
+            lines.append(self._box_line(row))
+
+        # Pad with dim placeholder rows so stats sits at the bottom
+        for _ in range(max_rows - min(max_rows, len(self._history))):
+            dim = self._DIM
+            blank_bar = self._c(dim, g.BLOCK_EMPTY * bar_w)
+            blank_pct = self._c(dim, "---".rjust(COL_PCT))
+            blank_num = self._c(dim, "---".rjust(COL_NUM))
+            blank_lbl = "  ---     "[:COL_LBL]
+            lines.append(self._box_line(f"{blank_bar} {blank_pct} {blank_num} {blank_lbl}   "))
+        return lines
+
+    def _build_stats_line(self) -> str:
+        """htop Mem-style stats bar: [Label ████████ count]."""
         g = self._glyphs
-        sorted_s = sorted(self._stats.items(), key=lambda x: -x[1])
+        sorted_s = sorted(self._stats.items(), key=lambda x: x[0])
         if not sorted_s:
-            return f"{g.PIPE}{_('  (no data)').ljust(self._width - 2)}{g.PIPE}"
+            return self._box_line(_("  (no data)"))
 
-        inner_w = self._width - 2
-        slots = _STATS_LINE_LABELS
         max_c = sorted_s[0][1]
+        inner = self._width - 2
         parts: list[str] = []
-        for lbl, count in sorted_s[:slots]:
-            ratio = count / max_c
-            per_slot = min((inner_w - 2) // slots, 16)
-            short = lbl if len(lbl) <= _SHORT_LABEL_LEN else lbl[:3] + "."
-            bar_w = per_slot - len(short) - 6
-            bar_w = max(bar_w, 2)
-            bar_str = self._pct_bar(ratio, bar_w)
-            parts.append(f"{short}{bar_str}{count}")
-        return f"{g.PIPE}{'  '.join(parts).ljust(inner_w)}{g.PIPE}"
-
-    def _build_bot(self) -> str:
-        g = self._glyphs
-        return f"{g.CORNER_BL}{g.DASH * (self._width - 2)}{g.CORNER_BR}"
+        left = inner
+        for lbl, count in sorted_s[:4]:
+            slot = f" {lbl} "
+            bar_w = max(2, round((count / max_c) * (min(left - len(slot) - 4, 16))))
+            filled = round((count / max_c) * bar_w)
+            code = self._GREEN if (count / max_c) >= 0.5 else (self._YELLOW if (count / max_c) >= 0.2 else self._RED)
+            bar = self._c(code, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
+            entry = f"{slot}{bar} {count}"
+            if len(entry) > left:
+                break
+            parts.append(entry)
+            left -= len(entry) + 2
+        return self._box_line("  ".join(parts))
 
     # ---- main api ----
 
@@ -307,57 +379,65 @@ class UserOutputFormatter:
         timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,
     ) -> None:
-        """Handle one prediction result."""
+        """Handle one prediction result — btop-style multi-zone layout."""
         self._refresh_width()
         self._total_count += 1
         self._stats[label] += 1
         self._inference_times.append(timing_s)
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
 
-        change_event: str | None = None
-        if self._prev_label is not None and label != self._prev_label:
-            held_s = time.monotonic() - self._change_t0
-            g = self._glyphs
-            top_str = f"  |  {self._top_n(top_labels)}" if top_labels else ""
-            change_event = (
-                f"{g.DASH * 2} {self._prev_label} {g.ARROW_R} {label}  "
-                f"{confidence * 100:.1f}%  "
-                f"{_('(held {time:.1f}s, {count} detections)').format(time=held_s, count=self._dets_since_change)}"
-                f"{top_str} {g.DASH * 2}"
-            )
+        # Detect label change
+        is_change = self._prev_label is not None and label != self._prev_label
+        if is_change:
             self._change_t0 = time.monotonic()
             self._dets_since_change = 0
             self._last_change_time = time.monotonic()
         elif self._prev_label is None:
             self._change_t0 = time.monotonic()
 
+        prev = self._prev_label
         self._dets_since_change += 1
         self._prev_label = label
 
-        panel = "\n".join([
-            self._dash_top(label, confidence, fps),
-            self._dash_mid(confidence, top_labels),
-            self._stats_line(),
-            self._build_bot(),
-        ])
+        # Append to history ring buffer
+        self._history.append((self._total_count, label, confidence, fps, timing_s, is_change, prev))
+
+        # ── Build multi-zone layout ──
+        g = self._glyphs
+        panel_lines: list[str] = []
+
+        # Top zone: current detection (always same position)
+        panel_lines += self._build_current(label, confidence, fps, top_labels)
+
+        # History zone: recent predictions (fill available space, leave 1 line for prompt)
+        current_h = 4      # top + label/metrics + legend + separator
+        col_header = 1
+        stats_h = 3         # separator + line + bottom
+        avail = max(2, self._lines - current_h - col_header - stats_h - 1)
+        panel_lines += self._build_history(avail)
+
+        # Stats zone: cummulative counts (htop Mem-style bar)
+        g2 = self._glyphs
+        inner_w = self._width - 2
+        sep = f"{g2.TJUNCTION_L}{g2.DASH} Stats {g2.DASH * (inner_w - 8)}{g2.TJUNCTION_R}"
+        panel_lines.append(sep)
+        panel_lines.append(self._build_stats_line())
+        panel_lines.append(f"{g2.CORNER_BL}{g2.DASH * (self._width - 2)}{g2.CORNER_BR}")
+
+        panel = "\n".join(panel_lines)
 
         if self._first_output:
             self._first_output = False
-            g = self._glyphs
-            if self._context:
-                self._write(f"\n{self._context}\n{g.DASH * self._width}\n")
-            self._write(f"{panel}\n")
+            ctx = f"\n{self._context}\n" if self._context else "\n"
+            self._write(f"{ctx}{panel}\n")
             self._flush_buf()
             return
 
         if self._tty:
-            self._write(f"\033[4A\033[J{panel}\n")
+            # Full-screen redraw — pan lives at the top of the terminal, no cursor‑up chaos
+            self._write(f"\033[H\033[J{panel}\n")
         else:
             self._write(f"\n{panel}")
-            self._flush_buf()
-
-        if change_event:
-            self._write(f"\n{change_event}\n")
             self._flush_buf()
 
     def on_error(
@@ -365,32 +445,24 @@ class UserOutputFormatter:
         timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,  # noqa: ARG002  # pylint: disable=unused-argument
     ) -> None:
-        # pylint: disable=too-many-locals
         self._total_count += 1
         self._inference_times.append(timing_s)
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
+        self._history.append((self._total_count, "---", 0.0, fps, timing_s, False, None))
+
         g = self._glyphs
-
-        err = self._c(self._RED, "---")
-        fstr = f"fps:{fps:.1f}"
-        cstr = f"#{self._total_count}"
-        label_part = f" {err}  {err} "
-        metrics = f" {fstr}  {g.PIPE}  {cstr}"
-        label_len = _visible_len(label_part)
-        gap = max(2, self._width - 4 - label_len - _visible_len(metrics))
-
-        top = f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{metrics} {g.DASH}{g.CORNER_TR}"
-        bar_chars = self._c(self._RED, self._glyphs.BLOCK_FULL * _MIN_BAR_WIDTH)
-        mid = f"{g.PIPE}{g.DASH}{bar_chars}{_('  camera error')}{g.DASH}{g.PIPE}"
-        panel = "\n".join([top, mid, self._stats_line(), self._build_bot()])  # noqa: FLY002
+        panel_lines: list[str] = []
+        panel_lines += self._build_current("---", 0.0, fps, None)
+        panel_lines += self._build_history(max(2, self._lines - 13))
+        panel = "\n".join(panel_lines)
 
         if self._first_output:
             self._first_output = False
         if self._tty:
-            self._write(f"\033[4A\033[J{panel}\n")
+            self._write(f"\033[H\033[J{panel}\n")
         else:
             self._write(f"\n{panel}")
-            self._flush_buf()
+        self._flush_buf()
 
     def close(self) -> None:
         self._flush_buf()
