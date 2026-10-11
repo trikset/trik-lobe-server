@@ -24,8 +24,8 @@ class FruitDemo:
     """Generates a realistic prediction stream for visual QA of the dashboard.
 
     Emits three types of events:
-    - High‑conf detection (normal)
-    - Low‑conf / uncertain (simulates no clear label)
+    - High-conf detection (normal)
+    - Low-conf / uncertain (simulates no clear label)
     - Error (simulates camera / model failure)
     """
 
@@ -46,8 +46,8 @@ class FruitDemo:
         self._fmt.close()
         raise SystemExit(0)
 
-    def _top(self, ix: int, base: float = 0.95) -> list[tuple[str, float]]:
-        """Top‑3 labels with declining confidence from *base*."""
+    def _top3(self, ix: int, base: float = 0.95) -> list[tuple[str, float]]:
+        """Top-3 labels with declining confidence from *base*."""
         return [(self.LABELS[(ix + i) % 4], max(base - i * 0.18, 0.01)) for i in range(3)]
 
     def step(self) -> None:
@@ -60,10 +60,10 @@ class FruitDemo:
             if r < 0.15:          # 15% chance: error burst
                 self._phase = "error"
                 self._phase_countdown = int(random.uniform(1, 3))
-            elif r < 0.30:        # 15% chance: low‑conf uncertainty
+            elif r < 0.30:        # 15% chance: low-conf uncertainty
                 self._phase = "low"
                 self._phase_countdown = int(random.uniform(3, 7))
-            else:                  # 70% chance: normal high‑conf detection
+            else:                  # 70% chance: normal high-conf detection
                 self._phase = "high"
                 self._phase_countdown = int(random.uniform(8, 16))
                 self._label_ix = (self._label_ix + 1) % 4
@@ -73,7 +73,7 @@ class FruitDemo:
         sleep_s = 1.0 / (10 + random.uniform(0, 7))
 
         if self._phase == "error":
-            self._fmt.on_error(timing, self._top(self._label_ix, 0.1))
+            self._fmt.on_error(timing, self._top3(self._label_ix, 0.1))
             time.sleep(sleep_s)
             return
 
@@ -82,17 +82,17 @@ class FruitDemo:
             low_base = 0.1 + random.uniform(0, 0.15)
             label = self.LABELS[self._label_ix]
             conf = round(low_base + random.uniform(0, 0.08), 3)
-            self._fmt.on_prediction(label, conf, timing, self._top(self._label_ix, low_base))
+            self._fmt.on_prediction(label, conf, timing, self._top3(self._label_ix, low_base))
             time.sleep(sleep_s)
             return
 
-        # High‑conf normal detection
+        # High-conf normal detection
         if self._same >= 8 + int(random.uniform(0, 7)):
             self._label_ix = (self._label_ix + 1) % 4
             self._same = 0
         label = self.LABELS[self._label_ix]
         conf = round(0.95 - random.uniform(0, 0.12), 3)
-        self._fmt.on_prediction(label, conf, timing, self._top(self._label_ix, 0.95))
+        self._fmt.on_prediction(label, conf, timing, self._top3(self._label_ix, 0.95))
         self._same += 1
         time.sleep(sleep_s)
 

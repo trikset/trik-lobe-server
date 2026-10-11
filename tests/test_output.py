@@ -55,15 +55,16 @@ class TestUserBasic:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_error(0.05)
         stderr = capsys.readouterr().err
-        assert "camera error" in stderr
+        assert "---" in stderr
 
     def test_on_error_in_tty(self, capsys: pytest.CaptureFixture[str]) -> None:
-        r"""Test on_error in TTY mode (uses cursor-up redraw)."""
+        r"""Test on_error in TTY mode (uses home+clear redraw)."""
         fmt = UserOutputFormatter(color_enabled=False)
+        fmt._first_output = False  # simulate already-active session
         fmt._tty = True
         fmt.on_error(0.05)
         stderr = capsys.readouterr().err
-        assert "\033[4A" in stderr
+        assert "\033[H\033[J" in stderr
 
     def test_close_releases(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -100,17 +101,7 @@ class TestUserBasic:
 
 
 class TestUserAdvanced:
-    """Advanced UserOutputFormatter tests: bars, fps, non-TTY, context."""
-
-    def test_bar_high_confidence(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        result = fmt._bar(0.9, width=10)
-        assert result.count("█") + result.count("#") == 9
-
-    def test_bar_low_confidence(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        result = fmt._bar(0.3, width=10)
-        assert result.count("█") + result.count("#") == 3
+    """Advanced UserOutputFormatter tests: fps, context, status badge."""
 
     def test_tier_green(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -220,7 +211,7 @@ class TestUserAdvanced:
         with _tty(fmt):
             fmt.on_prediction("cat", 0.88, 0.06)
         stderr = capsys.readouterr().err
-        assert "\033[4A" in stderr  # cursor-up escape
+        assert "\033[H\033[J" in stderr  # home+clear escape
 
     def test_width_caps_at_120(self) -> None:
         """When terminal reports huge buffer width, formatter caps no higher than 120."""

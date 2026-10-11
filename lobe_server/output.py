@@ -24,10 +24,15 @@ _STATS_FREQ_HIGH = 0.5
 _STATS_FREQ_MID = 0.2
 _STDOUT_EVERY_DETECTION = 2
 _BOX_WIDTH = 72
-_MAX_WIDTH = 120  # cap to prevent panel wrapping on huge terminal buffers
-_MIN_BAR_WIDTH = 10
-_STATS_LINE_LABELS = 4  # labels shown on the compact stats bar
-_SHORT_LABEL_LEN = 4
+_MAX_WIDTH = 120
+_HIST_COL_PCT = 5
+_HIST_COL_NUM = 4
+_HIST_COL_LBL = 10
+_HIST_COL_EVT = 3
+_HIST_COL_SP = 1
+_HIST_BAR_MIN = 10
+_HIST_BAR_MAX = 50
+_BAR_COLORS = ("\x1b[92m", "\x1b[94m", "\x1b[95m", "\x1b[2m")
 
 _WIN = os.name == "nt"
 _ENCODING = getattr(sys.stderr, "encoding", "") or ""
@@ -92,11 +97,15 @@ def _enable_vt() -> bool:  # pragma: no cover (Windows-only)
 
 class UserOutputFormatter:
     """
-    btop-style live dashboard (3 lines) + compact cumulative stats bar (1 line).
+    Full-screen btop-style live dashboard.
 
-    The stats bar shows the top N labels with mini bars and counts. On label
-    change a persistent event line prints below the panel.
-    Connection status is shown as a badge on the top line.
+    Layout (top to bottom):
+      ┌─ Current ──┐    — label + fps/Δ, coloured legend
+      ├─ History ──┤    — process-list, newest at top
+      ├─ Stats ────┤    — cumulative per-label counts
+      ╰──────────────┐
+
+    History rows are capped to fit the terminal without scrolling.
     """
 
     _GREEN = "\033[92m"
@@ -221,133 +230,123 @@ class UserOutputFormatter:
             return self._YELLOW
         return self._RED
 
-    def _bar(self, confidence: float, width: int) -> str:
-        filled = round(confidence * width)
-        empty = max(0, width - filled)
-        code = self._tier(confidence)
-        return self._c(code, self._glyphs.BLOCK_FULL * filled + self._glyphs.BLOCK_EMPTY * empty)
 
-    def _top_n(self, labels: list[tuple[str, float]], n: int = 3) -> str:
-        parts: list[str] = []
-        for lbl, conf in labels[:n]:
-            pct = conf * 100
-            parts.append(self._c(self._tier(conf), f"{lbl}({pct:.0f}%)"))
-        return "  ".join(parts)
-
-    # ── btop‑style meter (htop inspired) ─────────────────────────
-
-    def _meter(self, confidence: float, text: str, bar_max: int, total_width: int) -> str:
-        """htop-style meter: [|||  text] — bar fills up to bar_max within total_width."""
-        filled = round(confidence * bar_max)
-        bar = self._glyphs.BLOCK_FULL * filled
-        rest_w = max(0, total_width - filled)
-        txt = text[:rest_w]
-        rest = self._glyphs.BLOCK_EMPTY * max(0, rest_w - len(txt))
-        code = self._tier(confidence)
-        return f"[{self._c(code, bar)}{txt}{rest}]"
 
     def _box_line(self, content: str) -> str:
-        """│  content  │ — pads to _width by visible length (ANSI‑safe)."""
+        """│  content  │ — pads to _width by visible length (ANSI-safe)."""
         g = self._glyphs
         vis = _visible_len(content)
         pad = max(0, self._width - 2 - vis)
         return f"{g.PIPE}{content}{' ' * pad}{g.PIPE}"
 
+    def _section_header(self, title: str, width: int) -> str:
+        """\u252c\u2500 title \u2524 separator."""
+        g = self._glyphs
+        return f"{g.TJUNCTION_L}{g.DASH} {title} {g.DASH * (width - 4 - len(title))}{g.TJUNCTION_R}"
+
+    def _box_top(self, title: str, width: int) -> str:
+        """\u256d\u2500 title \u2500\u256e box top."""
+        g = self._glyphs
+        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (width - 4 - len(title))}{g.CORNER_TR}"
+
+    def _box_bot(self, width: int) -> str:
+        """\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f box bottom."""
+        g = self._glyphs
+        return f"{g.CORNER_BL}{g.DASH * (width - 2)}{g.CORNER_BR}"
+
+    def _available_history_rows(self) -> int:
+        """Return how many history rows fit the terminal."""
+        return max(2, self._lines - 4 - 1 - 3 - 1)
+
+    def _redraw(self, panel: str) -> None:
+        """Write panel with full-screen clear (TTY) or append (pipe)."""
+        nl = "\n"
+        if self._first_output:
+            self._first_output = False
+            ctx = f"{nl}{self._context}{nl}" if self._context else nl
+            self._write(f"{ctx}{panel}{nl}")
+            self._flush_buf()
+            return
+        if self._tty:
+            self._write(f"\033[H\033[J{panel}{nl}")
+        else:
+            self._write(f"{nl}{panel}")
+            self._flush_buf()
+
     def _build_current(self, label: str, confidence: float, fps: float,
                        top_labels: list[tuple[str, float]] | None) -> list[str]:
-        """Current detection box — stacked bar with all labels, colored legend."""
+        """Build the current detection box: label + metrics + coloured legend."""
         g = self._glyphs
         tier = self._tier(confidence)
         is_fresh = self._last_change_time and time.monotonic() - self._last_change_time < 1.0
-        lbl_display = (
+        lbl = (
             self._c(self._BOLD + tier, f"{g.STAR} {label}")
             if is_fresh and self._color
             else self._cb(tier, label)
         )
-        inner = self._width - 2
-        lines: list[str] = [
-            f"{g.CORNER_TL}{g.DASH} Current {g.DASH * (inner - 10)}{g.CORNER_TR}",
-        ]
-        # ── label + metrics on one line (metrics right‑aligned) ──
+        lines = [self._box_top("Current", self._width)]
         metrics = f"fps:{fps:.0f}  #{self._total_count}"
-        if self._prev_label is not None:
+        if self._prev_label is not None and not self._status:
             held = time.monotonic() - self._change_t0
             metrics += f"  \u0394 {held:.1f}s"
-        label_content = f" {lbl_display} "
-        metrics_str = f" {metrics} "
-        pad = max(1, self._width - 2 - _visible_len(label_content) - _visible_len(metrics_str))
-        lines.append(self._box_line(f"{label_content}{' ' * pad}{metrics_str}"))
-
-        # ── legend: colored labels with percentages ──
+        if self._status:
+            metrics = f"{self._c(self._BOLD + self._YELLOW, self._status)}  {metrics}"
+        lp = f" {lbl} "
+        mp = f" {metrics} "
+        pad = max(1, self._width - 2 - _visible_len(lp) - _visible_len(mp))
+        lines.append(self._box_line(f"{lp}{' ' * pad}{mp}"))
+        # coloured legend
         all_labels = top_labels or [(label, confidence)]
-        label_map = {l: c for l, c in all_labels}
-        label_map[label] = max(label_map.get(label, 0), confidence)
-        sorted_lbls = sorted(label_map.items(), key=lambda x: -x[1])
-        bar_colors = [self._GREEN, self._BLUE, self._PURPLE, self._DIM]
+        lm = dict(all_labels)
+        lm[label] = max(lm.get(label, 0), confidence)
+        sorted_lbls = sorted(lm.items(), key=lambda x: -x[1])
         legend = "  ".join(
-            f"{self._c(bar_colors[min(i, len(bar_colors)-1)], f'{lbl}({c*100:.0f}%)')}"
-            for i, (lbl, c) in enumerate(sorted_lbls[:4])
+            self._c(_BAR_COLORS[min(i, 3)], f"{lb}({c*100:.0f}%)")
+            for i, (lb, c) in enumerate(sorted_lbls[:4])
         )
         lines.append(self._box_line(f"  {legend}  "))
-
-        # ── separator ──
-        lines.append(f"{g.TJUNCTION_L}{g.DASH} History {g.DASH * (inner - 10)}{g.TJUNCTION_R}")
+        lines.append(self._section_header("History", self._width))
         return lines
 
     def _build_history(self, max_rows: int) -> list[str]:
-        """Process‑list style history with fixed column widths — bar first."""
+        """Process-list style history with fixed column widths — bar first."""
         g = self._glyphs
         lines: list[str] = []
-        inner = self._width - 2
-
-        # Fixed column widths (in characters)
-        COL_PCT = 5    # " 89%"
-        COL_NUM = 4    # " 35"
-        COL_LBL = 10   # "  Cherry  " (left)
-        COL_EVT = 3    # " →" or "   "
-        SP = 1         # space between columns
-        fixed = COL_PCT + COL_NUM + COL_LBL + COL_EVT + SP * 4
-        bar_w = max(10, min(inner - fixed, 50))  # cap bar at 50 to avoid overbloat
+        fixed = _HIST_COL_PCT + _HIST_COL_NUM + _HIST_COL_LBL + _HIST_COL_EVT + _HIST_COL_SP * 4
+        bar_w = max(_HIST_BAR_MIN, min(self._width - 2 - fixed, _HIST_BAR_MAX))
 
         # Column header aligned to data columns
         header = (
             f"{'Bar':<{bar_w}}"
-            f"{'%':>{COL_PCT}} "
-            f"{'#':>{COL_NUM}} "
-            f"{'Label':<{COL_LBL}} "
-            f"{'Evt':>{COL_EVT}}"
+            f"{'%':>{_HIST_COL_PCT}} "
+            f"{'#':>{_HIST_COL_NUM}} "
+            f"{'Label':<{_HIST_COL_LBL}} "
+            f"{'Evt':>{_HIST_COL_EVT}}"
         )
         lines.append(self._box_line(header))
 
         for entry in reversed(list(self._history)[-max_rows:]):
-            idx, lbl, conf, _fps, _timing, is_change, prev_lbl = entry
+            idx, lbl, conf, _fps, _timing, is_change, _pl = entry
             tier = self._tier(conf)
-            # Bar (colored)
             filled = round(conf * bar_w)
-            bar_color = self._c(tier, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
-            # Percentage (same color as bar)
-            pct = self._c(tier, f"{conf*100:.0f}%".rjust(COL_PCT))
-            # Number (same color as bar)
-            num = self._c(tier, f"{idx}".rjust(COL_NUM))
-            # Label
-            label = f"  {lbl:<8}"[:COL_LBL]
-            # Event marker
+            bar = self._c(tier, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
+            pct = self._c(tier, f"{conf*100:.0f}%".rjust(_HIST_COL_PCT))
+            num = self._c(tier, f"{idx}".rjust(_HIST_COL_NUM))
+            cl = f"  {lbl:<8}"[:_HIST_COL_LBL]
             evt = f" {g.ARROW_R}" if is_change else "   "
-            row = f"{bar_color} {pct} {num} {label} {evt}"
-            lines.append(self._box_line(row))
+            lines.append(self._box_line(f"{bar} {pct} {num} {cl} {evt}"))
 
-        # Pad with dim placeholder rows so stats sits at the bottom
         for _ in range(max_rows - min(max_rows, len(self._history))):
-            dim = self._DIM
-            blank_bar = self._c(dim, g.BLOCK_EMPTY * bar_w)
-            blank_pct = self._c(dim, "---".rjust(COL_PCT))
-            blank_num = self._c(dim, "---".rjust(COL_NUM))
-            blank_lbl = "  ---     "[:COL_LBL]
-            lines.append(self._box_line(f"{blank_bar} {blank_pct} {blank_num} {blank_lbl}   "))
+            d = self._DIM
+            blank = self._c(d, g.BLOCK_EMPTY * bar_w)
+            bp = self._c(d, "---".rjust(_HIST_COL_PCT))
+            bn = self._c(d, "---".rjust(_HIST_COL_NUM))
+            bl = "  ---     "[:_HIST_COL_LBL]
+            lines.append(self._box_line(f"{blank} {bp} {bn} {bl}   "))
         return lines
 
     def _build_stats_line(self) -> str:
-        """htop Mem-style stats bar: [Label ████████ count]."""
+        """Htop Mem-style stats bar: [Label ████████ count]."""
         g = self._glyphs
         sorted_s = sorted(self._stats.items(), key=lambda x: x[0])
         if not sorted_s:
@@ -361,7 +360,8 @@ class UserOutputFormatter:
             slot = f" {lbl} "
             bar_w = max(2, round((count / max_c) * (min(left - len(slot) - 4, 16))))
             filled = round((count / max_c) * bar_w)
-            code = self._GREEN if (count / max_c) >= 0.5 else (self._YELLOW if (count / max_c) >= 0.2 else self._RED)
+            code = self._GREEN if (count / max_c) >= _STATS_FREQ_HIGH else (
+                self._YELLOW if (count / max_c) >= _STATS_FREQ_MID else self._RED)
             bar = self._c(code, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
             entry = f"{slot}{bar} {count}"
             if len(entry) > left:
@@ -403,7 +403,6 @@ class UserOutputFormatter:
         self._history.append((self._total_count, label, confidence, fps, timing_s, is_change, prev))
 
         # ── Build multi-zone layout ──
-        g = self._glyphs
         panel_lines: list[str] = []
 
         # Top zone: current detection (always same position)
@@ -434,7 +433,7 @@ class UserOutputFormatter:
             return
 
         if self._tty:
-            # Full-screen redraw — pan lives at the top of the terminal, no cursor‑up chaos
+            # Full-screen redraw — pan lives at the top of the terminal, no cursor-up chaos
             self._write(f"\033[H\033[J{panel}\n")
         else:
             self._write(f"\n{panel}")
@@ -450,19 +449,13 @@ class UserOutputFormatter:
         fps = len(self._inference_times) / (sum(self._inference_times) or 1e-9)
         self._history.append((self._total_count, "---", 0.0, fps, timing_s, False, None))
 
-        g = self._glyphs
-        panel_lines: list[str] = []
-        panel_lines += self._build_current("---", 0.0, fps, None)
-        panel_lines += self._build_history(max(2, self._lines - 13))
-        panel = "\n".join(panel_lines)
+        panel_lines = list(self._build_current("---", 0.0, fps, None))
+        panel_lines += self._build_history(self._available_history_rows())
+        panel_lines.append(self._section_header("Stats", self._width))
+        panel_lines.append(self._build_stats_line())
+        panel_lines.append(self._box_bot(self._width))
 
-        if self._first_output:
-            self._first_output = False
-        if self._tty:
-            self._write(f"\033[H\033[J{panel}\n")
-        else:
-            self._write(f"\n{panel}")
-        self._flush_buf()
+        self._redraw("\n".join(panel_lines))
 
     def close(self) -> None:
         self._flush_buf()

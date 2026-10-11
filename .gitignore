@@ -145,3 +145,6 @@ signature.json
 
 # Local temp files (PR bodies, scratch data, hypothesis notes)
 .tmp/
+
+# Basedpyright builtin stub — tracked, not ignored
+!__builtins__.pyi
