@@ -64,7 +64,6 @@ jobs:
 
   build:
     needs: test
-    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +76,10 @@ jobs:
     container: ${{ matrix.container }}
     env:
       SCRIPT_NAME: TRIKLobeServer
+      # manylinux_2_28 image ships a statically-linked Python (/opt/python, no
+      # shared lib) which breaks PyInstaller. Force uv to use its managed build
+      # (python-build-standalone, Py_ENABLE_SHARED=1). See MEMORY.md CI quirks.
+      UV_PYTHON_PREFERENCE: only-managed
 
     steps:
       - uses: actions/checkout@v7
