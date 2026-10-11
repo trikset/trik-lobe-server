@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Pre-push hook — rejects pushes that would spoil upstream.
+# Install:  ln -sf ../../scripts/pre-push .git/hooks/pre-push
+# Skip:     git push --no-verify
+
+set -eu
+
+# Block 1: pushing to main directly (unless it's a merge commit push from PR squash)
+while read _local_ref _local_sha _remote_ref _remote_sha; do
+  if [ "$_remote_ref" = "refs/heads/main" ]; then
+    echo "ERROR: Direct push to main is forbidden."
+    echo "  Create a feature branch: git switch --create feat/<name>"
+    exit 1
+  fi
+
+  # Block 2: deleting tags (re-tagging)
+  if echo "$_remote_ref" | grep -q "^refs/tags/"; then
+    echo "ERROR: Deleting or overwriting a tag is forbidden without explicit user permission."
+    echo "  Tags represent published releases — they must never be deleted."
+    exit 1
+  fi
+done
+
+# Block 3: .omo/ or other gitignored artifacts in the commit
+STAGED_OMO=$(git diff --cached --name-only -- .omo/ 2>/dev/null || true)
+if [ -n "$STAGED_OMO" ]; then
+  echo "ERROR: .omo/ artifacts are staged. Remove them before pushing:"
+  echo "  git reset -- .omo/"
+  exit 1
+fi
+
+exit 0
