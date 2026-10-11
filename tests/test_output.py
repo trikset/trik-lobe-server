@@ -245,17 +245,26 @@ class TestUserAdvanced:
         assert "W298" in diag
         assert ">120" in diag
 
-    def test_diagnostic_on_top_line(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Diagnostic appears on top line when room allows, omitted otherwise."""
+    def test_diagnostic_goes_to_title(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Diagnostic moves to OSC window title, not panel."""
         fmt = UserOutputFormatter(color_enabled=False)
+        capsys.readouterr()
         with (
             patch.object(fmt, "_tty", True),  # noqa: FBT003
             patch("shutil.get_terminal_size", return_value=os.terminal_size((150, 24))),
         ):
             fmt._refresh_width()
-        fmt.on_prediction("cat", 0.90, 0.05)
         stderr = capsys.readouterr().err
-        assert "W148" in stderr  # 150 - 2 = 148 raw, capped to 120
+        # Must appear as OSC title escape
+        assert "\033]0;TRIK Lobe [W148" in stderr
+
+    def test_update_title_cache_hit(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Second title write with same diagnostic is suppressed."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        capsys.readouterr()  # discard init write
+        fmt._update_title()  # second call — diagnostic unchanged (cache hit)
+        stderr = capsys.readouterr().err
+        assert stderr == ""  # no new title write
 
 
 class TestStdoutOutputFormatter:

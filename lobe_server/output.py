@@ -133,6 +133,8 @@ class UserOutputFormatter:
         self._stats: Counter[str] = Counter()
         self._buf: list[str] = []
         self._last_width_check = 0.0
+        self._last_title: str | None = None
+        self._update_title()
 
     def _refresh_width(self) -> None:
         """Re-check terminal width (may change on resize). Called once per frame."""
@@ -147,11 +149,24 @@ class UserOutputFormatter:
             if cols >= 40:  # noqa: PLR2004  # minimum terminal width for the box to fit
                 self._raw_width = cols
                 self._width = min(cols, _MAX_WIDTH)
+                self._update_title()
 
     def _diagnostic(self) -> str:
         """Compact terminal diagnostic: Wraw→capped+encoding+VT+COL."""
         enc = (getattr(sys.stderr, "encoding", "") or "?").upper().replace("-", "")
         return "+".join([f"W{self._raw_width}>{self._width}", enc, f"VT{int(self._vt_ok)}", f"COL{int(self._color)}"])
+
+    def _update_title(self) -> None:
+        """Push diagnostic to window/tab title (OSC 0). Only writes on actual change."""
+        title = self._diagnostic()
+        if title == self._last_title:
+            return
+        self._last_title = title
+        # OSC 0 escape — sets window/tab title on all modern terminals (Linux,
+        # macOS, Windows Terminal, iTerm2, etc.). On old cmd.exe this silently
+        # does nothing; no wider effect.
+        sys.stderr.write(f"\033]0;TRIK Lobe [{title}]\007")
+        sys.stderr.flush()
 
     def set_context(self, context: str) -> None:
         self._context = context
@@ -183,7 +198,7 @@ class UserOutputFormatter:
     def _cb(self, code: str, text: str) -> str:
         if self._color:
             return self._c(self._BOLD, self._c(code, text))
-        return f"*{text}*"
+        return text
 
     def _tier(self, confidence: float) -> str:
         if confidence >= _CONF_TIER_HIGH:
@@ -233,17 +248,10 @@ class UserOutputFormatter:
             metrics += f"  {g.PIPE}  \u0394 {held:.1f}s"
 
         label_len = _visible_len(label_part)
-        diag = self._diagnostic()
-        diag_len = _visible_len(diag)
         inner_w = self._width - 4
-        # left side: label, right side: metrics + status + diagnostic
         right_part = f"{metrics}{status_part}"
         right_len = _visible_len(right_part)
-        # If room for diagnostic + separators, include it
-        if label_len + right_len + diag_len + 4 <= inner_w:
-            gap = max(1, inner_w - label_len - right_len - diag_len - 2)
-            return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{right_part} {diag} {g.DASH}{g.CORNER_TR}"
-        gap = max(1, inner_w - label_len - right_len)
+        gap = max(1, inner_w - label_len - right_len - 1)
         return f"{g.CORNER_TL}{g.DASH}{label_part}{g.DASH * gap}{right_part} {g.DASH}{g.CORNER_TR}"
 
     def _dash_mid(self, confidence: float, labels: list[tuple[str, float]] | None) -> str:
@@ -270,9 +278,9 @@ class UserOutputFormatter:
         g = self._glyphs
         sorted_s = sorted(self._stats.items(), key=lambda x: -x[1])
         if not sorted_s:
-            return f"{g.PIPE}{_('  (no data)').ljust(self._width - 4)}{g.PIPE}"
+            return f"{g.PIPE}{_('  (no data)').ljust(self._width - 2)}{g.PIPE}"
 
-        inner_w = self._width - 4
+        inner_w = self._width - 2
         slots = _STATS_LINE_LABELS
         max_c = sorted_s[0][1]
         parts: list[str] = []
