@@ -20,8 +20,6 @@ from collections import Counter, deque
 
 _CONF_TIER_HIGH = 0.8
 _CONF_TIER_MID = 0.5
-_STATS_FREQ_HIGH = 0.5
-_STATS_FREQ_MID = 0.2
 _STDOUT_EVERY_DETECTION = 2
 _BOX_WIDTH = 72
 _MAX_WIDTH = 120
@@ -233,24 +231,24 @@ class UserOutputFormatter:
 
 
     def _box_line(self, content: str) -> str:
-        """│  content  │ — pads to _width by visible length (ANSI-safe)."""
+        """│  content  │ — padded to _width by visible length (ANSI-safe)."""
         g = self._glyphs
         vis = _visible_len(content)
         pad = max(0, self._width - 2 - vis)
         return f"{g.PIPE}{content}{' ' * pad}{g.PIPE}"
 
     def _section_header(self, title: str, width: int) -> str:
-        """\u252c\u2500 title \u2524 separator."""
+        """├─ title ──┤ separator."""
         g = self._glyphs
-        return f"{g.TJUNCTION_L}{g.DASH} {title} {g.DASH * (width - 4 - len(title))}{g.TJUNCTION_R}"
+        return f"{g.TJUNCTION_L}{g.DASH} {title} {g.DASH * (width - 5 - len(title))}{g.TJUNCTION_R}"
 
     def _box_top(self, title: str, width: int) -> str:
-        """\u256d\u2500 title \u2500\u256e box top."""
+        """╭─ title ──╮ box top."""
         g = self._glyphs
-        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (width - 4 - len(title))}{g.CORNER_TR}"
+        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (width - 5 - len(title))}{g.CORNER_TR}"
 
     def _box_bot(self, width: int) -> str:
-        """\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f box bottom."""
+        """╰──────────╯ box bottom."""
         g = self._glyphs
         return f"{g.CORNER_BL}{g.DASH * (width - 2)}{g.CORNER_BR}"
 
@@ -301,7 +299,7 @@ class UserOutputFormatter:
         lm[label] = max(lm.get(label, 0), confidence)
         sorted_lbls = sorted(lm.items(), key=lambda x: -x[1])
         legend = "  ".join(
-            self._c(_BAR_COLORS[min(i, 3)], f"{lb}({c*100:.0f}%)")
+            self._c(_BAR_COLORS[min(i, 3)], f"{lb[:_HIST_COL_LBL]}({c*100:.0f}%)")
             for i, (lb, c) in enumerate(sorted_lbls[:4])
         )
         lines.append(self._box_line(f"  {legend}  "))
@@ -333,7 +331,7 @@ class UserOutputFormatter:
             pct = self._c(tier, f"{conf*100:.0f}%".rjust(_HIST_COL_PCT))
             num = self._c(tier, f"{idx}".rjust(_HIST_COL_NUM))
             cl = f"  {lbl:<8}"[:_HIST_COL_LBL]
-            evt = f" {g.ARROW_R}" if is_change else "   "
+            evt = f"  {g.ARROW_R}" if is_change else "   "
             lines.append(self._box_line(f"{bar} {pct} {num} {cl} {evt}"))
 
         for _ in range(max_rows - min(max_rows, len(self._history))):
@@ -346,24 +344,16 @@ class UserOutputFormatter:
         return lines
 
     def _build_stats_line(self) -> str:
-        """Htop Mem-style stats bar: [Label ████████ count]."""
-        g = self._glyphs
+        """Compact per-label counts — alphabetical, no bars."""
         sorted_s = sorted(self._stats.items(), key=lambda x: x[0])
         if not sorted_s:
             return self._box_line(_("  (no data)"))
 
-        max_c = sorted_s[0][1]
-        inner = self._width - 2
         parts: list[str] = []
-        left = inner
-        for lbl, count in sorted_s[:4]:
-            slot = f" {lbl} "
-            bar_w = max(2, round((count / max_c) * (min(left - len(slot) - 4, 16))))
-            filled = round((count / max_c) * bar_w)
-            code = self._GREEN if (count / max_c) >= _STATS_FREQ_HIGH else (
-                self._YELLOW if (count / max_c) >= _STATS_FREQ_MID else self._RED)
-            bar = self._c(code, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
-            entry = f"{slot}{bar} {count}"
+        left = self._width - 2
+        for lbl, count in sorted_s:
+            short = lbl[:_HIST_COL_LBL]
+            entry = f" {short} {count}"
             if len(entry) > left:
                 break
             parts.append(entry)
