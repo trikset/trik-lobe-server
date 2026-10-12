@@ -176,3 +176,44 @@ def test_load_settings_invalid_output_mode(ini_path: Path) -> None:
     ini_path.write_text(content, encoding="utf-8")
     with pytest.raises(ValueError, match=r"OUTPUT_MODE"):
         load_settings(ini_path)
+
+
+def test_load_settings_threshold_defaults(ini_path: Path) -> None:
+    """No threshold keys -> documented defaults (view 0.4, send 0.6)."""
+    ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\n", encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.view_threshold == 0.4
+    assert s.send_threshold == 0.6
+
+
+def test_load_settings_threshold_explicit(ini_path: Path) -> None:
+    ini_path.write_text(
+        "[Settings]\nVIEW_THRESHOLD=0.35\nSEND_THRESHOLD=0.75\n", encoding="utf-8"
+    )
+    s = load_settings(ini_path)
+    assert s.view_threshold == 0.35
+    assert s.send_threshold == 0.75
+
+
+@pytest.mark.parametrize(
+    ("ini_content", "match"),
+    [
+        ("[Settings]\nVIEW_THRESHOLD=banana\n", r"VIEW_THRESHOLD"),
+        ("[Settings]\nSEND_THRESHOLD=abc\n", r"SEND_THRESHOLD"),
+        ("[Settings]\nVIEW_THRESHOLD=0\n", r"VIEW_THRESHOLD"),
+        ("[Settings]\nSEND_THRESHOLD=-0.5\n", r"SEND_THRESHOLD"),
+        ("[Settings]\nSEND_THRESHOLD=1.5\n", r"SEND_THRESHOLD"),
+        ("[Settings]\nVIEW_THRESHOLD=0.8\nSEND_THRESHOLD=0.6\n", r"VIEW_THRESHOLD"),
+    ],
+)
+def test_load_settings_threshold_invalid(ini_path: Path, ini_content: str, match: str) -> None:
+    ini_path.write_text(ini_content, encoding="utf-8")
+    with pytest.raises(ValueError, match=match):
+        load_settings(ini_path)
+
+
+def test_load_settings_threshold_view_equals_send_ok(ini_path: Path) -> None:
+    """view == send is a valid degenerate config (everything shown = everything sent)."""
+    ini_path.write_text("[Settings]\nVIEW_THRESHOLD=0.5\nSEND_THRESHOLD=0.5\n", encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.view_threshold == s.send_threshold == 0.5

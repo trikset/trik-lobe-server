@@ -19,6 +19,8 @@ class Settings:
     my_hull_number: int = 2
     model_path: str = ""
     camera_source: str = ""
+    view_threshold: float = 0.4
+    send_threshold: float = 0.6
     output_mode: str = "user"
     color_enabled: bool = True
 
@@ -29,6 +31,17 @@ def _get_int(section: configparser.SectionProxy, key: str, default: int) -> int:
         return default
     try:
         return int(raw)
+    except ValueError:
+        msg = _("Invalid {key} in settings.ini: {raw!r}").format(key=key, raw=raw)
+        raise ValueError(msg) from None
+
+
+def _get_float(section: configparser.SectionProxy, key: str, default: float) -> float:
+    raw = section.get(key)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
     except ValueError:
         msg = _("Invalid {key} in settings.ini: {raw!r}").format(key=key, raw=raw)
         raise ValueError(msg) from None
@@ -116,6 +129,21 @@ def load_settings(path: Path | None = None) -> Settings:
 
     camera_source = _fallback_camera_source(s)
 
+    view_threshold = _get_float(s, "VIEW_THRESHOLD", 0.4)
+    if not 0.0 < view_threshold <= 1.0:
+        msg = _("VIEW_THRESHOLD must be in (0, 1]: {value}").format(value=view_threshold)
+        raise ValueError(msg)
+
+    send_threshold = _get_float(s, "SEND_THRESHOLD", 0.6)
+    if not 0.0 < send_threshold <= 1.0:
+        msg = _("SEND_THRESHOLD must be in (0, 1]: {value}").format(value=send_threshold)
+        raise ValueError(msg)
+    if view_threshold > send_threshold:
+        msg = _("VIEW_THRESHOLD ({view}) must not exceed SEND_THRESHOLD ({send})").format(
+            view=view_threshold, send=send_threshold
+        )
+        raise ValueError(msg)
+
     ui = config["UI"] if "UI" in config else config["Settings"]
     output_mode = ui.get("OUTPUT_MODE", "user")
     if output_mode not in ("user", "stdout"):
@@ -130,6 +158,8 @@ def load_settings(path: Path | None = None) -> Settings:
         my_hull_number=my_hull_number,
         model_path=s.get("MODEL_PATH", ""),
         camera_source=camera_source,
+        view_threshold=view_threshold,
+        send_threshold=send_threshold,
         output_mode=output_mode,
         color_enabled=color_enabled,
     )
