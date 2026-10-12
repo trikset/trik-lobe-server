@@ -31,6 +31,11 @@ changes (cursor-up sequence, box-drawing characters, line count), both
 ## Live demo
 
 ```bash
-uv run scripts/fruits-demo.py           # 3 seconds, auto-stop
+uv run scripts/fruits-demo.py            # 3 seconds, ~16fps pipeline
 uv run scripts/fruits-demo.py --unlimit  # until Ctrl+C
+uv run scripts/fruits-demo.py --fps 5    # slower: 1 detection per second
 ```
+
+`--fps N` simulates a pipeline running at N frames/sec; a detection is
+emitted once per 5 frames, so events arrive at N/5 per second (fps=16 →
+≈3.2 events/sec). The dashboard's fps counter reads ≈N.

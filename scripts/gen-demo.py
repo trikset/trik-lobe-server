@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # ruff: noqa: N999, S311 — script filename with hyphen, demo uses random
+# pylint: disable=W0212  # demo pins output internals for deterministic screenshots
 """
 Generate ANSI demo output for screenshot pipeline.
 
@@ -37,7 +38,7 @@ def _dist(ix: int, scenario: str) -> list[tuple[str, float]]:
         "spread": [0.82, 0.70, 0.58, 0.10],
         "hold": [0.55, 0.42, 0.12, 0.04],
     }[scenario]
-    jitter = [random.uniform(-0.02, 0.02) for _ in base]
+    jitter = [random.uniform(-0.02, 0.02) for _ in base]  # nosec B311 — demo jitter
     return sorted(
         [(_LABELS[(ix + i) % 4], max(0.01, base[i] + jitter[i])) for i in range(4)],
         key=lambda x: -x[1],

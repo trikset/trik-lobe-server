@@ -54,11 +54,11 @@ jobs:
       - name: Type check with basedpyright
         run: uv run basedpyright .
       - name: Lint with pylint
-        run: uv run pylint trik_mind TRIKMind.py tests
+        run: uv run pylint trik_mind TRIKMind.py tests scripts
       - name: Security scan with bandit
-        run: uv run bandit --recursive trik_mind/ TRIKMind.py
+        run: uv run bandit --recursive trik_mind/ TRIKMind.py scripts/
       - name: Dead code check with vulture
-        run: uv run vulture trik_mind/ tests/ TRIKMind.py
+        run: uv run vulture trik_mind/ tests/ TRIKMind.py scripts/
       - name: Test with pytest
         run: uv run pytest
 

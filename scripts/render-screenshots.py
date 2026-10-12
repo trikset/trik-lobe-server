@@ -79,10 +79,12 @@ def _segments(text: str) -> Generator[tuple[str, tuple[int, int, int] | None, tu
                 bg = None
                 continue
             for p in params.split(";"):
-                if p in _SGR_FG:
-                    fg = _SGR_FG[p]
-                elif p in _SGR_BG:
-                    bg = _SGR_BG[p]
+                new_fg = _SGR_FG.get(p)
+                if new_fg is not None:
+                    fg = new_fg
+                new_bg = _SGR_BG.get(p)
+                if new_bg is not None:
+                    bg = new_bg
             continue
         yield text[i], fg, bg
         i += 1
@@ -127,6 +129,53 @@ def _draw_cell(draw: ImageDraw.ImageDraw, cell: _Cell) -> None:
         draw.text((cell.x, cell.y), cell.char, fill=colour, font=cell.font)
 
 
+class _Geometry(NamedTuple):
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    cw: int
+    ch: int
+    iw: int
+    ih: int
+
+
+def _geometry(max_cols: int) -> _Geometry:
+    """Compute font + cell/canvas metrics from *max_cols*."""
+    font = _load_font()
+    dd = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = dd.textbbox((0, 0), "M", font=font)
+    cw = max(int(bbox[2] - bbox[0]), 7)
+    ch = max(int(bbox[3] - bbox[1]), 14)
+    return _Geometry(font, cw, ch, max_cols * cw + _PAD * 2, _TERM_ROWS * ch + _PAD * 2)
+
+
+def _paint(
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    max_cols: int,
+    geom: _Geometry,
+    theme: dict[str, tuple[int, int, int]],
+) -> None:
+    """Draw every terminal cell onto *draw*."""
+    for ri, line in enumerate(lines[:_TERM_ROWS]):
+        for ci, (char, fg, bg) in enumerate(_segments(line)):
+            if ci >= max_cols:
+                break
+            _draw_cell(
+                draw,
+                _Cell(
+                    char,
+                    fg,
+                    bg,
+                    _PAD + ci * geom.cw,
+                    _PAD + ri * geom.ch,
+                    _PAD + ci * geom.cw + geom.cw - 1,
+                    _PAD + ri * geom.ch + geom.ch - 1,
+                    geom.font,
+                    theme["fg"],
+                    theme["bg"],
+                ),
+            )
+
+
 def render(input_path: str, output_path: str, *, dark: bool) -> None:
     """Read *input_path* (ANSI), render last _TERM_ROWS rows as PNG."""
     theme = _THEMES["dark" if dark else "light"]
@@ -142,41 +191,13 @@ def render(input_path: str, output_path: str, *, dark: bool) -> None:
     lines = all_lines[-_TERM_ROWS:] if len(all_lines) > _TERM_ROWS else all_lines + [""] * (_TERM_ROWS - len(all_lines))
     max_cols = min(max((len(line) for line in lines), default=_TERM_COLS), _TERM_COLS)
 
-    # Font and cell metrics
-    font = _load_font()
-    dd = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    bbox = dd.textbbox((0, 0), "M", font=font)
-    cw = max(int(bbox[2] - bbox[0]), 7)
-    ch = max(int(bbox[3] - bbox[1]), 14)
-
-    # Canvas
-    iw = max_cols * cw + _PAD * 2
-    ih = _TERM_ROWS * ch + _PAD * 2
-    img = Image.new("RGB", (iw, ih), theme["bg"])
+    geom = _geometry(max_cols)
+    img = Image.new("RGB", (geom.iw, geom.ih), theme["bg"])
     draw = ImageDraw.Draw(img)
-
-    for ri, line in enumerate(lines[:_TERM_ROWS]):
-        for ci, (char, fg, bg) in enumerate(_segments(line)):
-            if ci >= max_cols:
-                break
-            _draw_cell(
-                draw,
-                _Cell(
-                    char,
-                    fg,
-                    bg,
-                    _PAD + ci * cw,
-                    _PAD + ri * ch,
-                    _PAD + ci * cw + cw - 1,
-                    _PAD + ri * ch + ch - 1,
-                    font,
-                    theme["fg"],
-                    theme["bg"],
-                ),
-            )
+    _paint(draw, lines, max_cols, geom, theme)
 
     img.save(output_path)
-    print(f"Saved {output_path}  {iw}x{ih}, {len(lines)} rows, {max_cols} cols")
+    print(f"Saved {output_path}  {geom.iw}x{geom.ih}, {len(lines)} rows, {max_cols} cols")
 
 
 def main() -> None:
