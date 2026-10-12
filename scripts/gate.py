@@ -10,7 +10,7 @@ Usage:  cd /project/root && uv run python scripts/gate.py
 
 from __future__ import annotations
 
-import subprocess
+import subprocess  # nosec B404  # gate runs fixed commands, never user input
 import sys
 from pathlib import Path
 
@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 STEPS: list[tuple[str, list[str]]] = [
     ("ruff", ["uv", "run", "ruff", "check", "."]),
     ("basedpyright", ["uv", "run", "basedpyright", "."]),
-    ("pylint", ["uv", "run", "pylint", "trik_mind", "TRIKMind.py", "tests"]),
-    ("bandit", ["uv", "run", "bandit", "--recursive", "trik_mind/", "TRIKMind.py"]),
-    ("vulture", ["uv", "run", "vulture", "trik_mind/", "tests/", "TRIKMind.py"]),
+    ("pylint", ["uv", "run", "pylint", "trik_mind", "TRIKMind.py", "tests", "scripts"]),
+    ("bandit", ["uv", "run", "bandit", "--recursive", "trik_mind/", "TRIKMind.py", "scripts/"]),
+    ("vulture", ["uv", "run", "vulture", "trik_mind/", "tests/", "TRIKMind.py", "scripts/"]),
     ("pytest", ["uv", "run", "pytest", "-q", "--cov", "--cov-fail-under=100"]),
 ]
 
@@ -29,7 +29,8 @@ STEPS: list[tuple[str, list[str]]] = [
 def main() -> int:
     for name, cmd in STEPS:
         print(f"=== {name} ===")
-        result = subprocess.run(cmd, cwd=ROOT)
+        # Fixed command list from this file — no user input reaches subprocess
+        result = subprocess.run(cmd, cwd=ROOT, check=False)  # nosec B404,B603
         if result.returncode != 0:
             print(f"FAIL: {name} exited with code {result.returncode}")
             return 1
