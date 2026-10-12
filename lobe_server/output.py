@@ -343,22 +343,27 @@ class UserOutputFormatter:
             lines.append(self._box_line(f"{blank} {bp} {bn} {bl}   "))
         return lines
 
-    def _build_stats_line(self) -> str:
-        """Compact per-label counts — alphabetical, no bars."""
+    def _build_stats_lines(self) -> list[str]:
+        """Per-label counts — all labels, wrapped to multiple lines."""
         sorted_s = sorted(self._stats.items(), key=lambda x: x[0])
         if not sorted_s:
-            return self._box_line(_("  (no data)"))
+            return [self._box_line(_("  (no data)"))]
 
-        parts: list[str] = []
+        lines: list[str] = []
+        row: list[str] = []
         left = self._width - 2
         for lbl, count in sorted_s:
             short = lbl[:_HIST_COL_LBL]
             entry = f" {short} {count}"
-            if len(entry) > left:
-                break
-            parts.append(entry)
+            if len(entry) > left and row:
+                lines.append(self._box_line("  ".join(row)))
+                row = []
+                left = self._width - 2
+            row.append(entry)
             left -= len(entry) + 2
-        return self._box_line("  ".join(parts))
+        if row:
+            lines.append(self._box_line("  ".join(row)))
+        return lines
 
     # ---- main api ----
 
@@ -398,20 +403,14 @@ class UserOutputFormatter:
         # Top zone: current detection (always same position)
         panel_lines += self._build_current(label, confidence, fps, top_labels)
 
-        # History zone: recent predictions (fill available space, leave 1 line for prompt)
-        current_h = 4      # top + label/metrics + legend + separator
-        col_header = 1
-        stats_h = 3         # separator + line + bottom
-        avail = max(2, self._lines - current_h - col_header - stats_h - 1)
+        # History zone: fill available space
+        avail = max(2, self._lines - 4 - 1 - 3 - 1)
         panel_lines += self._build_history(avail)
 
-        # Stats zone: cummulative counts (htop Mem-style bar)
-        g2 = self._glyphs
-        inner_w = self._width - 2
-        sep = f"{g2.TJUNCTION_L}{g2.DASH} Stats {g2.DASH * (inner_w - 8)}{g2.TJUNCTION_R}"
-        panel_lines.append(sep)
-        panel_lines.append(self._build_stats_line())
-        panel_lines.append(f"{g2.CORNER_BL}{g2.DASH * (self._width - 2)}{g2.CORNER_BR}")
+        # Stats zone: all labels with counts
+        panel_lines.append(self._section_header("Stats", self._width))
+        panel_lines += self._build_stats_lines()
+        panel_lines.append(self._box_bot(self._width))
 
         panel = "\n".join(panel_lines)
 
@@ -442,7 +441,7 @@ class UserOutputFormatter:
         panel_lines = list(self._build_current("---", 0.0, fps, None))
         panel_lines += self._build_history(self._available_history_rows())
         panel_lines.append(self._section_header("Stats", self._width))
-        panel_lines.append(self._build_stats_line())
+        panel_lines += self._build_stats_lines()
         panel_lines.append(self._box_bot(self._width))
 
         self._redraw("\n".join(panel_lines))
