@@ -2,6 +2,7 @@
 # pyright: reportPrivateUsage=false
 # pylint: disable=W0212  # tests inspect private entrypoint helpers
 
+import argparse
 import builtins
 import sys
 from collections.abc import Callable
@@ -60,6 +61,18 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["prog", "-v", "-v"]):
             args = TRIKMind._parse_args()
         assert args.verbose == 2
+
+    def test_demo_flag(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--demo"]):
+            args = TRIKMind._parse_args()
+        assert args.demo is True
+        assert args.fps == 16.0
+
+    def test_demo_fps_override(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--demo", "--fps", "8"]):
+            args = TRIKMind._parse_args()
+        assert args.demo is True
+        assert args.fps == 8.0
 
 
 class TestBuildFormatter:
@@ -129,3 +142,39 @@ def test_main_keyboard_interrupt_closes_server() -> None:
         TRIKMind.main()
     mock_server.close.assert_called_once()
     mock_input.assert_not_called()
+
+
+def test_run_demo_wires_formatter_and_source() -> None:
+    mock_formatter = MagicMock()
+    mock_source = MagicMock()
+    mock_source.run.side_effect = KeyboardInterrupt
+    with (
+        patch("TRIKMind.UserOutputFormatter", return_value=mock_formatter),
+        patch("TRIKMind.DemoSource", return_value=mock_source) as mock_demo_cls,
+        patch("TRIKMind.logger"),
+    ):
+        TRIKMind._run_demo(argparse.Namespace(no_color=False, fps=8.0))
+    mock_demo_cls.assert_called_once_with(mock_formatter, fps=8.0)
+    mock_source.run.assert_called_once()
+    mock_formatter.close.assert_called_once()
+    mock_formatter.set_context.assert_called_once()
+
+
+def test_main_demo_branch_skips_server() -> None:
+    mock_formatter = MagicMock()
+    mock_source = MagicMock()
+    mock_source.run.side_effect = KeyboardInterrupt
+    with (
+        patch.object(sys, "argv", ["prog", "--demo", "--fps", "6"]),
+        patch("TRIKMind.UserOutputFormatter", return_value=mock_formatter),
+        patch("TRIKMind.DemoSource", return_value=mock_source) as mock_demo_cls,
+        patch("TRIKMind.load_settings") as mock_load,
+        patch("TRIKMind.MindServer") as mock_server,
+        patch("TRIKMind.logger"),
+    ):
+        TRIKMind.main()
+    mock_demo_cls.assert_called_once()
+    mock_load.assert_not_called()
+    mock_server.assert_not_called()
+    mock_source.run.assert_called_once()
+    mock_formatter.close.assert_called_once()
