@@ -289,26 +289,27 @@ class UserOutputFormatter:
             else self._cb(tier, label)
         )
         lines = [self._box_top("Current", self._width, self._diagnostic())]
+        # ── label + confidence + metrics on one line ──
+        pct = self._c(tier, f"{confidence * 100:.1f}%")
         metrics = f"fps:{fps:.0f}  #{self._total_count}"
         if self._prev_label is not None and not self._status:
             held = time.monotonic() - self._change_t0
             metrics += f"  \u0394 {held:.1f}s"
         if self._status:
             metrics = f"{self._c(self._BOLD + self._YELLOW, self._status)}  {metrics}"
-        lp = f" {lbl} "
+        lp = f" {lbl}  {pct} "
         mp = f" {metrics} "
         pad = max(1, self._width - 2 - _visible_len(lp) - _visible_len(mp))
         lines.append(self._box_line(f"{lp}{' ' * pad}{mp}"))
-        # coloured legend
+        # ── candidate labels (skip current, show top 3 others) ──
         all_labels = top_labels or [(label, confidence)]
         lm = dict(all_labels)
         lm[label] = max(lm.get(label, 0), confidence)
         sorted_lbls = sorted(lm.items(), key=lambda x: -x[1])
-        legend = "  ".join(
-            self._c(_BAR_COLORS[min(i, 3)], f"{lb[:_HIST_COL_LBL]}({c*100:.0f}%)")
-            for i, (lb, c) in enumerate(sorted_lbls[:4])
-        )
-        lines.append(self._box_line(f"  {legend}  "))
+        cands = [self._c(_BAR_COLORS[min(i, 3)], f"{lb[:_HIST_COL_LBL]}({c*100:.0f}%)")
+                 for i, (lb, c) in enumerate(sorted_lbls) if i > 0][:3]
+        if cands:
+            lines.append(self._box_line(f"  {'  '.join(cands)}  "))
         lines.append(self._section_header("History", self._width))
         return lines
 

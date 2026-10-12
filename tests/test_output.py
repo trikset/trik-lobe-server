@@ -168,7 +168,7 @@ class TestUserAdvanced:
         assert g.CORNER_BL in stderr
 
     def test_change_prints_top_labels(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Change event shows top-N labels."""
+        """Change shows the new label with its percentage on the label line."""
         fmt = UserOutputFormatter(color_enabled=False)
         labels = [("cat", 0.92), ("dog", 0.74), ("bird", 0.51)]
         with _tty(fmt):
@@ -177,8 +177,7 @@ class TestUserAdvanced:
         with _tty(fmt):
             fmt.on_prediction("dog", 0.74, 0.06, top_labels=labels)
         stderr = capsys.readouterr().err
-        assert "cat(92%)" in stderr
-        assert "dog(74%)" in stderr
+        assert "dog  74.0%" in stderr  # label line: current label + pct
 
     def test_mid_line_with_labels(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Middle panel line shows top-2 labels when available."""
