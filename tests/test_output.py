@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter
+from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter, _visible_len
 
 
 @contextmanager
@@ -350,3 +350,155 @@ class TestStdoutOutputFormatter:
     def test_close_noop(self) -> None:
         fmt = StdoutOutputFormatter()
         fmt.close()
+
+
+class TestThresholdsAndBars:
+    """View/send threshold filtering, letter-char bars, sent/hold markers."""
+
+    def _fmt(self, **kw: float) -> UserOutputFormatter:
+        fmt = UserOutputFormatter(color_enabled=False, **kw)  # type: ignore[arg-type]  # view_threshold only
+        fmt.set_context("t")
+        return fmt
+
+    def test_view_threshold_filters_mid_labels(self) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        labels = [("Apple", 0.9), ("Peach", 0.45), ("Banana", 0.2)]
+        mid = fmt._mid_labels(labels)
+        assert [n for n, _ in mid] == ["Apple", "Peach"]
+
+    def test_view_threshold_filtered_history_row_empty_bar(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        fmt.on_prediction("Apple", 0.3, 0.05, [("Apple", 0.3), ("Peach", 0.2)], sent=False)
+        err = capsys.readouterr().err
+        assert "░" in err  # dim empty bar, nothing above view threshold
+
+    def test_labels_text_comma_joined_truncated(self) -> None:
+        fmt = self._fmt()
+        entry = (1, "Apple", 0.9, 0.0, 0.0, False, None, [("AppleVeryLongName", 0.9), ("Peach", 0.7)], True)
+        assert fmt._labels_text(entry) == "AppleVeryL,Peach"
+
+    def test_labels_text_uses_winner_when_no_mid(self) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        entry = (1, "Apple", 0.3, 0.0, 0.0, False, None, [("Apple", 0.3)], True)
+        assert fmt._labels_text(entry) == "Apple"
+
+    def test_sent_marker_up_arrow_in_history(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = self._fmt()
+        fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)
+        assert "↑" in capsys.readouterr().err
+
+    def test_hold_marker_cross_in_history(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = self._fmt()
+        fmt.on_prediction("Apple", 0.5, 0.05, [("Apple", 0.5)], sent=False)
+        assert "×" in capsys.readouterr().err
+
+    def test_hold_marker_in_current_line(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = self._fmt()
+        fmt.on_prediction("Apple", 0.5, 0.05, [("Apple", 0.5)], sent=False)
+        assert "×" in capsys.readouterr().err
+
+    def test_sent_no_marker_in_current_line(self, capsys: pytest.CaptureFixture[str]) -> None:
+        fmt = self._fmt()
+        fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)
+        err = capsys.readouterr().err
+        assert "×" not in err
+
+    def test_bar_width_rounding_fills_exactly(self) -> None:
+        fmt = self._fmt()
+        cases = [
+            ([("A", 0.90), ("B", 0.75)], 60),
+            ([("A", 0.90), ("B", 0.75), ("C", 0.55)], 61),
+            ([("A", 0.95)], 60),
+            ([("A", 0.5), ("B", 0.5)], 59),
+            ([("A", 0.55), ("B", 0.42), ("C", 0.12), ("D", 0.3)], 60),
+        ]
+        for labels, bar_w in cases:
+            bar = fmt._history_bar(labels, bar_w)
+            assert _visible_len(bar) == bar_w, f"bar_w={bar_w} got {_visible_len(bar)} for {labels}"
+
+    def test_bar_four_way_split_has_dim_tail(self) -> None:
+        fmt = self._fmt()
+        bar = fmt._history_bar([("AAAA", 0.5), ("BBBB", 0.45), ("CCCC", 0.4), ("DDDD", 0.45)], 40)
+        assert "░" in bar  # dim lumped tail for 4th+
+
+    def test_bar_empty_when_no_mid(self) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        bar = fmt._history_bar([("A", 0.3), ("B", 0.2)], 30)
+        assert bar == "░" * 30
+
+    def test_bar_total_zero_dim(self) -> None:
+        fmt = self._fmt()
+        assert fmt._history_bar([("A", 0.0)], 10) == "░" * 10
+
+    def test_bar_tiny_width_guard(self) -> None:
+        fmt = self._fmt()
+        labels = [("Apple", 0.9), ("Banana", 0.8), ("Cherry", 0.7)]
+        bar = fmt._history_bar(labels, 3)
+        assert _visible_len(bar) == 3
+
+    def test_candidate_tokens_filtered_by_view(self) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        toks = fmt._candidate_tokens([("Apple", 0.9), ("Peach", 0.35), ("Banana", 0.2)], "Apple", 0.9)
+        assert toks == []
+
+    def test_candidate_tokens_keeps_above_view(self) -> None:
+        fmt = self._fmt(view_threshold=0.4)
+        toks = fmt._candidate_tokens([("Apple", 0.9), ("Peach", 0.7)], "Apple", 0.9)
+        assert len(toks) == 1
+        assert "Peach" in toks[0]
+
+    def test_unique_letter_collision(self) -> None:
+        fmt = self._fmt()
+        taken: set[str] = set()
+        a = fmt._unique_letter("Apple", taken)
+        p = fmt._unique_letter("Apricot", taken)
+        assert a == "A"
+        assert p == "P"  # second letter, unique
+
+    def test_ascii_path_no_non_ascii(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        import trik_mind.output as m
+
+        monkeypatch.setattr(m, "_HAS_UNICODE", False)
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_context("t")
+        fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)
+        fmt.on_prediction("Peach", 0.5, 0.05, [("Peach", 0.5)], sent=False)
+        err = capsys.readouterr().err
+        # Windows cmd (cp1251) must display everything: nothing outside Latin-1/cp1251.
+        err.encode("cp1251")
+
+    def test_ascii_glyphs_present(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        import trik_mind.output as m
+
+        monkeypatch.setattr(m, "_HAS_UNICODE", False)
+        fmt = UserOutputFormatter(color_enabled=False)
+        fmt.set_context("t")
+        fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)
+        fmt.on_prediction("Peach", 0.5, 0.05, [("Peach", 0.5)], sent=False)
+        err = capsys.readouterr().err
+        assert "^" in err  # ASCII SENT glyph
+        assert "x" in err  # ASCII HOLD glyph
+        assert "|" in err  # ASCII PIPE
+
+    def test_set_context_pipe_is_glyph_aware(self) -> None:
+        fmt = self._fmt()
+        fmt.set_context("model  |  USB")
+        assert fmt._context is not None
+        assert "\u2502" not in fmt._context  # no hardcoded U+2502
+
+    def test_tier_bg_red_below_mid(self) -> None:
+        fmt = self._fmt()
+        assert fmt._tier_bg(0.3) == "\033[41m"
+
+    def test_tier_bg_green_high(self) -> None:
+        fmt = self._fmt()
+        assert fmt._tier_bg(0.9) == "\033[42m"
+
+    def test_tier_bg_yellow_mid(self) -> None:
+        fmt = self._fmt()
+        assert fmt._tier_bg(0.6) == "\033[43m"
+
+    def test_unique_letter_all_collide_fallback(self) -> None:
+        fmt = self._fmt()
+        taken = {"A", "B", "C"}
+        assert fmt._unique_letter("ABC", taken) == "A"  # all chars taken -> first char fallback
