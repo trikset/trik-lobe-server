@@ -1,6 +1,6 @@
-# TRIK Lobe Server
+# TRIK Mind
 
-[![CI](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml/badge.svg)](https://github.com/trikset/trik-lobe-server/actions/workflows/python-app.yml)
+[![CI](https://github.com/trikset/trik-mind/actions/workflows/python-app.yml/badge.svg)](https://github.com/trikset/trik-mind/actions/workflows/python-app.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 
 Сервер для выполнения инференса ML-моделей (ONNX / TFLite) на ПК и отправки результатов
@@ -9,7 +9,7 @@
 ## Установка
 
 1. Скачайте архив для вашей платформы с последней версией сервера
-   [здесь](https://github.com/trikset/trik-lobe-server/releases/latest).
+   [здесь](https://github.com/trikset/trik-mind/releases/latest).
 1. Распакуйте архив.
 1. Отредактируйте `settings.ini` (см. ниже).
 
@@ -21,12 +21,12 @@
 после проверки сопровождающим.
 
 Имена файлов содержат версию релиза, например
-`TRIKLobeServer-v26.08.03-Windows.zip`,
-`TRIKLobeServer-v26.08.03-Linux.tar.gz` или
-`TRIKLobeServer-v26.08.03-macOS.tar.gz`. Windows использует `.zip`,
+`TRIKMind-v26.08.03-Windows.zip`,
+`TRIKMind-v26.08.03-Linux.tar.gz` или
+`TRIKMind-v26.08.03-macOS.tar.gz`. Windows использует `.zip`,
 Linux и macOS — `.tar.gz`. Внутри каждого архива лежит исполняемый файл с
-версией в имени (`TRIKLobeServer-v26.08.03.exe` для Windows,
-`TRIKLobeServer-v26.08.03.bin` для Linux/macOS).
+версией в имени (`TRIKMind-v26.08.03.exe` для Windows,
+`TRIKMind-v26.08.03.bin` для Linux/macOS).
 
 ## Системные требования
 
@@ -122,7 +122,7 @@ ML-библиотек (onnxruntime, LiteRT) больше не существуе
 В режиме `stdout` (`-o stdout`) выводятся табулированные строки для передачи
 в другие программы (grep, awk, логирование).
 
-Лог-файл по умолчанию — `lobe_server.log` рядом с программой. Путь можно
+Лог-файл по умолчанию — `trik_mind.log` рядом с программой. Путь можно
 изменить через `--log-file`.
 
 ## Подготовка модели
@@ -203,7 +203,7 @@ def main():
 | `-o, --output-mode <user|stdout>` | Режим вывода. `user` — цветной вывод в stderr (по умолчанию). `stdout` — табулированный вывод для pipe |
 | `--no-color` | Отключить ANSI-цвета (только в режиме `user`) |
 | `-v, --verbose` | Подробный вывод в stdout-режиме. Можно указать дважды: `-v -v` |
-| `--log-file PATH` | Путь к лог-файлу (по умолчанию `lobe_server.log`) |
+| `--log-file PATH` | Путь к лог-файлу (по умолчанию `trik_mind.log`) |
 | `--version` | Показать версию программы и выйти |
 
 ## Поддерживаемые модели
@@ -221,7 +221,7 @@ def main():
 
 ```bash
 uv sync
-uv run pyinstaller TRIKLobeServer.py --onefile  # add --icon=trik-studio.ico on Windows
+uv run pyinstaller TRIKMind.py --onefile  # add --icon=trik-studio.ico on Windows
 ```
 
 Готовый исполняемый файл появится в `dist/`.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gate.py — canonical local quality gate for trik-lobe-server.
+gate.py — canonical local quality gate for trik-mind.
 
 Runs all checks in the required order (ruff -> basedpyright -> pylint ->
 bandit -> vulture -> pytest). Exits on first failure.
@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 STEPS: list[tuple[str, list[str]]] = [
     ("ruff", ["uv", "run", "ruff", "check", "."]),
     ("basedpyright", ["uv", "run", "basedpyright", "."]),
-    ("pylint", ["uv", "run", "pylint", "lobe_server", "TRIKLobeServer.py", "tests"]),
-    ("bandit", ["uv", "run", "bandit", "--recursive", "lobe_server/", "TRIKLobeServer.py"]),
-    ("vulture", ["uv", "run", "vulture", "lobe_server/", "tests/", "TRIKLobeServer.py"]),
+    ("pylint", ["uv", "run", "pylint", "trik_mind", "TRIKMind.py", "tests"]),
+    ("bandit", ["uv", "run", "bandit", "--recursive", "trik_mind/", "TRIKMind.py"]),
+    ("vulture", ["uv", "run", "vulture", "trik_mind/", "tests/", "TRIKMind.py"]),
     ("pytest", ["uv", "run", "pytest", "-q", "--cov", "--cov-fail-under=100"]),
 ]
 

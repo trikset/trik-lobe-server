@@ -22,13 +22,13 @@ import logging
 import sys
 from pathlib import Path
 
-from lobe_server.config import Settings, load_settings, resolve_model_path
-from lobe_server.locale import setup_locale
-from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
-from lobe_server.server import LobeServer
+from trik_mind.config import Settings, load_settings, resolve_model_path
+from trik_mind.locale import setup_locale
+from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter
+from trik_mind.server import MindServer
 
 _LOG_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
-_LOG_FILE = _LOG_DIR / "lobe_server.log"
+_LOG_FILE = _LOG_DIR / "trik_mind.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,13 +52,13 @@ def _get_version() -> str:
     try:
         from importlib.metadata import version as _version  # noqa: PLC0415
 
-        return _version("trik-lobe-server")
+        return _version("trik-mind")
     except Exception:  # noqa: BLE001
         return "0.0.0"
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="TRIK Lobe ML inference server")
+    parser = argparse.ArgumentParser(description="TRIK Mind ML inference server")
     parser.add_argument(
         "-o",
         "--output-mode",
@@ -78,7 +78,7 @@ def _parse_args() -> argparse.Namespace:
         "--log-file",
         type=str,
         default=None,
-        help="Path to log file (default: lobe_server.log next to executable)",
+        help="Path to log file (default: trik_mind.log next to executable)",
     )
     parser.add_argument(
         "--robot-ip",
@@ -173,10 +173,10 @@ def _create_server_or_exit(
     settings: Settings,
     model_path: Path,
     formatter: UserOutputFormatter | StdoutOutputFormatter,
-) -> LobeServer:
+) -> MindServer:
     """Create server with graceful error handling on model load failure."""
     try:
-        return LobeServer(settings, model_path, formatter=formatter)
+        return MindServer(settings, model_path, formatter=formatter)
     except (RuntimeError, FileNotFoundError):
         logger.exception(_("Failed to create server (check model file)"))
         _pause_for_user()

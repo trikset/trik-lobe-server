@@ -1,4 +1,4 @@
-# MEMORY.md — trik-lobe-server
+# MEMORY.md — trik-mind
 
 <!-- encoding: utf-8 -->
 
@@ -11,7 +11,7 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 
 ## Architecture
 
-### Model loading — `lobe_server/model.py`
+### Model loading — `trik_mind/model.py`
 
 - Dual backend: `ONNXImageModel` (onnxruntime) and `TFLiteImageModel`
   (ai_edge_litert). Auto-detects format by scanning for `.onnx` or `.tflite`
@@ -24,9 +24,9 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 - Three supported model directory layouts are documented in
   "Model directory layout (three supported layouts)".
 
-### Connection protocol — `lobe_server/server.py`
+### Connection protocol — `trik_mind/server.py`
 
-- `LobeServer` is a TCP client connecting to the robot's mailbox server.
+- `MindServer` is a TCP client connecting to the robot's mailbox server.
   Sends `register:<port>:<hull>`, `self:<hull>`, `keepalive` (every 5s),
   `data:<prediction>` (every 0.2s).
 - Receives `self:<hull>`, `connection:<ip>:<port>:<hull>` during handshake,
@@ -36,7 +36,7 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
   outbound-only — death detection is the reader's job. Full strategy and the
   `_send` guardrail are in "Connection health detection strategy".
-- **Network interfaces**: `LobeServer` is a TCP client only — it never listens
+- **Network interfaces**: `MindServer` is a TCP client only — it never listens
   on any port. Outgoing connections to `ROBOT_IP:ROBOT_PORT` are routed by the
   OS through whichever interface(s) can reach that IP. If the host has multiple
   interfaces (WiFi + Ethernet), no configuration is needed beyond a reachable
@@ -732,9 +732,9 @@ compare link, and ambiguous artifact filenames.
 **Decisions:**
 
 - Artifacts carry the release tag in the filename (e.g.
-  `TRIKLobeServer-v26.08.03-Linux.tar.gz`) so multiple downloads don't
+  `TRIKMind-v26.08.03-Linux.tar.gz`) so multiple downloads don't
   collide in a user's Downloads folder.
-- Inner binaries keep the version plus an extension (`TRIKLobeServer-v26.08.03.bin`
+- Inner binaries keep the version plus an extension (`TRIKMind-v26.08.03.bin`
   / `.exe`) so users can identify and execute them after extraction.
 - Release notes Part 2 opens with an "Updated dependencies" table instead of
   one bullet per dependency bump; then lists only major issues/PRs; then
@@ -761,7 +761,7 @@ matters for users on slow connections.
 **Decision:** Ship every platform as one archive — Windows `.zip` (native
 double-click extraction in Explorer), Linux and macOS `.tar.gz` (platform
 standard, preserves the executable bit). Each archive contains the versioned
-binary (`TRIKLobeServer-v<tag>.exe` / `.bin`) **and** `settings.ini` at the
+binary (`TRIKMind-v<tag>.exe` / `.bin`) **and** `settings.ini` at the
 root. The separate `settings.ini` release asset is dropped.
 
 **Trade-off:** PyInstaller one-file binaries are already internally compressed,
@@ -773,7 +773,7 @@ because it is the standard and keeps file permissions.
 
 **Consequences:**
 
-- Artifact names become `TRIKLobeServer-v<tag>-Windows.zip`, `-Linux.tar.gz`,
+- Artifact names become `TRIKMind-v<tag>-Windows.zip`, `-Linux.tar.gz`,
   `-macOS.tar.gz`.
 - The `release` job needs `zip` and `tar` on the runner (both preinstalled on
   `ubuntu-latest`), enforced by the "Check for all tools" step.
@@ -915,7 +915,7 @@ refreshed in-place via `\r`. The user experience review revealed:
 | CLI `--no-color` | — | Disables ANSI color |
 | CLI `-v` / `--verbose` | — | Stackable, only in `stdout` mode |
 | CLI `--version` | — | Print version and exit |
-| CLI `--log-file` | — | Custom log file path (default `lobe_server.log`) |
+| CLI `--log-file` | — | Custom log file path (default `trik_mind.log`) |
 
 ### [2026-09-18] Cross-platform output considerations
 
@@ -953,11 +953,12 @@ Screenshots are generated programmatically, not taken from a real terminal.
 This ensures reproducibility and easy regeneration when the output format
 changes:
 
-1. `.tmp/gen_demo.py` — creates a `UserOutputFormatter`, feeds a realistic
+1. `scripts/gen-demo.py` — creates a `UserOutputFormatter`, feeds a realistic
    prediction sequence (4 classes, 33 frames, 3 label changes, 10-17 FPS
    random timing), and writes the ANSI output (both color and colorless)
-   to `.tmp/demo-dark.ansi` / `.tmp/demo-light.ansi`.
-1. `.tmp/render_screenshots.py` — parses the ANSI, extracts the last 41
+   to `.tmp/demo-dark.ansi` / `.tmp/demo-light.ansi`. Pins the terminal to
+   81×41 via a `shutil.get_terminal_size` stub.
+1. `scripts/render-screenshots.py` — parses the ANSI, extracts the last 41
    rows of scrollback (simulating a terminal viewport), and renders each
    character cell via Pillow. `█` blocks become filled rectangles in the
    active ANSI colour; `░` light shade becomes a dotted pattern. Regular
@@ -966,14 +967,14 @@ changes:
 **Regeneration:**
 
 ```bash
-uv run .tmp/gen_demo.py
-uv run .tmp/render_screenshots.py .tmp/demo-dark.ansi screenshots-dark.png --dark
-uv run .tmp/render_screenshots.py .tmp/demo-light.ansi screenshots-light.png
+uv run scripts/gen-demo.py
+uv run scripts/render-screenshots.py .tmp/demo-dark.ansi screenshots-dark.png --dark
+uv run scripts/render-screenshots.py .tmp/demo-light.ansi screenshots-light.png
 ```
 
 **Design choices for the demo:**
 
-- **81 × 41** terminal size — typical classroom/real-world window
+- **81 × 41** terminal size — typical classroom/real-world window
 - Labels: **Apple, Banana, Cherry, Dewberry** — unambiguous English words,
   no Cyrillic/Unicode confusion (previous screenshots used Russian labels
   that caused encoding issues in the render pipeline)
@@ -984,9 +985,10 @@ uv run .tmp/render_screenshots.py .tmp/demo-light.ansi screenshots-light.png
 
 **Guardrail:** When the output format changes (line count, cursor-up
 sequence, box-drawing characters), BOTH scripts must be updated. The render
-script depends on `\033[4A` as the cursor-up marker and expects a 4-line
-panel matching the formatter's output. If the formatter changes these,
-the screenshots will show wrong content.
+script depends on the cursor-up/clear markers (`\033[H\033[J` full-screen
+redraw since 2026-10-12) and expects a panel matching the formatter's output;
+if the formatter changes these, the screenshots will show wrong content.
+`scripts/README.md` is the canonical home for the pipeline commands.
 
 ### [2026-09-18] Camera source redesign: unified CAMERA_SOURCE
 
@@ -1035,7 +1037,7 @@ The name sounds like "this app's own port" but it's actually the TCP port of
 **Decision:** Rename `SERVER_IP` → `ROBOT_IP` and `SERVER_PORT` → `ROBOT_PORT`.
 Add new `ROBOT_VIDEO_PORT` (default 8080). Keep old names as backward-compat
 fallbacks in `load_settings()` with a startup deprecation log. `MY_HULL_NUMBER`
-stays as-is — the lobe-server emulates a TRIK robot in the protocol layer, and
+stays as-is — the trik-mind emulates a TRIK robot in the protocol layer, and
 the hull number is the emulated robot's identity.
 
 **CLI flags added:**
@@ -1127,7 +1129,86 @@ Key design decisions:
 | `_stats_line()` / `_build_bot()` | `_build_stats_lines()` (returns list[str]) + `_box_bot()` |
 | `_bar()` / `_meter()` / `_top_n()` | No longer needed |
 
-**Permanent dependencies:** The render scripts `.tmp/gen_demo.py` and
-`.tmp/render_screenshots.py` depend on the exact cursor-up sequence (`\033[4A`) and
-the box-drawing character set. If the formatter changes these, both must be updated
-to keep screenshots in sync.
+**Permanent dependencies:** The render scripts `scripts/gen_demo.py` and
+`scripts/render_screenshots.py` depend on the exact redraw sequence (`\033[H\033[J`,
+full-screen, since the btop redesign) and the box-drawing character set. If the
+formatter changes these, both must be updated to keep screenshots in sync.
+
+### [2026-10-12] Agent quirks: CI gate stops at first failing step
+
+**Context:** PR #149's scripts had latent type errors (basedpyright) that CI
+never caught. The `test` job's first step is `ruff check`; when it failed,
+GitHub Actions **stops the job** — basedpyright/pylint/bandit/vulture/pytest
+in the same job never ran. The run said "failure" but only proved ruff was
+broken; the branch was assumed green.
+
+**Quirk:** In this workflow each job is one linear step list with no
+`continue-on-error` — a red step hides every tool after it in that job.
+
+**Rule (AGENTS.md):** a red `ruff` step does NOT mean the other gates passed —
+they never ran. Re-run the full local gate (all 7 tools) before claiming CI
+failure analysis is complete; when one tool fails, read the full output of
+the others too (they may also be broken, from the same root cause).
+
+### [2026-10-12] Agent quirks: GPG signing hangs on cold passphrase cache
+
+**Context:** mid-session, `git commit -S` started hanging after previously
+working. The gpg-agent caches the passphrase only for its TTL (default 600s,
+renewable); an agent session that signed earlier in the day can later hang
+silently waiting for pinentry — which in a headless/tmux context waits with
+no UI, or times out.
+
+**Symptoms:** `git commit -S` / `git rebase --exec '… -S'` hangs with no
+output; `gpg-connect-agent "KEYINFO --list <keygrip>"` shows the cached
+field as `-` (passphrase not cached); a pinentry dialog may briefly flash
+or never appear in a headless context.
+
+**Workaround:** the gpg-agent checks its cache before prompting — once the
+passphrase has been entered *interactively* at least once during a session
+(via a TTY/pinentry), all subsequent `-S` operations complete
+non-interactively until the TTL expires (default 600s, renewed on use).
+Group all signing work together right after the first interactive unlock;
+if a long gap leaves the cache cold again, re-unlock once (any `git commit -S` in a terminal) before batch re-signing. In a headless session, notify
+the user that a pinentry prompt needs attention rather than retrying a
+hanging `-S` blindly.
+
+### [2026-10-12] Agent quirks: rebase --exec does not re-sign on fast-forward
+
+**Context:** `git rebase <base> --exec 'git commit --amend --no-edit -S'` is the
+documented re-sign recipe (/AGENTS.md). When the branch is already up to date
+with the base, the rebase **fast-forwards** and never replays commits — so the
+`--exec` steps are skipped and commits stay unsigned while the command reports
+"Successfully rebased".
+
+**Rule:** after a fast-forwarded `rebase --exec`, verify signatures actually
+changed: `git log --format=%G? <base>..HEAD` must show `G`. If it still shows
+`N`, force replay with `git rebase --force-rebase <base> --exec '…'` and verify
+again.
+
+### [2026-10-12] Agent quirks: gh run watch on stale run
+
+**Context:** after a force-push, `gh run list --branch <b> --limit 1` may still
+point at the pre-push run ID — GitHub Actions does not restart runs on updated
+SHAs. `gh run watch <stale>` then reports the *old* commit's conclusion
+("already completed") and can mislead the agent into trusting a failed run or
+missing a new one.
+
+**Rule:** capture `headSha` from the run list and compare to local `HEAD`
+before trusting the conclusion; if they differ, the check is stale — re-list
+the branch (GitHub reconciles within seconds) and watch the fresh run.
+
+### [2026-10-12] Agent quirks: ruff format vs E501 conflict in locale.py
+
+**Context:** `ruff format` joins a dict entry onto one line whenever the key is
+short enough, ignoring the 120-char limit for the *value* side — producing
+lines > 120 that E501 then rejects. `locale.py` translation tables (short
+English keys + long Russian/Spanish values) hit this directly: `ruff format`
+ballooned the file and broke the lint gate.
+
+**Decision:** `_RU`/`_ES` dicts are wrapped in `# fmt: off` … `# fmt: on` so the
+formatter leaves the hand-split key/value layout alone; E501 stays satisfied.
+Ruff suppresses formatting within those guards, and lint checks remain green.
+
+**Consequence (guardrail):** keep new translations inside the `# fmt: off/on`
+block; never let `ruff format` reformat them (it re-collapses to >120 chars).
+See AGENTS.md "Tooling assumptions".

@@ -1,4 +1,4 @@
-# AGENTS.md — trik-lobe-server
+# AGENTS.md — trik-mind
 
 <!-- encoding: utf-8 -->
 
@@ -69,6 +69,15 @@ configurations, update this section and the referenced config files
   state, retry with backoff, then report — don't blindly repeat the command
 - CI failure: check each tool (ruff, basedpyright, pylint, bandit, vulture,
   pytest), platform-specificity, flakiness (retry once), and coverage output
+- **CI stops at the first failing step in a job**: a red `ruff` step means
+  basedpyright/pylint/bandit/vulture/pytest never ran in that run — the run only
+  proves the failed tool is broken. Always re-run the full local gate before
+  claiming "all checks"; when a later tool then fails too, fix all findings in
+  one pass (read full output, never truncated).
+- **After any force-push, confirm the watched run's `headSha` equals the new
+  local HEAD before trusting its result**: `gh run list --branch <b>` shows the
+  latest run, but `gh run watch` on a stale run ID reports the *old* commit's
+  outcome ("already completed with failure") and misleads.
 - **Error triage**: after any unexpected error ask "Was this expected? Would I
   have been surprised if it succeeded?" If unexpected, stop and investigate —
   root cause first, fix second, skip third.
@@ -178,6 +187,10 @@ distinct work → new branch/PR, never append to an open one.
   needs a direct explicit unbiased user prompt — it bypasses required reviews
 - Squash-merge subject uses Conventional Commits (\<50 chars); the body carries
   the PR-description info, not just a file changelog
+- **`--auto` does not bypass required reviews**: with branch protection's
+  review requirement, `gh pr merge --auto` arms the queue but stays BLOCKED
+  until someone approves (you cannot approve your own PR — GitHub 422). Either
+  get a human review or, on explicit user instruction, merge with `--admin`.
 
 ### Stacked PRs (squash merge)
 
@@ -239,6 +252,11 @@ example).
   reflowed into lists — never start a wrapped line with a list character
 - `coverage.py` `exclude_lines` REPLACES the default exclusions (incl.
   `if TYPE_CHECKING:`); use `exclude_also` to add to the defaults instead
+- **`ruff format` collapses dict entries onto one line regardless of the
+  120-char limit** (short key + long string value ⇒ joined line > 120 chars,
+  tripping E501). `locale.py` translation tables are wrapped in `# fmt: off/on`
+  to keep key/value pairs hand-split — keep new translations inside those
+  guards; do not reformat them with `ruff format .`
 
 ### Decision-making
 
@@ -280,6 +298,7 @@ Details live in `MEMORY.md` — pull a section on demand:
 | CI quirks, runner notes, release flow | CI quirks |
 | Stacked PR recovery | Workflows |
 | Rationale and trade-offs for choices | Design decisions |
+| Agent quirks (signing, rebase, CI staleness, formatter) | Design decisions — `Agent quirks:` dated entries |
 | Python version constraint | Python version (below) |
 
 `python-app.yml` is the single workflow file — job guards: see MEMORY.md
@@ -294,11 +313,11 @@ uv run ruff check .          # lint
 uv run ruff format .         # format
 uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
-uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py  # security scan
-uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
+uv run pylint trik_mind TRIKMind.py tests  # code quality (10.00 expected)
+uv run bandit --recursive trik_mind/ TRIKMind.py  # security scan
+uv run vulture trik_mind/ tests/ TRIKMind.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
+uv run pyinstaller TRIKMind.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
 ```
 
 **Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.

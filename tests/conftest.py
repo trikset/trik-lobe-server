@@ -4,7 +4,7 @@
 """
 Install English identity translations before each test.
 
-Production calls setup_locale() in TRIKLobeServer.main(); pytest doesn't run
+Production calls setup_locale() in TRIKMind.main(); pytest doesn't run
 that entry point. An autouse fixture (not a session hook) guarantees the
 builtin ``_`` exists and stays English even after tests install other
 catalogs (test_locale.py calls setup_locale("ru") / setup_locale("es")).
@@ -12,9 +12,9 @@ catalogs (test_locale.py calls setup_locale("ru") / setup_locale("es")).
 
 import pytest
 
-from lobe_server.locale import _LobeTranslations
+from trik_mind.locale import _MindTranslations
 
 
 @pytest.fixture(autouse=True)
 def _english_translations() -> None:
-    _LobeTranslations("en").install()
+    _MindTranslations("en").install()

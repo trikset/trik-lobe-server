@@ -6,8 +6,8 @@ import os
 import sys
 from unittest.mock import patch
 
-from lobe_server.locale import _ES, _RU, _LobeTranslations, detect_locale, setup_locale
-from TRIKLobeServer import _parse_args
+from trik_mind.locale import _ES, _RU, _MindTranslations, detect_locale, setup_locale
+from TRIKMind import _parse_args
 
 
 class TestDetectLocale:
@@ -60,40 +60,40 @@ class TestSetupLocale:
         assert code == "en"
 
     def test_install_makes_translation(self) -> None:
-        t = _LobeTranslations("ru")
+        t = _MindTranslations("ru")
         t.install()
         result = t.gettext("Press any key to close the window...")
         assert "\u041d\u0430\u0436\u043c\u0438\u0442\u0435" in result
 
 
-class TestLobeTranslations:
+class TestMindTranslations:
     def test_english_returns_identity(self) -> None:
-        t = _LobeTranslations("en")
+        t = _MindTranslations("en")
         assert t.gettext("Hello, World!") == "Hello, World!"
 
     def test_russian_translates(self) -> None:
-        t = _LobeTranslations("ru")
+        t = _MindTranslations("ru")
         result = t.gettext("Press any key to close the window...")
         assert "Нажмите" in result
         assert result != "Press any key to close the window..."
 
     def test_spanish_translates(self) -> None:
-        t = _LobeTranslations("es")
+        t = _MindTranslations("es")
         result = t.gettext("Press any key to close the window...")
         assert "Presione" in result
         assert result != "Press any key to close the window..."
 
     def test_unknown_key_falls_back_to_english(self) -> None:
-        t = _LobeTranslations("ru")
+        t = _MindTranslations("ru")
         assert t.gettext("Some untranslated string") == "Some untranslated string"
 
     def test_ngettext_singular(self) -> None:
-        t = _LobeTranslations("ru")
+        t = _MindTranslations("ru")
         result = t.ngettext("connecting", "reconnecting", 1)
         assert result == t.gettext("connecting")
 
     def test_ngettext_plural(self) -> None:
-        t = _LobeTranslations("ru")
+        t = _MindTranslations("ru")
         result = t.ngettext("connecting", "reconnecting", 2)
         assert result == t.gettext("reconnecting")
 

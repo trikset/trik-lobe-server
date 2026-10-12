@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from lobe_server.config import Settings
-from lobe_server.server import LobeServer
+from trik_mind.config import Settings
+from trik_mind.server import MindServer
 
 _SockPair = tuple[socket.socket, socket.socket]
 
@@ -52,21 +52,21 @@ def real_sock_pair() -> _SockPair:
     return a, b
 
 
-def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
+def _make_server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> MindServer:
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        return LobeServer(settings, MagicMock())
+        return MindServer(settings, MagicMock())
 
 
 @pytest.fixture
-def server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> LobeServer:
+def server(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> MindServer:
     return _make_server(settings, mock_model, mock_camera)
 
 
 @pytest.fixture
-def running_server(server: LobeServer) -> LobeServer:
+def running_server(server: MindServer) -> MindServer:
     server._running = True
     return server
 
@@ -82,7 +82,7 @@ def _reader_sock(data: Any) -> MagicMock:
     return sock
 
 
-async def _run_with_timeout(server: LobeServer, coro: Coroutine[Any, Any, object], seconds: float = 0.5) -> None:
+async def _run_with_timeout(server: MindServer, coro: Coroutine[Any, Any, object], seconds: float = 0.5) -> None:
     """Run coro until it finishes or `seconds` elapse (then stop the server)."""
 
     async def stop_after() -> None:
@@ -96,7 +96,7 @@ async def _run_with_timeout(server: LobeServer, coro: Coroutine[Any, Any, object
 
 
 @pytest.mark.asyncio
-async def test_send_format(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_send_format(server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     await server._send(sock, "hello")
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
@@ -104,7 +104,7 @@ async def test_send_format(server: LobeServer, real_sock_pair: _SockPair) -> Non
 
 
 @pytest.mark.asyncio
-async def test_send_message(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_send_message(server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     await server._send_message(sock, "cat")
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
@@ -112,34 +112,34 @@ async def test_send_message(server: LobeServer, real_sock_pair: _SockPair) -> No
 
 
 @pytest.mark.asyncio
-async def test_send_oserror(server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_send_oserror(server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     reader.close()
     await server._send(sock, "hello")
 
 
-def test_predict(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
+def test_predict(server: MindServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     result = server._predict()
     assert result == "cat"
     mock_camera.capture.assert_called_once()
     mock_model.predict.assert_called_once()
 
 
-def test_predict_none(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
+def test_predict_none(server: MindServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     mock_camera.capture.return_value = None
     result = server._predict()
     assert result == "-1"
     mock_model.predict.assert_not_called()
 
 
-def test_predict_full_success(server: LobeServer) -> None:
+def test_predict_full_success(server: MindServer) -> None:
     label, conf, labels = server._predict_full()
     assert label == "cat"
     assert conf == 0.924
     assert labels is not None
 
 
-def test_predict_full_camera_failure(server: LobeServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
+def test_predict_full_camera_failure(server: MindServer, mock_camera: MagicMock, mock_model: MagicMock) -> None:
     mock_camera.capture.return_value = None
     label, conf, labels = server._predict_full()
     assert label is None
@@ -148,7 +148,7 @@ def test_predict_full_camera_failure(server: LobeServer, mock_camera: MagicMock,
     mock_model.predict.assert_not_called()
 
 
-def test_predict_full_no_labels(server: LobeServer, mock_model: MagicMock) -> None:
+def test_predict_full_no_labels(server: MindServer, mock_model: MagicMock) -> None:
     """When result.labels is empty, confidence defaults to 0.0."""
     mock_model.predict.return_value.labels = []
     label, conf, labels = server._predict_full()
@@ -157,7 +157,7 @@ def test_predict_full_no_labels(server: LobeServer, mock_model: MagicMock) -> No
     assert labels == []
 
 
-def test_predict_full_model_crash(server: LobeServer, mock_model: MagicMock) -> None:
+def test_predict_full_model_crash(server: MindServer, mock_model: MagicMock) -> None:
     """When model.predict() raises, _predict_full returns (None, None, None)."""
     mock_model.predict.side_effect = RuntimeError("Model failed")
     label, conf, labels = server._predict_full()
@@ -166,14 +166,14 @@ def test_predict_full_model_crash(server: LobeServer, mock_model: MagicMock) -> 
     assert labels is None
 
 
-def test_shutdown(server: LobeServer) -> None:
+def test_shutdown(server: MindServer) -> None:
     assert server._running is False
     server._running = True
     server.shutdown()
     assert server._running is False
 
 
-def test_close(server: LobeServer, mock_camera: MagicMock) -> None:
+def test_close(server: MindServer, mock_camera: MagicMock) -> None:
     server.close()
     mock_camera.release.assert_called_once()
 
@@ -193,7 +193,7 @@ def test_close(server: LobeServer, mock_camera: MagicMock) -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_reader_behavior(running_server: LobeServer, recv: Any, mode: str) -> None:
+async def test_reader_behavior(running_server: MindServer, recv: Any, mode: str) -> None:
     sock = _reader_sock(recv)
     if mode == "race":
         await _run_with_timeout(running_server, running_server._reader(sock))
@@ -203,7 +203,7 @@ async def test_reader_behavior(running_server: LobeServer, recv: Any, mode: str)
 
 
 @pytest.mark.asyncio
-async def test_reader_oserror_transient_recovers(running_server: LobeServer) -> None:
+async def test_reader_oserror_transient_recovers(running_server: MindServer) -> None:
     calls = {"n": 0}
 
     def _recv(*_: Any) -> bytes:
@@ -221,7 +221,7 @@ async def test_reader_oserror_transient_recovers(running_server: LobeServer) -> 
 
 
 @pytest.mark.asyncio
-async def test_reader_oserror_exhausts_retries(running_server: LobeServer) -> None:
+async def test_reader_oserror_exhausts_retries(running_server: MindServer) -> None:
     def _recv(*_: Any) -> bytes:
         err = "fatal"
         raise OSError(err)
@@ -231,7 +231,7 @@ async def test_reader_oserror_exhausts_retries(running_server: LobeServer) -> No
 
 
 @pytest.mark.asyncio
-async def test_keepalive_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_keepalive_loop(running_server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     await _run_with_timeout(running_server, running_server._keepalive_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
@@ -239,7 +239,7 @@ async def test_keepalive_loop(running_server: LobeServer, real_sock_pair: _SockP
 
 
 @pytest.mark.asyncio
-async def test_prediction_loop(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_prediction_loop(running_server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
     await _run_with_timeout(running_server, running_server._prediction_loop(sock), seconds=0.1)
     data = await asyncio.get_running_loop().sock_recv(reader, 255)
@@ -247,7 +247,7 @@ async def test_prediction_loop(running_server: LobeServer, real_sock_pair: _Sock
 
 
 @pytest.mark.asyncio
-async def test_handle_connection(running_server: LobeServer, real_sock_pair: _SockPair) -> None:
+async def test_handle_connection(running_server: MindServer, real_sock_pair: _SockPair) -> None:
     sock, reader = real_sock_pair
 
     async def send_quit() -> None:
@@ -264,7 +264,7 @@ async def test_handle_connection(running_server: LobeServer, real_sock_pair: _So
 def test_load_model(settings: Settings) -> None:
     mock_img_model = MagicMock()
 
-    with patch("lobe_server.server.load_model", return_value=mock_img_model):
+    with patch("trik_mind.server.load_model", return_value=mock_img_model):
         server = _make_server(settings, mock_img_model, MagicMock())
     assert server._model is mock_img_model
 
@@ -272,10 +272,10 @@ def test_load_model(settings: Settings) -> None:
 def test_formatter_passed_to_server(settings: Settings) -> None:
     formatter = MagicMock()
     with (
-        patch("lobe_server.server.load_model", return_value=MagicMock()),
-        patch("lobe_server.server.create_camera", return_value=MagicMock()),
+        patch("trik_mind.server.load_model", return_value=MagicMock()),
+        patch("trik_mind.server.create_camera", return_value=MagicMock()),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
     assert server._formatter is formatter
 
 
@@ -286,10 +286,10 @@ async def test_prediction_loop_calls_formatter(
     sock, _reader = real_sock_pair
     formatter = MagicMock()
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
     server._running = True
 
     await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
@@ -304,17 +304,17 @@ async def test_run_forever_calls_set_status(settings: Settings, mock_model: Magi
     connect_fail.side_effect = [ConnectionRefusedError, ConnectionRefusedError]
 
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
-        patch("lobe_server.server.LobeServer._connect_once", connect_fail),
-        patch("lobe_server.server.asyncio.sleep", return_value=None),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.MindServer._connect_once", connect_fail),
+        patch("trik_mind.server.asyncio.sleep", return_value=None),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
 
         async def stop_on_sleep(_seconds: float) -> None:
             server.shutdown()
 
-        with patch.object(server, "RECONNECT_DELAY", 0.01), patch("lobe_server.server.asyncio.sleep", stop_on_sleep):
+        with patch.object(server, "RECONNECT_DELAY", 0.01), patch("trik_mind.server.asyncio.sleep", stop_on_sleep):
             await server.run_forever()
 
     assert formatter.set_status.call_count >= 2  # called on connect attempt + reconnect
@@ -328,10 +328,10 @@ async def test_prediction_loop_calls_on_error_on_camera_failure(
     mock_camera.capture.return_value = None
     formatter = MagicMock()
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
     server._running = True
 
     await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
@@ -344,10 +344,10 @@ async def test_prediction_loop_no_formatter_still_sends(
 ) -> None:
     sock, reader = real_sock_pair
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock())
+        server = MindServer(settings, MagicMock())
     server._running = True
 
     await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
@@ -364,10 +364,10 @@ async def test_prediction_loop_continues_on_formatter_error(
     formatter = MagicMock()
     formatter.on_prediction.side_effect = RuntimeError("boom")
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
     server._running = True
 
     await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
@@ -382,10 +382,10 @@ async def test_handle_connection_closes_formatter(
     sock, reader = real_sock_pair
     formatter = MagicMock()
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
     server._running = True
 
     async def send_quit() -> None:
@@ -398,20 +398,20 @@ async def test_handle_connection_closes_formatter(
     formatter.close.assert_called_once()
     mock_img_model = MagicMock()
 
-    with patch("lobe_server.server.load_model", return_value=mock_img_model):
+    with patch("trik_mind.server.load_model", return_value=mock_img_model):
         server = _make_server(settings, mock_img_model, MagicMock())
     assert server._model is mock_img_model
 
 
 @pytest.mark.asyncio
-async def test_connect_once(server: LobeServer) -> None:
+async def test_connect_once(server: MindServer) -> None:
     mock_sock = MagicMock()
     mock_loop = MagicMock()
     mock_loop.sock_connect = AsyncMock()
 
     with (
-        patch("lobe_server.server.socket.socket", return_value=mock_sock),
-        patch("lobe_server.server.asyncio.get_running_loop", return_value=mock_loop),
+        patch("trik_mind.server.socket.socket", return_value=mock_sock),
+        patch("trik_mind.server.asyncio.get_running_loop", return_value=mock_loop),
     ):
         result = await server._connect_once()
 
@@ -424,9 +424,9 @@ async def test_connect_once(server: LobeServer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_forever_connect_failure(server: LobeServer) -> None:
+async def test_run_forever_connect_failure(server: MindServer) -> None:
     with patch(
-        "lobe_server.server.LobeServer._connect_once",
+        "trik_mind.server.MindServer._connect_once",
         side_effect=ConnectionRefusedError,
     ):
 
@@ -439,7 +439,7 @@ async def test_run_forever_connect_failure(server: LobeServer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_forever_success(server: LobeServer) -> None:
+async def test_run_forever_success(server: MindServer) -> None:
     mock_sock = MagicMock()
 
     async def handle_and_stop(_sock: socket.socket) -> None:
@@ -462,10 +462,10 @@ async def test_run_forever_success_sets_formatter_status(
     formatter = MagicMock()
     mock_sock = MagicMock()
     with (
-        patch("lobe_server.server.load_model", return_value=mock_model),
-        patch("lobe_server.server.create_camera", return_value=mock_camera),
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
     ):
-        server = LobeServer(settings, MagicMock(), formatter=formatter)
+        server = MindServer(settings, MagicMock(), formatter=formatter)
 
     async def handle_and_stop(_sock: object) -> None:
         server._running = False
@@ -481,7 +481,7 @@ async def test_run_forever_success_sets_formatter_status(
 
 
 @pytest.mark.asyncio
-async def test_run_forever_reconnects_after_reader_break(server: LobeServer) -> None:
+async def test_run_forever_reconnects_after_reader_break(server: MindServer) -> None:
     calls = {"n": 0}
 
     def handle_and_stop(_sock: socket.socket) -> None:
@@ -492,7 +492,7 @@ async def test_run_forever_reconnects_after_reader_break(server: LobeServer) -> 
     with (
         patch.object(server, "_connect_once", return_value=MagicMock()),
         patch.object(server, "_handle_connection", side_effect=handle_and_stop),
-        patch("lobe_server.server.asyncio.sleep", AsyncMock()),
+        patch("trik_mind.server.asyncio.sleep", AsyncMock()),
     ):
         await server.run_forever()
 
@@ -501,7 +501,7 @@ async def test_run_forever_reconnects_after_reader_break(server: LobeServer) -> 
 
 
 @pytest.mark.asyncio
-async def test_run_forever_does_not_swallow_keyboardinterrupt(server: LobeServer) -> None:
+async def test_run_forever_does_not_swallow_keyboardinterrupt(server: MindServer) -> None:
     with (
         patch.object(server, "_connect_once", return_value=MagicMock()),
         patch.object(server, "_handle_connection", side_effect=KeyboardInterrupt),

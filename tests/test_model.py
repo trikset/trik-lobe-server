@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from lobe_server.model import (
+from trik_mind.model import (
     ClassificationResult,
     ONNXImageModel,
     TFLiteImageModel,
@@ -79,7 +79,7 @@ def _construct_tflite(mock: MagicMock, labels: list[str]) -> _Model:
 
 
 def _patch_onnx(mock: MagicMock) -> Any:
-    return patch("lobe_server.model._ort.InferenceSession", return_value=mock)
+    return patch("trik_mind.model._ort.InferenceSession", return_value=mock)
 
 
 def _patch_tflite(mock: MagicMock) -> Any:
@@ -140,7 +140,7 @@ def _make_tflite_interpreter(num_classes: int = 3, input_shape: list[int] | None
 def _tflite_patch(interpreter: MagicMock) -> Any:
     tflite_mock = MagicMock()
     tflite_mock.Interpreter.return_value = interpreter
-    return patch("lobe_server.model.tflite", tflite_mock)
+    return patch("trik_mind.model.tflite", tflite_mock)
 
 
 @contextmanager
@@ -335,7 +335,7 @@ def test_load_model_prefers_onnx_over_tflite() -> None:
     interpreter = _make_tflite_interpreter()
 
     with (
-        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("trik_mind.model._ort.InferenceSession", return_value=session),
         _tflite_patch(interpreter),
         tempfile.TemporaryDirectory() as tmp,
     ):
@@ -390,7 +390,7 @@ def test_load_lobe_legacy(backend: _Backend) -> None:
 @pytest.mark.parametrize("input_shape", [[1, 3, 224, 224], [None, 3, 224, 224], [224, 224], [None]])
 def test_onnx_model_load_shape(input_shape: list[Any]) -> None:
     session = _make_onnx_session(3, input_shape=input_shape)
-    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+    with patch("trik_mind.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
         _write_labels_txt(tmp, ["a", "b", "c"])
         model = ONNXImageModel.load(tmp)
@@ -400,7 +400,7 @@ def test_onnx_model_load_shape(input_shape: list[Any]) -> None:
 def test_onnx_model_load_colon_suffix() -> None:
     session = _make_onnx_session(3)
     session.get_inputs.return_value[0].name = "Image:0"
-    with patch("lobe_server.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
+    with patch("trik_mind.model._ort.InferenceSession", return_value=session), tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "model.onnx").write_bytes(b"fake onnx")
         _write_labels_txt(tmp, ["a", "b", "c"])
         model = ONNXImageModel.load(tmp)
@@ -418,7 +418,7 @@ def test_onnx_model_predict_nchw() -> None:
 def test_load_model_unicode_path() -> None:
     session = _make_onnx_session(3)
     with (
-        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("trik_mind.model._ort.InferenceSession", return_value=session),
         tempfile.TemporaryDirectory() as tmp,
     ):
         model_dir = Path(tmp) / "моя_папка model test"  # Cyrillic + spaces
@@ -437,7 +437,7 @@ def test_load_model_tflite_unicode_path() -> None:
     tflite_mock.Interpreter.return_value = _make_tflite_interpreter()
     with (
         tempfile.TemporaryDirectory() as tmp,
-        patch("lobe_server.model.tflite", tflite_mock),
+        patch("trik_mind.model.tflite", tflite_mock),
     ):
         model_dir = Path(tmp) / "\u0440\u0430\u0431\u043e\u0447\u0438\u0439_\u043a\u0430\u0442"
         model_dir.mkdir()
@@ -453,7 +453,7 @@ def test_load_model_unicode_path_prefers_onnx() -> None:
     """Cyrillic directory with both .onnx and .tflite — ONNX is preferred."""
     session = _make_onnx_session(3)
     with (
-        patch("lobe_server.model._ort.InferenceSession", return_value=session),
+        patch("trik_mind.model._ort.InferenceSession", return_value=session),
         tempfile.TemporaryDirectory() as tmp,
     ):
         model_dir = Path(tmp) / "кириллица"
@@ -472,7 +472,7 @@ def test_tflite_load_valueerror_caught() -> None:
     tflite_mock.Interpreter.side_effect = ValueError("model allocation is null/empty")
     with (
         tempfile.TemporaryDirectory() as tmp,
-        patch("lobe_server.model.tflite", tflite_mock),
+        patch("trik_mind.model.tflite", tflite_mock),
     ):
         (Path(tmp) / "model.tflite").write_bytes(b"garbage")
         _write_labels_txt(tmp, ["a", "b"])
@@ -484,7 +484,7 @@ def test_onnx_load_inference_error_caught() -> None:
     """ONNX InferenceSession error is caught, logged, re-raised as RuntimeError."""
     with (
         tempfile.TemporaryDirectory() as tmp,
-        patch("lobe_server.model._ort.InferenceSession", side_effect=ValueError("Unsupported model")),
+        patch("trik_mind.model._ort.InferenceSession", side_effect=ValueError("Unsupported model")),
     ):
         (Path(tmp) / "model.onnx").write_bytes(b"garbage")
         _write_labels_txt(tmp, ["a", "b"])

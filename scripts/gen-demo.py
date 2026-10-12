@@ -47,7 +47,7 @@ def capture_demo(*, color: bool) -> str:
     old_stderr = sys.stderr
     sys.stderr = cap
 
-    import lobe_server.output as m  # noqa: PLC0415
+    import trik_mind.output as m  # noqa: PLC0415
 
     m._HAS_UNICODE = True  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     fmt = m.UserOutputFormatter(color_enabled=color)

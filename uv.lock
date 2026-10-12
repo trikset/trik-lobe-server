@@ -817,7 +817,7 @@ wheels = [
 ]
 
 [[package]]
-name = "trik-lobe-server"
+name = "trik-mind"
 version = "26.10.11"
 source = { virtual = "." }
 dependencies = [

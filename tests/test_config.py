@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lobe_server.config import load_settings, resolve_model_path
+from trik_mind.config import load_settings, resolve_model_path
 
 _SAMPLE = dedent(
     """\
@@ -17,7 +17,7 @@ _SAMPLE = dedent(
     ROBOT_HULL=5
     ROBOT_PORT=9999
     ROBOT_VIDEO_PORT=8081
-    MODEL_PATH=C:\\models\\lobe
+    MODEL_PATH=C:\\models\\mind
     CAMERA_SOURCE=0
     """
 )
@@ -35,7 +35,7 @@ def test_load_settings_full(ini_path: Path) -> None:
     assert s.my_hull_number == 5
     assert s.robot_port == 9999
     assert s.robot_video_port == 8081
-    assert s.model_path == "C:\\models\\lobe"
+    assert s.model_path == "C:\\models\\mind"
     assert s.camera_source == "0"
 
 
@@ -73,7 +73,7 @@ def test_load_settings_validation_error(ini_path: Path, ini_content: str, match:
 
 def test_load_settings_default_path() -> None:
     with (
-        patch("lobe_server.config.Path.exists", return_value=False),
+        patch("trik_mind.config.Path.exists", return_value=False),
         pytest.raises(FileNotFoundError, match=r"settings\.ini"),
     ):
         load_settings()

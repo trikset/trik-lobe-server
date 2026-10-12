@@ -29,7 +29,7 @@ uv run pytest tests/test_model.py::test_onnx_model_load_with_signature_json --ex
   If errors persist → pre-existing (5-min timebox)
 
 Coverage config is single-sourced in `pyproject.toml`:
-`addopts = "--cov"`, `source = ["lobe_server"]`, `fail_under = 100`.
+`addopts = "--cov"`, `source = ["trik_mind"]`, `fail_under = 100`.
 CI runs bare `uv run pytest`.
 
 ## Coverage notes
@@ -43,7 +43,7 @@ with `patch.object(WebcamCamera, "__init__", return_value=None)`.
 ### HTTP camera cooldown testing
 
 `UrlCamera`/`RobotCamera` fast-fail inside a `_FAILURE_COOLDOWN` window tracked
-via `time.monotonic`. Tests patch `lobe_server.camera.time.monotonic` with a
+via `time.monotonic`. Tests patch `trik_mind.camera.time.monotonic` with a
 `side_effect` sequence. Gotcha: `_within_cooldown(None)` short-circuits before
 calling the clock, so the first `capture()` (no prior failure) does NOT consume
 a `monotonic` value — account for that when numbering the sequence.

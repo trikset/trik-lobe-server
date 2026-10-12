@@ -9,21 +9,21 @@ import socket
 import time
 from typing import TYPE_CHECKING
 
-from lobe_server.camera import CameraSource, create_camera
-from lobe_server.constants import PREDICTION_INTERVAL as _PI
-from lobe_server.model import load_model
-from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
+from trik_mind.camera import CameraSource, create_camera
+from trik_mind.constants import PREDICTION_INTERVAL as _PI
+from trik_mind.model import load_model
+from trik_mind.protocol import format_message, is_quit_command, make_command, try_parse_message
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from lobe_server.config import Settings
-    from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
+    from trik_mind.config import Settings
+    from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter
 
 logger = logging.getLogger(__name__)
 
 
-class LobeServer:
+class MindServer:
     KEEPALIVE_INTERVAL = 5  # robot sends every 3s; predictions also reset heartbeat timer
     PREDICTION_INTERVAL = _PI
     RECONNECT_DELAY = 3
