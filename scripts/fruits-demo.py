@@ -16,8 +16,8 @@ import time
 from typing import ClassVar, NoReturn
 
 sys.path.insert(0, "")
-from lobe_server.locale import setup_locale
-from lobe_server.output import UserOutputFormatter
+from trik_mind.locale import setup_locale
+from trik_mind.output import UserOutputFormatter
 
 
 class FruitDemo:

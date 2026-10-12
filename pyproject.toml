@@ -1,7 +1,7 @@
 [project]
-name = "trik-lobe-server"
+name = "trik-mind"
 version = "26.10.11"
-description = "TRIK Lobe ML inference server"
+description = "TRIK Mind ML inference server"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "opencv-python>=5.0.0.93,<6.0.0",
@@ -36,7 +36,7 @@ testpaths = ["tests"]
 addopts = "--cov"
 
 [tool.coverage.run]
-source = ["lobe_server"]
+source = ["trik_mind"]
 
 [tool.coverage.report]
 fail_under = 100
@@ -67,7 +67,7 @@ disable = [
     "W0718",  # broad-exception-caught — intentional for reconnect loop
     "R0902",  # too-many-instance-attributes — Settings has 9 fields
     "E1101",  # no-member — cv2 C extension
-    "C0103",  # invalid-name — TRIKLobeServer entry point name
+    "C0103",  # invalid-name — TRIKMind entry point name
     "C0301",  # line-too-long — ruff format handles this at 120
     "C0415",  # import-outside-toplevel — cv2 lazy import
 ]
@@ -82,7 +82,7 @@ typeCheckingMode = "strict"
 reportPossiblyUnboundVariable = "error"
 reportMissingTypeStubs = "none"
 reportMissingImports = "none"
-exclude = ["trik-lobe-server/**", ".tmp/**", ".venv/**", "node_modules"]
+exclude = ["trik-mind/**", ".tmp/**", ".venv/**", "node_modules"]
 
 [tool.vulture]
 # TypedDict string-key access is invisible to vulture — `index` is read via

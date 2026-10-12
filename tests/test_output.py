@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lobe_server.output import StdoutOutputFormatter, UserOutputFormatter
+from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter
 
 
 @contextmanager
@@ -247,8 +247,8 @@ class TestUserAdvanced:
         ):
             fmt._refresh_width()
         stderr = capsys.readouterr().err
-        # Must appear as OSC title escape — format: TRIK Lobe  ...  W148
-        assert "\033]0;TRIK Lobe " in stderr
+        # Must appear as OSC title escape — format: TRIK Mind  ...  W148
+        assert "\033]0;TRIK Mind " in stderr
         assert "W148" in stderr
 
     def test_update_title_cache_hit(self, capsys: pytest.CaptureFixture[str]) -> None:

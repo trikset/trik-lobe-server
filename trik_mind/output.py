@@ -186,7 +186,7 @@ class UserOutputFormatter:
         if title == self._last_title:
             return
         self._last_title = title
-        sys.stderr.write(f"\033]0;TRIK Lobe  {title}\007")
+        sys.stderr.write(f"\033]0;TRIK Mind  {title}\007")
         sys.stderr.flush()
 
     def set_context(self, context: str) -> None:

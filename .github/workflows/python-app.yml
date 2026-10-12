@@ -54,11 +54,11 @@ jobs:
       - name: Type check with basedpyright
         run: uv run basedpyright .
       - name: Lint with pylint
-        run: uv run pylint lobe_server TRIKLobeServer.py tests
+        run: uv run pylint trik_mind TRIKMind.py tests
       - name: Security scan with bandit
-        run: uv run bandit --recursive lobe_server/ TRIKLobeServer.py
+        run: uv run bandit --recursive trik_mind/ TRIKMind.py
       - name: Dead code check with vulture
-        run: uv run vulture lobe_server/ tests/ TRIKLobeServer.py
+        run: uv run vulture trik_mind/ tests/ TRIKMind.py
       - name: Test with pytest
         run: uv run pytest
 
@@ -75,7 +75,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     env:
-      SCRIPT_NAME: TRIKLobeServer
+      SCRIPT_NAME: TRIKMind
       # manylinux_2_28 image ships a statically-linked Python (/opt/python, no
       # shared lib) which breaks PyInstaller. Force uv to use its managed build
       # (python-build-standalone, Py_ENABLE_SHARED=1). See MEMORY.md CI quirks.
@@ -173,26 +173,26 @@ jobs:
           # Windows -> zip (Explorer-native); Linux/macOS -> tar.gz (platform standard).
           # Each archive bundles the versioned binary + settings.ini at the root.
           mkdir -p pack/win pack/lin pack/mac
-          cp artifacts/TRIKLobeServer-Windows/dist/TRIKLobeServer.exe \
-             "pack/win/TRIKLobeServer-${version}.exe"
-          cp artifacts/TRIKLobeServer-Windows/settings.ini "pack/win/settings.ini"
-          (cd pack/win && zip -q "../TRIKLobeServer-${version}-Windows.zip" \
-              "TRIKLobeServer-${version}.exe" settings.ini)
+          cp artifacts/TRIKMind-Windows/dist/TRIKMind.exe \
+             "pack/win/TRIKMind-${version}.exe"
+          cp artifacts/TRIKMind-Windows/settings.ini "pack/win/settings.ini"
+          (cd pack/win && zip -q "../TRIKMind-${version}-Windows.zip" \
+              "TRIKMind-${version}.exe" settings.ini)
           for os in Linux macOS; do
             mkdir -p "pack/${os}"
-            cp "artifacts/TRIKLobeServer-${os}/dist/TRIKLobeServer" \
-               "pack/${os}/TRIKLobeServer-${version}.bin"
-            cp "artifacts/TRIKLobeServer-${os}/settings.ini" "pack/${os}/settings.ini"
-            (cd "pack/${os}" && tar -czf "../TRIKLobeServer-${version}-${os}.tar.gz" \
-                "TRIKLobeServer-${version}.bin" settings.ini)
+            cp "artifacts/TRIKMind-${os}/dist/TRIKMind" \
+               "pack/${os}/TRIKMind-${version}.bin"
+            cp "artifacts/TRIKMind-${os}/settings.ini" "pack/${os}/settings.ini"
+            (cd "pack/${os}" && tar -czf "../TRIKMind-${version}-${os}.tar.gz" \
+                "TRIKMind-${version}.bin" settings.ini)
           done
-          ls -la pack/TRIKLobeServer-*
+          ls -la pack/TRIKMind-*
       - name: Publish draft release
         uses: softprops/action-gh-release@v3
         with:
           draft: true
           body_path: .release-tag-body.md
           files: |
-            pack/TRIKLobeServer-${{ github.ref_name }}-Windows.zip
-            pack/TRIKLobeServer-${{ github.ref_name }}-Linux.tar.gz
-            pack/TRIKLobeServer-${{ github.ref_name }}-macOS.tar.gz
+            pack/TRIKMind-${{ github.ref_name }}-Windows.zip
+            pack/TRIKMind-${{ github.ref_name }}-Linux.tar.gz
+            pack/TRIKMind-${{ github.ref_name }}-macOS.tar.gz

@@ -12,7 +12,7 @@ import requests
 from PIL import Image
 
 if TYPE_CHECKING:
-    from lobe_server.config import Settings
+    from trik_mind.config import Settings
 
 logger = logging.getLogger(__name__)
 

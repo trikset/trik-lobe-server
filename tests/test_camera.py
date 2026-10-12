@@ -9,14 +9,14 @@ import numpy as np
 import pytest
 import requests
 
-from lobe_server.camera import (
+from trik_mind.camera import (
     CameraSource,
     RobotCamera,
     UrlCamera,
     WebcamCamera,
     create_camera,
 )
-from lobe_server.config import Settings
+from trik_mind.config import Settings
 
 _CamFactory = Callable[[], UrlCamera | RobotCamera]
 
@@ -50,7 +50,7 @@ def test_abstract() -> None:
 
 
 @pytest.mark.parametrize(("factory", "url", "extra"), _HTTP_CAMERAS)
-@patch("lobe_server.camera.requests.get")
+@patch("trik_mind.camera.requests.get")
 def test_http_camera_capture(
     mock_get: MagicMock,
     factory: _CamFactory,
@@ -69,7 +69,7 @@ def test_http_camera_capture(
 
 
 @pytest.mark.parametrize(("factory", "url", "extra"), _HTTP_CAMERAS)
-@patch("lobe_server.camera.requests.get", side_effect=requests.RequestException("timeout"))
+@patch("trik_mind.camera.requests.get", side_effect=requests.RequestException("timeout"))
 def test_http_camera_network_error(
     mock_get: MagicMock,
     factory: _CamFactory,
@@ -99,8 +99,8 @@ def test_http_camera_cooldown(
     mock_response.content = _minimal_png()
     side_effect = [mock_response if kind == "ok" else requests.RequestException("timeout") for kind in get_seq]
     with (
-        patch("lobe_server.camera.requests.get", side_effect=side_effect) as mock_get,
-        patch("lobe_server.camera.time.monotonic", side_effect=clock),
+        patch("trik_mind.camera.requests.get", side_effect=side_effect) as mock_get,
+        patch("trik_mind.camera.time.monotonic", side_effect=clock),
     ):
         cam = factory()
         results = [cam.capture() for _ in expected]

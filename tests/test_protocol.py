@@ -2,7 +2,7 @@
 
 import pytest
 
-from lobe_server.protocol import format_message, is_quit_command, make_command, try_parse_message
+from trik_mind.protocol import format_message, is_quit_command, make_command, try_parse_message
 
 _KOSHKA = "кошка".encode()
 

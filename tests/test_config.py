@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lobe_server.config import load_settings, resolve_model_path
+from trik_mind.config import load_settings, resolve_model_path
 
 _SAMPLE = dedent(
     """\
@@ -73,7 +73,7 @@ def test_load_settings_validation_error(ini_path: Path, ini_content: str, match:
 
 def test_load_settings_default_path() -> None:
     with (
-        patch("lobe_server.config.Path.exists", return_value=False),
+        patch("trik_mind.config.Path.exists", return_value=False),
         pytest.raises(FileNotFoundError, match=r"settings\.ini"),
     ):
         load_settings()

@@ -6,7 +6,7 @@ Locale and translation support using Python stdlib (gettext + locale).
 
 Usage in application code::  # noqa: D415
 
-    from lobe_server.locale import _
+    from trik_mind.locale import _
     raise RuntimeError(_("Model file not found: {path}").format(path=...))
 
 The ``_()`` builtin is installed by :func:`setup_locale`. Log messages stay in
@@ -71,7 +71,7 @@ _RU: dict[str, str] = {
     "settings.ini: {old} is deprecated \u2014 use {new} instead":
         "settings.ini: {old} устарел \u2014 используйте {new}",
 
-    # --- TRIKLobeServer.py ---
+    # --- TRIKMindServer.py ---
     "settings.ini not found":
         "settings.ini не найден",
     "settings.ini has invalid values":
@@ -149,7 +149,7 @@ _ES: dict[str, str] = {
     "settings.ini: {old} is deprecated \u2014 use {new} instead":
         "settings.ini: {old} est\u00e1 obsoleto \u2014 use {new}",
 
-    # --- TRIKLobeServer.py ---
+    # --- TRIKMindServer.py ---
     "settings.ini not found":
         "settings.ini no encontrado",
     "settings.ini has invalid values":
@@ -178,7 +178,7 @@ _ES: dict[str, str] = {
 # fmt: on
 
 
-class _LobeTranslations(gettext.NullTranslations):
+class _MindTranslations(gettext.NullTranslations):
     """Translation catalog using gettext API — English strings as message keys."""
 
     def __init__(self, lang: str = "en") -> None:
@@ -208,5 +208,5 @@ def detect_locale() -> str:
 def setup_locale(lang: str | None = None) -> str:
     """Install translations — makes _() available as builtin. Returns the effective lang code."""
     code = lang if lang and lang in ("ru", "es") else detect_locale()
-    _LobeTranslations(code).install()
+    _MindTranslations(code).install()
     return code
