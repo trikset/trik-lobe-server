@@ -141,7 +141,6 @@ class UserOutputFormatter:
         self._prev_label: str | None = None
         self._total_count = 0
         self._change_t0 = time.monotonic()
-        self._dets_since_change = 0
         self._inference_times: deque[float] = deque(maxlen=50)
         self._first_output = True
         self._context: str | None = None
@@ -233,8 +232,6 @@ class UserOutputFormatter:
             return self._YELLOW
         return self._RED
 
-
-
     def _box_line(self, content: str) -> str:
         """│  content  │ — padded to _width by visible length (ANSI-safe)."""
         g = self._glyphs
@@ -268,7 +265,7 @@ class UserOutputFormatter:
         return max(2, self._lines - 4 - 1 - 3 - 1)
 
     def _header_props(self) -> str:
-        """Static info for the Current box header — compact, pipe-separated."""
+        """Build compact pipe-separated header for the Current box."""
         parts = [self._diagnostic()]
         if self._source:
             parts.insert(0, self._source)
@@ -289,37 +286,50 @@ class UserOutputFormatter:
             self._write(f"{nl}{panel}")
             self._flush_buf()
 
-    def _build_current(self, label: str, confidence: float, fps: float,
-                       top_labels: list[tuple[str, float]] | None) -> list[str]:
-        """Build the current detection box: label + metrics + coloured legend."""
-        g = self._glyphs
-        tier = self._tier(confidence)
-        is_fresh = self._last_change_time and time.monotonic() - self._last_change_time < 1.0
-        lbl = (
-            self._c(self._BOLD + tier, f"{g.STAR} {label}")
-            if is_fresh and self._color
-            else self._cb(tier, label)
-        )
-        lines = [self._box_top("Current", self._width, self._header_props())]
-        # ── label + confidence + metrics on one line ──
-        pct = self._c(tier, f"{confidence * 100:.1f}%")
+    def _candidate_tokens(self, top_labels: list[tuple[str, float]] | None, label: str, confidence: float) -> list[str]:
+        """Coloured 'name(pct%)' tokens for the top non-current labels (max 3)."""
+        all_labels = top_labels or [(label, confidence)]
+        lm = dict(all_labels)
+        lm[label] = max(lm.get(label, 0), confidence)
+        sorted_lbls = sorted(lm.items(), key=lambda x: -x[1])
+        return [
+            self._c(_BAR_COLORS[min(i, 3)], f"{lb[:_HIST_COL_LBL]}({c * 100:.0f}%)")
+            for i, (lb, c) in enumerate(sorted_lbls)
+            if i > 0
+        ][:3]
+
+    def _metrics_line(self, fps: float) -> str:
+        """Runtime metrics: fps + count + elapsed-since-change, with optional status badge."""
         metrics = f"fps:{fps:.0f}  #{self._total_count}"
         if self._prev_label is not None and not self._status:
             held = time.monotonic() - self._change_t0
             metrics += f"  \u0394 {held:.1f}s"
         if self._status:
             metrics = f"{self._c(self._BOLD + self._YELLOW, self._status)}  {metrics}"
+        return metrics
+
+    def _current_line(self, label: str, confidence: float, fps: float) -> str:
+        """Build the padded 'label  pct   metrics' content line for the Current box."""
+        g = self._glyphs
+        tier = self._tier(confidence)
+        is_fresh = self._last_change_time and time.monotonic() - self._last_change_time < 1.0
+        lbl = self._c(self._BOLD + tier, f"{g.STAR} {label}") if is_fresh and self._color else self._cb(tier, label)
+        pct = self._c(tier, f"{confidence * 100:.1f}%")
         lp = f" {lbl}  {pct} "
-        mp = f" {metrics} "
+        mp = f" {self._metrics_line(fps)} "
         pad = max(1, self._width - 2 - _visible_len(lp) - _visible_len(mp))
-        lines.append(self._box_line(f"{lp}{' ' * pad}{mp}"))
+        return f"{lp}{' ' * pad}{mp}"
+
+    def _build_current(
+        self, label: str, confidence: float, fps: float, top_labels: list[tuple[str, float]] | None
+    ) -> list[str]:
+        """Build the current detection box: label + metrics + coloured legend."""
+        lines = [
+            self._box_top("Current", self._width, self._header_props()),
+            self._box_line(self._current_line(label, confidence, fps)),
+        ]
         # ── candidate labels (skip current, show top 3 others) ──
-        all_labels = top_labels or [(label, confidence)]
-        lm = dict(all_labels)
-        lm[label] = max(lm.get(label, 0), confidence)
-        sorted_lbls = sorted(lm.items(), key=lambda x: -x[1])
-        cands = [self._c(_BAR_COLORS[min(i, 3)], f"{lb[:_HIST_COL_LBL]}({c*100:.0f}%)")
-                 for i, (lb, c) in enumerate(sorted_lbls) if i > 0][:3]
+        cands = self._candidate_tokens(top_labels, label, confidence)
         if cands:
             lines.append(self._box_line(f"  {'  '.join(cands)}  "))
         elif label == "---":
@@ -330,7 +340,6 @@ class UserOutputFormatter:
 
     def _build_history(self, max_rows: int) -> list[str]:
         """Process-list style history with fixed column widths — bar first."""
-        g = self._glyphs
         lines: list[str] = []
         fixed = _HIST_COL_PCT + _HIST_COL_NUM + _HIST_COL_LBL + _HIST_COL_EVT + _HIST_COL_SP * 4
         bar_w = max(_HIST_BAR_MIN, min(self._width - 2 - fixed, _HIST_BAR_MAX))
@@ -345,25 +354,39 @@ class UserOutputFormatter:
         )
         lines.append(self._box_line(header))
 
-        for entry in reversed(list(self._history)[-max_rows:]):
-            idx, lbl, conf, _fps, _timing, is_change, _pl = entry
-            tier = self._tier(conf)
-            filled = round(conf * bar_w)
-            bar = self._c(tier, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
-            pct = self._c(tier, f"{conf*100:.0f}%".rjust(_HIST_COL_PCT))
-            num = self._c(tier, f"{idx}".rjust(_HIST_COL_NUM))
-            cl = f"  {lbl:<8}"[:_HIST_COL_LBL]
-            evt = f"  {g.ARROW_R}" if is_change else "   "
-            lines.append(self._box_line(f"{bar} {pct} {num} {cl} {evt}"))
+        lines.extend(self._history_row(entry, bar_w) for entry in reversed(list(self._history)[-max_rows:]))
 
-        for _ in range(max_rows - min(max_rows, len(self._history))):
-            d = self._DIM
-            blank = self._c(d, g.BLOCK_EMPTY * bar_w)
-            bp = self._c(d, "---".rjust(_HIST_COL_PCT))
-            bn = self._c(d, "---".rjust(_HIST_COL_NUM))
-            bl = "  ---     "[:_HIST_COL_LBL]
-            lines.append(self._box_line(f"{blank} {bp} {bn} {bl}   "))
+        blank_rows = max_rows - min(max_rows, len(self._history))
+        lines.extend(self._blank_history_row(bar_w) for _ in range(blank_rows))
         return lines
+
+    def _history_row(self, entry: tuple[int, str, float, float, float, bool, str | None], bar_w: int) -> str:
+        """One history line: bar + pct + num + label + change arrow."""
+        g = self._glyphs
+        idx, lbl, conf, is_change = entry[0], entry[1], entry[2], entry[5]
+        tier = self._tier(conf)
+        seg = self._history_bar(tier, conf, bar_w)
+        pct = self._c(tier, f"{conf * 100:.0f}%".rjust(_HIST_COL_PCT))
+        num = self._c(tier, f"{idx}".rjust(_HIST_COL_NUM))
+        cl = f"  {lbl:<8}"[:_HIST_COL_LBL]
+        evt = f"  {g.ARROW_R}" if is_change else "   "
+        return self._box_line(f"{seg} {pct} {num} {cl} {evt}")
+
+    def _history_bar(self, tier: str, conf: float, bar_w: int) -> str:
+        """Coloured bar segment: full blocks for confidence, dim fill for the rest."""
+        g = self._glyphs
+        filled = round(conf * bar_w)
+        return self._c(tier, g.BLOCK_FULL * filled + g.BLOCK_EMPTY * max(0, bar_w - filled))
+
+    def _blank_history_row(self, bar_w: int) -> str:
+        """Dimmed placeholder line for unused history space."""
+        g = self._glyphs
+        d = self._DIM
+        blank = self._c(d, g.BLOCK_EMPTY * bar_w)
+        bp = self._c(d, "---".rjust(_HIST_COL_PCT))
+        bn = self._c(d, "---".rjust(_HIST_COL_NUM))
+        bl = "  ---     "[:_HIST_COL_LBL]
+        return self._box_line(f"{blank} {bp} {bn} {bl}   ")
 
     def _build_stats_lines(self) -> list[str]:
         """Per-label counts — all labels, wrapped to multiple lines."""
@@ -407,13 +430,11 @@ class UserOutputFormatter:
         is_change = self._prev_label is not None and label != self._prev_label
         if is_change:
             self._change_t0 = time.monotonic()
-            self._dets_since_change = 0
             self._last_change_time = time.monotonic()
         elif self._prev_label is None:
             self._change_t0 = time.monotonic()
 
         prev = self._prev_label
-        self._dets_since_change += 1
         self._prev_label = label
 
         # Append to history ring buffer
@@ -435,20 +456,7 @@ class UserOutputFormatter:
         panel_lines.append(self._box_bot(self._width))
 
         panel = "\n".join(panel_lines)
-
-        if self._first_output:
-            self._first_output = False
-            ctx = f"\n{self._context}\n" if self._context else "\n"
-            self._write(f"{ctx}{panel}\n")
-            self._flush_buf()
-            return
-
-        if self._tty:
-            # Full-screen redraw — pan lives at the top of the terminal, no cursor-up chaos
-            self._write(f"\033[H\033[J{panel}\n")
-        else:
-            self._write(f"\n{panel}")
-            self._flush_buf()
+        self._redraw(panel)
 
     def on_error(
         self,

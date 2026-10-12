@@ -259,6 +259,44 @@ class TestUserAdvanced:
         stderr = capsys.readouterr().err
         assert stderr == ""  # no new title write
 
+    def test_title_includes_source(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Window title combines source + diagnostic when source is set."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        capsys.readouterr()  # discard init write
+        fmt.set_context("model.onnx  |  USB@640x480  |  Ctrl+C to quit")
+        fmt._update_title()
+        stderr = capsys.readouterr().err
+        assert "model.onnx" in stderr
+        assert "Ctrl+C to quit" not in stderr  # hint stripped from source
+        assert "W" in stderr  # diagnostic prefix still present
+
+    def test_box_top_without_props(self) -> None:
+        """Box top with no props: title + fill, no pipe section."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        top = fmt._box_top("Hi", 10)
+        assert top.startswith("╭")
+        assert top.endswith("╮")
+        assert "Hi" in top
+        assert "│" not in top
+
+    def test_stats_wrap_uses_multiple_lines(self) -> None:
+        """Long uniform labels wrap into more than one Stats line."""
+        fmt = UserOutputFormatter(color_enabled=False)
+        labels = [
+            "Antidisestablishmentarian",
+            "Bourgeoisification",
+            "Cryptographically",
+            "Deoxyribonucleotide",
+            "Electroencephalogram",
+            "Floccinaucinihilipilification",
+        ]
+        for i, lbl in enumerate(labels, start=1):
+            fmt._stats[lbl] += i
+        fmt._width = 40  # narrow enough to force wrapping
+        lines = fmt._build_stats_lines()
+        assert len(lines) > 1
+        assert "Antidisest" in " ".join(lines)  # 8-char truncated label
+
 
 class TestStdoutOutputFormatter:
     """Tests for tab-separated pipe-friendly output."""
