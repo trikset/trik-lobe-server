@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from trik_mind.config import Settings, load_settings, resolve_model_path
+from trik_mind.demo import DemoSource
 from trik_mind.locale import setup_locale
 from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter
 from trik_mind.server import MindServer
@@ -111,6 +112,21 @@ def _parse_args() -> argparse.Namespace:
         choices=["en", "ru", "es"],
         help="Override language (default: auto-detect)",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run standalone demo dashboard with fake predictions (no robot)",
+    )
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=16.0,
+        metavar="N",
+        help=(
+            "Demo pipeline frame rate; a detection is emitted every 5 frames, "
+            "so events/sec = N/5 (default: 16, only with --demo)"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -183,12 +199,31 @@ def _create_server_or_exit(
         sys.exit(1)
 
 
+def _run_demo(args: argparse.Namespace) -> None:
+    """Run the standalone dashboard demo — fake predictions, no robot."""
+    color_enabled = not args.no_color
+    formatter = UserOutputFormatter(color_enabled=color_enabled, view_threshold=DemoSource.VIEW_THRESHOLD)
+    formatter.set_context("Demo  |  fruit_classifier.onnx  |  Ctrl+C to stop")
+    source = DemoSource(formatter, fps=args.fps)
+    try:
+        source.run()
+    except KeyboardInterrupt:
+        logger.info(_("Shutting down..."))
+    finally:
+        formatter.close()
+
+
 def main() -> None:
     args = _parse_args()
     setup_locale(args.lang)
     log_file = Path(args.log_file) if args.log_file else _LOG_FILE
     _setup_file_logging(log_file)
     logger.info("Starting program (log: %s)", log_file)
+
+    if args.demo:
+        _run_demo(args)
+        return
+
     settings = _load_settings_or_exit()
 
     if args.output_mode:
