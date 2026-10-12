@@ -242,10 +242,16 @@ class UserOutputFormatter:
         g = self._glyphs
         return f"{g.TJUNCTION_L}{g.DASH} {title} {g.DASH * (width - 5 - len(title))}{g.TJUNCTION_R}"
 
-    def _box_top(self, title: str, width: int) -> str:
-        """╭─ title ──╮ box top."""
+    def _box_top(self, title: str, width: int, props: str = "") -> str:
+        """╭─ title ── props ─╮ — props right-aligned when present."""
         g = self._glyphs
-        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (width - 5 - len(title))}{g.CORNER_TR}"
+        inner = width - 3 - len(title)  # ╭ + dashes + ╮
+        if not props:
+            return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (inner - 3)}{g.CORNER_TR}"
+        # Format: ╭─ title ── props ─╮
+        props_block = f" {props} "
+        dash_slots = inner - len(props_block) - 3
+        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * max(1, dash_slots)}{props_block}{g.DASH}{g.CORNER_TR}"
 
     def _box_bot(self, width: int) -> str:
         """╰──────────╯ box bottom."""
@@ -282,7 +288,7 @@ class UserOutputFormatter:
             if is_fresh and self._color
             else self._cb(tier, label)
         )
-        lines = [self._box_top("Current", self._width)]
+        lines = [self._box_top("Current", self._width, self._diagnostic())]
         metrics = f"fps:{fps:.0f}  #{self._total_count}"
         if self._prev_label is not None and not self._status:
             held = time.monotonic() - self._change_t0
