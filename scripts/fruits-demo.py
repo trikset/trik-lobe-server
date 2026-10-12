@@ -57,13 +57,13 @@ class FruitDemo:
         if self._phase_countdown <= 0:
             # Pick a new phase
             r = random.random()
-            if r < 0.15:          # 15% chance: error burst
+            if r < 0.15:  # 15% chance: error burst
                 self._phase = "error"
                 self._phase_countdown = int(random.uniform(1, 3))
-            elif r < 0.30:        # 15% chance: low-conf uncertainty
+            elif r < 0.30:  # 15% chance: low-conf uncertainty
                 self._phase = "low"
                 self._phase_countdown = int(random.uniform(3, 7))
-            else:                  # 70% chance: normal high-conf detection
+            else:  # 70% chance: normal high-conf detection
                 self._phase = "high"
                 self._phase_countdown = int(random.uniform(8, 16))
                 self._label_ix = (self._label_ix + 1) % 4
@@ -119,7 +119,7 @@ def main() -> None:
 
     fmt = UserOutputFormatter(color_enabled=not args.no_color)
     fmt.set_context("fruit_classifier.onnx  |  USB@640x480  |  Ctrl+C to stop")
-    if not args.no_color and not fmt._tty:
+    if not args.no_color and not fmt._tty:  # pyright: ignore[reportPrivateUsage]  # demo probes hidden TTY state
         print("Note: color disabled (stderr is not a TTY)", file=sys.stderr)
 
     demo = FruitDemo(fmt)
