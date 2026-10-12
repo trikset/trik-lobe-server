@@ -145,3 +145,6 @@ signature.json
 
 # Local temp files (PR bodies, scratch data, hypothesis notes)
 .tmp/
+
+# OpenCode session state (.omo)
+.omo/

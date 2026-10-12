@@ -51,6 +51,7 @@ def _setup_file_logging(log_path: Path | None = None) -> None:
 def _get_version() -> str:
     try:
         from importlib.metadata import version as _version  # noqa: PLC0415
+
         return _version("trik-lobe-server")
     except Exception:  # noqa: BLE001
         return "0.0.0"
@@ -59,39 +60,55 @@ def _get_version() -> str:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TRIK Lobe ML inference server")
     parser.add_argument(
-        "-o", "--output-mode",
+        "-o",
+        "--output-mode",
         choices=["user", "stdout"],
         help="Output mode (overrides settings.ini)",
     )
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
     parser.add_argument(
-        "-v", "--verbose",
-        action="count", default=0,
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
         help="Increase output verbosity (stackable: -v -v)",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_get_version()}")
     parser.add_argument(
-        "--log-file", type=str, default=None,
+        "--log-file",
+        type=str,
+        default=None,
         help="Path to log file (default: lobe_server.log next to executable)",
     )
     parser.add_argument(
-        "--robot-ip", type=str, default=None,
+        "--robot-ip",
+        type=str,
+        default=None,
         help="Robot IP address (overrides settings.ini)",
     )
     parser.add_argument(
-        "--robot-port", type=int, default=None,
+        "--robot-port",
+        type=int,
+        default=None,
         help="Robot TCP port for predictions (overrides settings.ini)",
     )
     parser.add_argument(
-        "--robot-video-port", type=int, default=None,
+        "--robot-video-port",
+        type=int,
+        default=None,
         help="Robot MJPEG video HTTP port (overrides settings.ini)",
     )
     parser.add_argument(
-        "--camera-source", type=str, default=None,
+        "--camera-source",
+        type=str,
+        default=None,
         help="Camera source (empty=auto from robot, URL, rtsp://, device index or path)",
     )
     parser.add_argument(
-        "--lang", type=str, default=None, choices=["en", "ru", "es"],
+        "--lang",
+        type=str,
+        default=None,
+        choices=["en", "ru", "es"],
         help="Override language (default: auto-detect)",
     )
     return parser.parse_args()
@@ -118,6 +135,7 @@ def _find_model_file(model_path: Path) -> str:
         sig = model_path / "signature.json"
         if sig.exists():
             import json  # noqa: PLC0415
+
             with sig.open(encoding="utf-8-sig") as f:
                 return json.load(f).get("filename", "?")
     except (OSError, ValueError, TypeError):
@@ -152,7 +170,8 @@ def _load_settings_or_exit() -> Settings:
 
 
 def _create_server_or_exit(
-    settings: Settings, model_path: Path,
+    settings: Settings,
+    model_path: Path,
     formatter: UserOutputFormatter | StdoutOutputFormatter,
 ) -> LobeServer:
     """Create server with graceful error handling on model load failure."""
