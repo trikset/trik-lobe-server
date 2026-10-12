@@ -31,7 +31,7 @@ Generate release notes for the tag being released. Work ONLY on this task.
 
 ## PROMPT
 
-You are writing the release notes for "TRIK Lobe Server". This is a desktop
+You are writing the release notes for "TRIK Mind". This is a desktop
 application that lets a user run AI image-recognition models (ONNX or TFLite)
 on their PC, detect objects from a camera, and send the result over TCP to a
 TRIK robot or TRIK Studio. The main audience is school teachers and TRIK
@@ -70,7 +70,7 @@ PART 2 — Developer reference, in this order:
    contributors (first PR in this repository) in bold with `(new)`:
    `**@username (new)**`.
 1. The last line, exactly:
-   `Detailed comparison with previous release vX.YY.ZZ: <https://github.com/trikset/trik-lobe-server/compare/vX.YY.ZZ...vCURRENT>`
+   `Detailed comparison with previous release vX.YY.ZZ: <https://github.com/trikset/trik-mind/compare/vX.YY.ZZ...vCURRENT>`
    using the actual previous tag and current tag.
 
 RULES:

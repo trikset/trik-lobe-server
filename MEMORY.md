@@ -1,4 +1,4 @@
-# MEMORY.md — trik-lobe-server
+# MEMORY.md — trik-mind
 
 <!-- encoding: utf-8 -->
 
@@ -11,7 +11,7 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 
 ## Architecture
 
-### Model loading — `lobe_server/model.py`
+### Model loading — `trik_mind/model.py`
 
 - Dual backend: `ONNXImageModel` (onnxruntime) and `TFLiteImageModel`
   (ai_edge_litert). Auto-detects format by scanning for `.onnx` or `.tflite`
@@ -24,9 +24,9 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
 - Three supported model directory layouts are documented in
   "Model directory layout (three supported layouts)".
 
-### Connection protocol — `lobe_server/server.py`
+### Connection protocol — `trik_mind/server.py`
 
-- `LobeServer` is a TCP client connecting to the robot's mailbox server.
+- `MindServer` is a TCP client connecting to the robot's mailbox server.
   Sends `register:<port>:<hull>`, `self:<hull>`, `keepalive` (every 5s),
   `data:<prediction>` (every 0.2s).
 - Receives `self:<hull>`, `connection:<ip>:<port>:<hull>` during handshake,
@@ -36,7 +36,7 @@ Rules live in AGENTS.md; rationale and detail live here — never in AGENTS.md.
   (10s, `asyncio.wait_for`). `_keepalive_loop`/`_prediction_loop` are
   outbound-only — death detection is the reader's job. Full strategy and the
   `_send` guardrail are in "Connection health detection strategy".
-- **Network interfaces**: `LobeServer` is a TCP client only — it never listens
+- **Network interfaces**: `MindServer` is a TCP client only — it never listens
   on any port. Outgoing connections to `ROBOT_IP:ROBOT_PORT` are routed by the
   OS through whichever interface(s) can reach that IP. If the host has multiple
   interfaces (WiFi + Ethernet), no configuration is needed beyond a reachable
@@ -732,9 +732,9 @@ compare link, and ambiguous artifact filenames.
 **Decisions:**
 
 - Artifacts carry the release tag in the filename (e.g.
-  `TRIKLobeServer-v26.08.03-Linux.tar.gz`) so multiple downloads don't
+  `TRIKMind-v26.08.03-Linux.tar.gz`) so multiple downloads don't
   collide in a user's Downloads folder.
-- Inner binaries keep the version plus an extension (`TRIKLobeServer-v26.08.03.bin`
+- Inner binaries keep the version plus an extension (`TRIKMind-v26.08.03.bin`
   / `.exe`) so users can identify and execute them after extraction.
 - Release notes Part 2 opens with an "Updated dependencies" table instead of
   one bullet per dependency bump; then lists only major issues/PRs; then
@@ -761,7 +761,7 @@ matters for users on slow connections.
 **Decision:** Ship every platform as one archive — Windows `.zip` (native
 double-click extraction in Explorer), Linux and macOS `.tar.gz` (platform
 standard, preserves the executable bit). Each archive contains the versioned
-binary (`TRIKLobeServer-v<tag>.exe` / `.bin`) **and** `settings.ini` at the
+binary (`TRIKMind-v<tag>.exe` / `.bin`) **and** `settings.ini` at the
 root. The separate `settings.ini` release asset is dropped.
 
 **Trade-off:** PyInstaller one-file binaries are already internally compressed,
@@ -773,7 +773,7 @@ because it is the standard and keeps file permissions.
 
 **Consequences:**
 
-- Artifact names become `TRIKLobeServer-v<tag>-Windows.zip`, `-Linux.tar.gz`,
+- Artifact names become `TRIKMind-v<tag>-Windows.zip`, `-Linux.tar.gz`,
   `-macOS.tar.gz`.
 - The `release` job needs `zip` and `tar` on the runner (both preinstalled on
   `ubuntu-latest`), enforced by the "Check for all tools" step.
@@ -915,7 +915,7 @@ refreshed in-place via `\r`. The user experience review revealed:
 | CLI `--no-color` | — | Disables ANSI color |
 | CLI `-v` / `--verbose` | — | Stackable, only in `stdout` mode |
 | CLI `--version` | — | Print version and exit |
-| CLI `--log-file` | — | Custom log file path (default `lobe_server.log`) |
+| CLI `--log-file` | — | Custom log file path (default `trik_mind.log`) |
 
 ### [2026-09-18] Cross-platform output considerations
 
@@ -1037,7 +1037,7 @@ The name sounds like "this app's own port" but it's actually the TCP port of
 **Decision:** Rename `SERVER_IP` → `ROBOT_IP` and `SERVER_PORT` → `ROBOT_PORT`.
 Add new `ROBOT_VIDEO_PORT` (default 8080). Keep old names as backward-compat
 fallbacks in `load_settings()` with a startup deprecation log. `MY_HULL_NUMBER`
-stays as-is — the lobe-server emulates a TRIK robot in the protocol layer, and
+stays as-is — the trik-mind emulates a TRIK robot in the protocol layer, and
 the hull number is the emulated robot's identity.
 
 **CLI flags added:**

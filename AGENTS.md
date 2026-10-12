@@ -1,4 +1,4 @@
-# AGENTS.md — trik-lobe-server
+# AGENTS.md — trik-mind
 
 <!-- encoding: utf-8 -->
 
@@ -313,11 +313,11 @@ uv run ruff check .          # lint
 uv run ruff format .         # format
 uv run pre-commit run mdformat --all-files   # markdown (root-level docs; PowerShell-safe)
 uv run basedpyright .        # typecheck (strict mode, 0 errors expected)
-uv run pylint lobe_server TRIKLobeServer.py tests  # code quality (10.00 expected)
-uv run bandit --recursive lobe_server/ TRIKLobeServer.py  # security scan
-uv run vulture lobe_server/ tests/ TRIKLobeServer.py  # dead code detection
+uv run pylint trik_mind TRIKMind.py tests  # code quality (10.00 expected)
+uv run bandit --recursive trik_mind/ TRIKMind.py  # security scan
+uv run vulture trik_mind/ tests/ TRIKMind.py  # dead code detection
 uv run pytest                         # tests + coverage (config in pyproject.toml)
-uv run pyinstaller TRIKLobeServer.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
+uv run pyinstaller TRIKMind.py --onefile --icon=trik-studio.ico  # Windows only (.ico)
 ```
 
 **Required order:** `ruff → mdformat → basedpyright → pylint → bandit → vulture → pytest`.
