@@ -1,7 +1,7 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
 # ruff: noqa: PLR0913, PLR0917, FBT001  # pytest fixtures + parametrize bool
 # pyright: reportPrivateUsage=false
-# pylint: disable=W0212,W0621,R0913,R0917,FBT001  # tests inspect privates; pytest fixtures/parametrize
+# pylint: disable=W0212,W0621,R0913,R0917  # tests inspect privates; pytest fixtures/parametrize
 
 import asyncio
 import socket
