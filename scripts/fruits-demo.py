@@ -23,19 +23,25 @@ from trik_mind.output import UserOutputFormatter
 class FruitDemo:
     """Generates a realistic prediction stream for visual QA of the dashboard.
 
-    Emits three types of events:
-    - High-conf detection (normal)
-    - Low-conf / uncertain (simulates no clear label)
-    - Error (simulates camera / model failure)
+    Emits a sequence of curated scenarios so every part of the new stacked
+    letter-bar is exercised:
+    - High-conf detection (normal)          — thick winner, thin runners
+    - Apple/Peach confusion (near-tie)      — "peach misread as apple" case:
+      both labels mid+, nearly equal split, visible as A|P segments
+    - Confident split across 3 labels       — A/B/C segments all visible
+    - Hold (winner between view & send)     — shown but NOT sent to robot
+    - Low-conf / uncertain (no mid label)   — dim empty bar
+    - Error (simulated camera failure)      — "---" row
     """
 
-    LABELS: ClassVar[list[str]] = ["Apple", "Banana", "Cherry", "Dewberry"]
+    LABELS: ClassVar[list[str]] = ["Apple", "Peach", "Banana", "Cherry"]
+    VIEW_THRESHOLD: ClassVar[float] = 0.4
+    SEND_THRESHOLD: ClassVar[float] = 0.6
 
     def __init__(self, formatter: UserOutputFormatter) -> None:
         self._fmt = formatter
         self._running = True
         self._label_ix = 0
-        self._same = 0
         self._phase = "high"
         self._phase_countdown = 0
         signal.signal(signal.SIGINT, self._signal)
@@ -46,54 +52,70 @@ class FruitDemo:
         self._fmt.close()
         raise SystemExit(0)
 
-    def _top3(self, ix: int, base: float = 0.95) -> list[tuple[str, float]]:
-        """Top-3 labels with declining confidence from *base*."""
-        return [(self.LABELS[(ix + i) % 4], max(base - i * 0.18, 0.01)) for i in range(3)]
+    def _dist(self, ix: int, scenario: str) -> tuple[str, float, list[tuple[str, float]]]:
+        """Return (label, confidence, top_labels) for the given scenario.
+
+        Scenarios select distinct distributions over the label pool so each
+        stacked-bar case is visible: clear winner, near-tie, 3-way spread,
+        and low-uncertainty (no mid+ label).
+        """
+        if scenario == "high":
+            base = [0.94, 0.14, 0.06, 0.02]
+        elif scenario == "peach":
+            base = [0.85, 0.78, 0.05, 0.02]
+        elif scenario == "spread":
+            base = [0.82, 0.70, 0.58, 0.10]
+        elif scenario == "hold":
+            base = [0.55, 0.42, 0.12, 0.04]
+        else:  # low
+            base = [0.42, 0.34, 0.22, 0.15]
+        jitter = [random.uniform(-0.02, 0.02) for _ in base]
+        labels = sorted(  # keep sorted desc by confidence, like a real model
+            [(self.LABELS[(ix + i) % 4], max(0.01, base[i] + jitter[i])) for i in range(4)],
+            key=lambda x: -x[1],
+        )
+        return labels[0][0], round(labels[0][1], 3), labels
 
     def step(self) -> None:
-        """Emit one prediction frame with varying confidence levels."""
+        """Emit one prediction frame with varying confidence distributions."""
         # Manage phases
         self._phase_countdown -= 1
         if self._phase_countdown <= 0:
-            # Pick a new phase
+            # Pick a new scenario
             r = random.random()
-            if r < 0.15:  # 15% chance: error burst
+            if r < 0.12:  # 12% chance: error burst
                 self._phase = "error"
                 self._phase_countdown = int(random.uniform(1, 3))
-            elif r < 0.30:  # 15% chance: low-conf uncertainty
+            elif r < 0.26:  # 14% chance: low-conf uncertainty (no mid label)
                 self._phase = "low"
                 self._phase_countdown = int(random.uniform(3, 7))
-            else:  # 70% chance: normal high-conf detection
+            elif r < 0.5:  # 24% chance: apple/peach confusion (near-tie)
+                self._phase = "peach"
+                self._phase_countdown = int(random.uniform(5, 12))
+                self._label_ix = 0  # force Apple-lead so Peach appears as runner
+            elif r < 0.62:  # 12% chance: winner between view and send — shown, held back
+                self._phase = "hold"
+                self._phase_countdown = int(random.uniform(4, 8))
+            else:  # 38% chance: normal high-conf detection
                 self._phase = "high"
                 self._phase_countdown = int(random.uniform(8, 16))
                 self._label_ix = (self._label_ix + 1) % 4
-                self._same = 0
 
         timing = 0.028 + random.uniform(0, 0.015)
         sleep_s = 1.0 / (10 + random.uniform(0, 7))
 
         if self._phase == "error":
-            self._fmt.on_error(timing, self._top3(self._label_ix, 0.1))
+            label, conf, labels = self._dist(self._label_ix, "low")
+            self._fmt.on_error(timing, labels)
             time.sleep(sleep_s)
             return
 
-        if self._phase == "low":
-            # All labels have similar low confidence — model is uncertain
-            low_base = 0.1 + random.uniform(0, 0.15)
-            label = self.LABELS[self._label_ix]
-            conf = round(low_base + random.uniform(0, 0.08), 3)
-            self._fmt.on_prediction(label, conf, timing, self._top3(self._label_ix, low_base))
-            time.sleep(sleep_s)
-            return
-
-        # High-conf normal detection
-        if self._same >= 8 + int(random.uniform(0, 7)):
-            self._label_ix = (self._label_ix + 1) % 4
-            self._same = 0
-        label = self.LABELS[self._label_ix]
-        conf = round(0.95 - random.uniform(0, 0.12), 3)
-        self._fmt.on_prediction(label, conf, timing, self._top3(self._label_ix, 0.95))
-        self._same += 1
+        label, conf, labels = self._dist(self._label_ix, self._phase)
+        if conf < self.VIEW_THRESHOLD:
+            self._fmt.on_error(timing, labels)
+        else:
+            self._fmt.on_prediction(label, conf, timing, labels, sent=conf >= self.SEND_THRESHOLD)
+        self._label_ix = (self._label_ix + 1) % 4
         time.sleep(sleep_s)
 
     def run(self, duration: float | None) -> None:

@@ -1,6 +1,7 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# ruff: noqa: PLR0913, PLR0917, FBT001  # pytest fixtures + parametrize bool
 # pyright: reportPrivateUsage=false
-# pylint: disable=W0212,W0621  # tests inspect privates; pytest fixtures shadow names
+# pylint: disable=W0212,W0621,R0913,R0917  # tests inspect privates; pytest fixtures/parametrize
 
 import asyncio
 import socket
@@ -539,3 +540,51 @@ async def test_handle_connection_cancels_pending(
 
     server._running = False
     block.set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("conf", "expect_sent", "expect_payload"),
+    [
+        (0.924, True, b"8:data:cat"),  # above send (0.6)
+        (0.5, False, b"7:data:-1"),  # between view (0.4) and send -> hold
+        (0.2, False, b"7:data:-1"),  # below view -> not routed to prediction
+    ],
+)
+async def test_prediction_loop_threshold_routing(
+    settings: Settings,
+    mock_model: MagicMock,
+    mock_camera: MagicMock,
+    real_sock_pair: _SockPair,
+    conf: float,
+    expect_sent: bool,
+    expect_payload: bytes,
+) -> None:
+    """Routing by view/send thresholds: sent flag on formatter, -1 vs label on socket."""
+    sock, reader = real_sock_pair
+    prediction = MagicMock()
+    prediction.prediction = "cat"
+    prediction.labels = [("cat", conf), ("dog", 0.1)]
+    mock_model.predict.return_value = prediction
+    formatter = MagicMock()
+    with (
+        patch("trik_mind.server.load_model", return_value=mock_model),
+        patch("trik_mind.server.create_camera", return_value=mock_camera),
+    ):
+        server = MindServer(settings, MagicMock(), formatter=formatter)
+    server._running = True
+
+    await _run_with_timeout(server, server._prediction_loop(sock), seconds=0.1)
+    data = await asyncio.get_running_loop().sock_recv(reader, 255)
+    assert data == expect_payload
+    if expect_sent:
+        formatter.on_prediction.assert_called_once()
+        _kw = formatter.on_prediction.call_args.kwargs
+        assert _kw["sent"] is True
+        assert _kw["label"] == "cat"
+    elif conf < 0.4:
+        formatter.on_error.assert_called_once()
+        formatter.on_prediction.assert_not_called()
+    else:
+        formatter.on_prediction.assert_called_once()
+        assert formatter.on_prediction.call_args.kwargs["sent"] is False

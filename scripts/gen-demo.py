@@ -4,7 +4,8 @@
 Generate ANSI demo output for screenshot pipeline.
 
 Emits two .ansi files (dark + light) with a realistic prediction sequence
-using Apple/Banana/Cherry/Dewberry labels, 10-17 FPS, 3 label changes.
+exercising the threshold UI: high-conf detection, Apple/Peach near-tie
+letter-bar, a hold row (shown, not sent) and sent rows.
 
 Usage:
     uv run scripts/gen-demo.py                    # writes .tmp/demo-*.ansi
@@ -23,12 +24,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-_LABELS = ["Apple", "Banana", "Cherry", "Dewberry"]
+_LABELS = ["Apple", "Peach", "Banana", "Cherry"]
 _TERM = os.terminal_size((81, 50))
+_VIEW = 0.4
+_SEND = 0.6
 
 
-def _top3(ix: int) -> list[tuple[str, float]]:
-    return [(_LABELS[(ix + i) % 4], max(0.95 - i * 0.18, 0.01)) for i in range(3)]
+def _dist(ix: int, scenario: str) -> list[tuple[str, float]]:
+    base = {
+        "high": [0.94, 0.14, 0.06, 0.02],
+        "peach": [0.85, 0.78, 0.05, 0.02],
+        "spread": [0.82, 0.70, 0.58, 0.10],
+        "hold": [0.55, 0.42, 0.12, 0.04],
+    }[scenario]
+    jitter = [random.uniform(-0.02, 0.02) for _ in base]
+    return sorted(
+        [(_LABELS[(ix + i) % 4], max(0.01, base[i] + jitter[i])) for i in range(4)],
+        key=lambda x: -x[1],
+    )
 
 
 def _fixed_term(*_args: object) -> os.terminal_size:
@@ -50,32 +63,30 @@ def capture_demo(*, color: bool) -> str:
     import trik_mind.output as m  # noqa: PLC0415
 
     m._HAS_UNICODE = True  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
-    fmt = m.UserOutputFormatter(color_enabled=color)
+    fmt = m.UserOutputFormatter(color_enabled=color, view_threshold=_VIEW)
     fmt._raw_width = 79  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     fmt._width = 79  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
     fmt.set_context("fruit_classifier.onnx  |  USB@640x480")
     fmt._change_t0 = fmt._last_change_time = _time.monotonic()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
-    # Apple (15 frames) → Banana (8) → Cherry (6) → Apple (ends on a change)
-    for _ in range(15):
-        fmt.on_prediction("Apple", round(0.97 - random.uniform(0, 0.06), 3), 0.028 + random.uniform(0, 0.018), _top3(0))
-        _time.sleep(0.0005)
+    def emit(scenario: str, ix: int, frames: int) -> None:
+        for _ in range(frames):
+            labels = _dist(ix, scenario)
+            label, conf = labels[0][0], labels[0][1]
+            if conf < _VIEW:
+                fmt.on_error(0.028, labels)
+            else:
+                fmt.on_prediction(label, conf, 0.028, labels, sent=conf >= _SEND)
+            _time.sleep(0.0005)
+
+    # Apple (high) → Banana (hold) → Peach near-tie → Apple high (final, single label)
+    emit("high", 0, 9)
     _time.sleep(0.002)
-    fmt.on_prediction("Banana", round(0.80 + random.uniform(0, 0.04), 3), 0.031, _top3(1))
-    for _ in range(8):
-        fmt.on_prediction(
-            "Banana", round(0.85 - random.uniform(0, 0.05), 3), 0.029 + random.uniform(0, 0.012), _top3(1)
-        )
-        _time.sleep(0.0005)
+    emit("hold", 1, 6)
     _time.sleep(0.002)
-    fmt.on_prediction("Cherry", round(0.70 + random.uniform(0, 0.04), 3), 0.033, _top3(2))
-    for _ in range(6):
-        fmt.on_prediction(
-            "Cherry", round(0.73 + random.uniform(-0.03, 0.03), 3), 0.030 + random.uniform(0, 0.015), _top3(2)
-        )
-        _time.sleep(0.0005)
+    emit("peach", 0, 3)
     _time.sleep(0.002)
-    fmt.on_prediction("Apple", 0.95, 0.027, _top3(0))
+    emit("high", 0, 2)
     fmt.close()
 
     sys.stderr = old_stderr
@@ -97,6 +108,9 @@ def main() -> None:
         lines = [ln for ln in clean.split("\n") if ln.strip()]
         changes = sum(1 for ln in lines if "→" in ln or "->" in ln)
         print(f"{path}: {len(lines)} lines, {changes} changes")
+        holds = sum(1 for ln in lines if "×" in ln or "x" in ln)  # noqa: RUF001
+        sents = sum(1 for ln in lines if "↑" in ln or "^" in ln)
+        print(f"   -> {holds} hold rows, {sents} sent rows")
 
 
 if __name__ == "__main__":

@@ -15,14 +15,14 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-# ANSI SGR colour map (8-colour foreground, keyed by code digit)
+# ANSI SGR colour maps (8-colour foreground/background, keyed by code digit)
 _SGR_FG: dict[str, tuple[int, int, int]] = {
     "30": (0, 0, 0),
     "31": (0xCC, 0, 0),
@@ -41,6 +41,13 @@ _SGR_FG: dict[str, tuple[int, int, int]] = {
     "96": (0, 0xFF, 0xFF),
     "97": (0xFF, 0xFF, 0xFF),
 }
+_SGR_BG: dict[str, tuple[int, int, int]] = {
+    "41": (0xCC, 0, 0),
+    "42": (0, 0xCC, 0),
+    "43": (0xCC, 0xCC, 0),
+    "44": (0x33, 0x33, 0xFF),
+    "45": (0xCC, 0, 0xCC),
+}
 
 _ANSI_ESC = re.compile(r"\033\[([0-9;]*)m")
 _FULL_BLOCK = "\u2588"  # █
@@ -58,9 +65,10 @@ _FONT_SIZE = 15
 _FONT_PATH = "/usr/share/fonts/truetype/andale/Andale_Mono.ttf"
 
 
-def _segments(text: str) -> Generator[tuple[str, tuple[int, int, int] | None], None, None]:
-    """Yield (char, colour|None) for each visible character, consuming ANSI codes."""
+def _segments(text: str) -> Generator[tuple[str, tuple[int, int, int] | None, tuple[int, int, int] | None], None, None]:
+    """Yield (char, fg_colour, bg_colour) for each visible character, consuming ANSI codes."""
     fg: tuple[int, int, int] | None = None
+    bg: tuple[int, int, int] | None = None
     i = 0
     while i < len(text):
         m = _ANSI_ESC.match(text, i)
@@ -68,12 +76,15 @@ def _segments(text: str) -> Generator[tuple[str, tuple[int, int, int] | None], N
             params, i = m.group(1), m.end()
             if not params or params == "0":
                 fg = None
+                bg = None
                 continue
             for p in params.split(";"):
                 if p in _SGR_FG:
                     fg = _SGR_FG[p]
+                elif p in _SGR_BG:
+                    bg = _SGR_BG[p]
             continue
-        yield text[i], fg
+        yield text[i], fg, bg
         i += 1
 
 
@@ -82,6 +93,38 @@ def _load_font() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.truetype(_FONT_PATH, _FONT_SIZE)
     except OSError:
         return ImageFont.load_default()
+
+
+class _Cell(NamedTuple):
+    char: str
+    fg: tuple[int, int, int] | None
+    bg: tuple[int, int, int] | None
+    x: int
+    y: int
+    x_end: int
+    y_end: int
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    fg_default: tuple[int, int, int]
+    bg_default: tuple[int, int, int]  # type: ignore[no-any-expr]  # pyright: ignore[reportUnknownVariableType,reportMissingTypeArgument]
+
+
+def _draw_cell(draw: ImageDraw.ImageDraw, cell: _Cell) -> None:
+    """Paint one terminal cell: optional bg fill, then block/dot/text glyph."""
+    colour = cell.fg if cell.fg is not None else cell.fg_default
+    if cell.bg is not None:
+        draw.rectangle([cell.x, cell.y, cell.x_end, cell.y_end], fill=cell.bg)
+        if cell.fg is None or cell.fg == cell.bg_default:
+            # dark text on bright background for letter-bars in colour mode
+            colour = (0, 0, 0) if cell.bg_default[0] > 0x80 else (0xFF, 0xFF, 0xFF)
+    if cell.char == _FULL_BLOCK:
+        draw.rectangle([cell.x, cell.y, cell.x_end, cell.y_end], fill=colour)
+    elif cell.char == _LIGHT_SHADE:
+        dot = tuple(v // 3 + base // 2 for v, base in zip(colour, cell.bg_default, strict=True))
+        for dx in range(0, cell.x_end - cell.x + 1, 2):
+            for dy in range(0, cell.y_end - cell.y + 1, 3):
+                draw.point((cell.x + dx, cell.y + dy), fill=dot)
+    else:
+        draw.text((cell.x, cell.y), cell.char, fill=colour, font=cell.font)
 
 
 def render(input_path: str, output_path: str, *, dark: bool) -> None:
@@ -113,23 +156,24 @@ def render(input_path: str, output_path: str, *, dark: bool) -> None:
     draw = ImageDraw.Draw(img)
 
     for ri, line in enumerate(lines[:_TERM_ROWS]):
-        for ci, (char, fg) in enumerate(_segments(line)):
+        for ci, (char, fg, bg) in enumerate(_segments(line)):
             if ci >= max_cols:
                 break
-            x = _PAD + ci * cw
-            y = _PAD + ri * ch
-            colour = fg if fg is not None else theme["fg"]
-
-            if char == _FULL_BLOCK:
-                draw.rectangle([x, y, x + cw - 1, y + ch - 1], fill=colour)
-            elif char == _LIGHT_SHADE:
-                # Dotted pattern at 25% intensity
-                dot = tuple(v // 3 + bg // 2 for v, bg in zip(colour, theme["bg"], strict=True))
-                for dx in range(0, cw, 2):
-                    for dy in range(0, ch, 3):
-                        draw.point((x + dx, y + dy), fill=dot)
-            else:
-                draw.text((x, y), char, fill=colour, font=font)
+            _draw_cell(
+                draw,
+                _Cell(
+                    char,
+                    fg,
+                    bg,
+                    _PAD + ci * cw,
+                    _PAD + ri * ch,
+                    _PAD + ci * cw + cw - 1,
+                    _PAD + ri * ch + ch - 1,
+                    font,
+                    theme["fg"],
+                    theme["bg"],
+                ),
+            )
 
     img.save(output_path)
     print(f"Saved {output_path}  {iw}x{ih}, {len(lines)} rows, {max_cols} cols")
