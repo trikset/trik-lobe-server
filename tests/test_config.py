@@ -215,3 +215,17 @@ def test_load_settings_threshold_view_equals_send_ok(ini_path: Path) -> None:
     ini_path.write_text("[Settings]\nVIEW_THRESHOLD=0.5\nSEND_THRESHOLD=0.5\n", encoding="utf-8")
     s = load_settings(ini_path)
     assert s.view_threshold == s.send_threshold == 0.5
+
+
+def test_send_on_change_only_default_false(ini_path: Path) -> None:
+    """SEND_ON_CHANGE_ONLY defaults to False when not set."""
+    ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\n", encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.send_on_change_only is False
+
+
+def test_send_on_change_only_explicit_true(ini_path: Path) -> None:
+    """SEND_ON_CHANGE_ONLY=True is read correctly."""
+    ini_path.write_text("[Settings]\nROBOT_IP=127.0.0.1\nSEND_ON_CHANGE_ONLY=true\n", encoding="utf-8")
+    s = load_settings(ini_path)
+    assert s.send_on_change_only is True

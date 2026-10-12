@@ -100,7 +100,8 @@ class MindServer:
                 else:
                     logger.info("Prediction: %s", payload)
                 self._last_payload = payload
-                await self._send_message(sock, payload)
+                if not self._settings.send_on_change_only or payload != self._last_payload:
+                    await self._send_message(sock, payload)
 
                 if self._formatter is not None:
                     try:
