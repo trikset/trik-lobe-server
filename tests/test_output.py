@@ -55,15 +55,16 @@ class TestUserBasic:
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.on_error(0.05)
         stderr = capsys.readouterr().err
-        assert "camera error" in stderr
+        assert "---" in stderr
 
     def test_on_error_in_tty(self, capsys: pytest.CaptureFixture[str]) -> None:
-        r"""Test on_error in TTY mode (uses cursor-up redraw)."""
+        r"""Test on_error in TTY mode (uses home+clear redraw)."""
         fmt = UserOutputFormatter(color_enabled=False)
+        fmt._first_output = False  # simulate already-active session
         fmt._tty = True
         fmt.on_error(0.05)
         stderr = capsys.readouterr().err
-        assert "\033[4A" in stderr
+        assert "\033[H\033[J" in stderr
 
     def test_close_releases(self, capsys: pytest.CaptureFixture[str]) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -100,17 +101,7 @@ class TestUserBasic:
 
 
 class TestUserAdvanced:
-    """Advanced UserOutputFormatter tests: bars, fps, non-TTY, context."""
-
-    def test_bar_high_confidence(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        result = fmt._bar(0.9, width=10)
-        assert result.count("█") + result.count("#") == 9
-
-    def test_bar_low_confidence(self) -> None:
-        fmt = UserOutputFormatter(color_enabled=False)
-        result = fmt._bar(0.3, width=10)
-        assert result.count("█") + result.count("#") == 3
+    """Advanced UserOutputFormatter tests: fps, context, status badge."""
 
     def test_tier_green(self) -> None:
         fmt = UserOutputFormatter(color_enabled=False)
@@ -142,12 +133,14 @@ class TestUserAdvanced:
         assert "Test context" in stderr
 
     def test_context_not_repeated(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Context appears in Current box header, not as a separate line."""
         fmt = UserOutputFormatter(color_enabled=False)
-        fmt.set_context("Header")
+        fmt.set_context("my_model.onnx")
         fmt.on_prediction("cat", 0.90, 0.05)
         capsys.readouterr()
         fmt.on_prediction("cat", 0.90, 0.05)
-        assert "Header" not in capsys.readouterr().err
+        stderr = capsys.readouterr().err
+        assert "my_model.onnx" in stderr  # in the box header
 
     def test_set_status_shows_badge(self, capsys: pytest.CaptureFixture[str]) -> None:
         """set_status() shows a badge on the dashboard top line."""
@@ -177,7 +170,7 @@ class TestUserAdvanced:
         assert g.CORNER_BL in stderr
 
     def test_change_prints_top_labels(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Change event shows top-N labels."""
+        """Change shows the new label with its percentage on the label line."""
         fmt = UserOutputFormatter(color_enabled=False)
         labels = [("cat", 0.92), ("dog", 0.74), ("bird", 0.51)]
         with _tty(fmt):
@@ -186,8 +179,7 @@ class TestUserAdvanced:
         with _tty(fmt):
             fmt.on_prediction("dog", 0.74, 0.06, top_labels=labels)
         stderr = capsys.readouterr().err
-        assert "cat(92%)" in stderr
-        assert "dog(74%)" in stderr
+        assert "dog  74.0%" in stderr  # label line: current label + pct
 
     def test_mid_line_with_labels(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Middle panel line shows top-2 labels when available."""
@@ -220,7 +212,7 @@ class TestUserAdvanced:
         with _tty(fmt):
             fmt.on_prediction("cat", 0.88, 0.06)
         stderr = capsys.readouterr().err
-        assert "\033[4A" in stderr  # cursor-up escape
+        assert "\033[H\033[J" in stderr  # home+clear escape
 
     def test_width_caps_at_120(self) -> None:
         """When terminal reports huge buffer width, formatter caps no higher than 120."""
@@ -255,8 +247,9 @@ class TestUserAdvanced:
         ):
             fmt._refresh_width()
         stderr = capsys.readouterr().err
-        # Must appear as OSC title escape
-        assert "\033]0;TRIK Lobe [W148" in stderr
+        # Must appear as OSC title escape — format: TRIK Lobe  ...  W148
+        assert "\033]0;TRIK Lobe " in stderr
+        assert "W148" in stderr
 
     def test_update_title_cache_hit(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Second title write with same diagnostic is suppressed."""
