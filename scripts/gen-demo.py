@@ -79,12 +79,14 @@ def capture_demo(*, color: bool) -> str:
                 fmt.on_prediction(label, conf, 0.028, labels, sent=conf >= _SEND)
             _time.sleep(0.0005)
 
-    # Apple (high) → Banana (hold) → Peach near-tie (final, ends on change sent)
+    # Apple (high) → Banana (hold) → Peach near-tie → Apple high (final, single label)
     emit("high", 0, 9)
     _time.sleep(0.002)
     emit("hold", 1, 6)
     _time.sleep(0.002)
     emit("peach", 0, 3)
+    _time.sleep(0.002)
+    emit("high", 0, 2)
     fmt.close()
 
     sys.stderr = old_stderr

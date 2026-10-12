@@ -500,3 +500,13 @@ class TestThresholdsAndBars:
         fmt = self._fmt()
         taken = {"A", "B", "C"}
         assert fmt._unique_letter("ABC", taken) == "A"  # all chars taken -> first char fallback
+
+    def test_current_always_two_lines_no_candidates(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Single label above view threshold must still render the 2nd Current line (glitch fix)."""
+        fmt = self._fmt(view_threshold=0.4)
+        fmt.set_context("t")
+        fmt.on_prediction("Apple", 0.94, 0.05, [("Apple", 0.94), ("Peach", 0.2)], sent=True)
+        err = capsys.readouterr().err
+        current_section = err.split("History")[0]
+        pipes = current_section.count("\u2502")  # │ box lines
+        assert pipes >= 4  # top line + label line + 2nd line + History header line

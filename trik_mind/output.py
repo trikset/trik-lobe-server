@@ -353,6 +353,10 @@ class UserOutputFormatter:
         elif label == "---":
             d = self._DIM
             lines.append(self._box_line(f"  {self._c(d, '---')}  "))
+        else:
+            # no other labels above view threshold — keep the second line
+            d = self._DIM
+            lines.append(self._box_line(f"  {self._c(d, '·')}  "))
         lines.append(self._section_header("History", self._width))
         return lines
 
