@@ -321,6 +321,9 @@ class UserOutputFormatter:
                  for i, (lb, c) in enumerate(sorted_lbls) if i > 0][:3]
         if cands:
             lines.append(self._box_line(f"  {'  '.join(cands)}  "))
+        elif label == "---":
+            d = self._DIM
+            lines.append(self._box_line(f"  {self._c(d, '---')}  "))
         lines.append(self._section_header("History", self._width))
         return lines
 
