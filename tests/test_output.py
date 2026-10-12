@@ -1,6 +1,7 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# ruff: noqa: RUF001  # tests assert on the literal hold/sent glyphs
 # pyright: reportPrivateUsage=false
-# pylint: disable=W0212  # tests inspect private output methods
+# pylint: disable=W0212,R0904,C0115,C0116  # tests inspect private output methods; many small test methods
 
 import os
 from collections.abc import Generator
@@ -9,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+import trik_mind.output as output_module
 from trik_mind.output import StdoutOutputFormatter, UserOutputFormatter, _visible_len
 
 
@@ -413,18 +415,18 @@ class TestThresholdsAndBars:
             ([("A", 0.55), ("B", 0.42), ("C", 0.12), ("D", 0.3)], 60),
         ]
         for labels, bar_w in cases:
-            bar = fmt._history_bar(labels, bar_w)
-            assert _visible_len(bar) == bar_w, f"bar_w={bar_w} got {_visible_len(bar)} for {labels}"
+            bar_s = fmt._history_bar(labels, bar_w)
+            assert _visible_len(bar_s) == bar_w, f"bar_w={bar_w} got {_visible_len(bar_s)} for {labels}"
 
     def test_bar_four_way_split_has_dim_tail(self) -> None:
         fmt = self._fmt()
-        bar = fmt._history_bar([("AAAA", 0.5), ("BBBB", 0.45), ("CCCC", 0.4), ("DDDD", 0.45)], 40)
-        assert "░" in bar  # dim lumped tail for 4th+
+        bar_s = fmt._history_bar([("AAAA", 0.5), ("BBBB", 0.45), ("CCCC", 0.4), ("DDDD", 0.45)], 40)
+        assert "░" in bar_s  # dim lumped tail for 4th+
 
     def test_bar_empty_when_no_mid(self) -> None:
         fmt = self._fmt(view_threshold=0.4)
-        bar = fmt._history_bar([("A", 0.3), ("B", 0.2)], 30)
-        assert bar == "░" * 30
+        bar_s = fmt._history_bar([("A", 0.3), ("B", 0.2)], 30)
+        assert bar_s == "░" * 30
 
     def test_bar_total_zero_dim(self) -> None:
         fmt = self._fmt()
@@ -433,8 +435,8 @@ class TestThresholdsAndBars:
     def test_bar_tiny_width_guard(self) -> None:
         fmt = self._fmt()
         labels = [("Apple", 0.9), ("Banana", 0.8), ("Cherry", 0.7)]
-        bar = fmt._history_bar(labels, 3)
-        assert _visible_len(bar) == 3
+        bar_s = fmt._history_bar(labels, 3)
+        assert _visible_len(bar_s) == 3
 
     def test_candidate_tokens_filtered_by_view(self) -> None:
         fmt = self._fmt(view_threshold=0.4)
@@ -456,9 +458,7 @@ class TestThresholdsAndBars:
         assert p == "P"  # second letter, unique
 
     def test_ascii_path_no_non_ascii(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-        import trik_mind.output as m
-
-        monkeypatch.setattr(m, "_HAS_UNICODE", False)
+        monkeypatch.setattr(output_module, "_HAS_UNICODE", False)
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.set_context("t")
         fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)
@@ -468,9 +468,7 @@ class TestThresholdsAndBars:
         err.encode("cp1251")
 
     def test_ascii_glyphs_present(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-        import trik_mind.output as m
-
-        monkeypatch.setattr(m, "_HAS_UNICODE", False)
+        monkeypatch.setattr(output_module, "_HAS_UNICODE", False)
         fmt = UserOutputFormatter(color_enabled=False)
         fmt.set_context("t")
         fmt.on_prediction("Apple", 0.92, 0.05, [("Apple", 0.92)], sent=True)

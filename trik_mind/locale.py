@@ -68,10 +68,8 @@ _RU: dict[str, str] = {
         "MY_HULL_NUMBER должен быть положительным: {hull}",
     "Invalid OUTPUT_MODE in settings.ini: {mode!r}":
         "Неверный OUTPUT_MODE в settings.ini: {mode!r}",
-    "VIEW_THRESHOLD must be in (0, 1]: {value}":
-        "VIEW_THRESHOLD должен быть в (0, 1]: {value}",
-    "SEND_THRESHOLD must be in (0, 1]: {value}":
-        "SEND_THRESHOLD должен быть в (0, 1]: {value}",
+    "{key} must be in (0, 1]: {value}":
+        "{key} должен быть в (0, 1]: {value}",
     "VIEW_THRESHOLD ({view}) must not exceed SEND_THRESHOLD ({send})":
         "VIEW_THRESHOLD ({view}) не должен превышать SEND_THRESHOLD ({send})",
     "settings.ini: {old} is deprecated \u2014 use {new} instead":
@@ -152,10 +150,8 @@ _ES: dict[str, str] = {
         "MY_HULL_NUMBER debe ser positivo: {hull}",
     "Invalid OUTPUT_MODE in settings.ini: {mode!r}":
         "OUTPUT_MODE inv\u00e1lido en settings.ini: {mode!r}",
-    "VIEW_THRESHOLD must be in (0, 1]: {value}":
-        "VIEW_THRESHOLD debe estar en (0, 1]: {value}",
-    "SEND_THRESHOLD must be in (0, 1]: {value}":
-        "SEND_THRESHOLD debe estar en (0, 1]: {value}",
+    "{key} must be in (0, 1]: {value}":
+        "{key} debe estar en (0, 1]: {value}",
     "VIEW_THRESHOLD ({view}) must not exceed SEND_THRESHOLD ({send})":
         "VIEW_THRESHOLD ({view}) no debe exceder SEND_THRESHOLD ({send})",
     "settings.ini: {old} is deprecated \u2014 use {new} instead":

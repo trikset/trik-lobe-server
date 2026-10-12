@@ -1,6 +1,7 @@
 # Copyright 2026 Iakov Kirilenko. Licensed under the Apache License, Version 2.0.
+# ruff: noqa: PLR0913, PLR0917, FBT001  # pytest fixtures + parametrize bool
 # pyright: reportPrivateUsage=false
-# pylint: disable=W0212,W0621  # tests inspect privates; pytest fixtures shadow names
+# pylint: disable=W0212,W0621,R0913,R0917,FBT001  # tests inspect privates; pytest fixtures/parametrize
 
 import asyncio
 import socket
@@ -581,10 +582,9 @@ async def test_prediction_loop_threshold_routing(
         _kw = formatter.on_prediction.call_args.kwargs
         assert _kw["sent"] is True
         assert _kw["label"] == "cat"
+    elif conf < 0.4:
+        formatter.on_error.assert_called_once()
+        formatter.on_prediction.assert_not_called()
     else:
-        if conf < 0.4:
-            formatter.on_error.assert_called_once()
-            formatter.on_prediction.assert_not_called()
-        else:
-            formatter.on_prediction.assert_called_once()
-            assert formatter.on_prediction.call_args.kwargs["sent"] is False
+        formatter.on_prediction.assert_called_once()
+        assert formatter.on_prediction.call_args.kwargs["sent"] is False

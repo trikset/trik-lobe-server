@@ -187,9 +187,7 @@ def test_load_settings_threshold_defaults(ini_path: Path) -> None:
 
 
 def test_load_settings_threshold_explicit(ini_path: Path) -> None:
-    ini_path.write_text(
-        "[Settings]\nVIEW_THRESHOLD=0.35\nSEND_THRESHOLD=0.75\n", encoding="utf-8"
-    )
+    ini_path.write_text("[Settings]\nVIEW_THRESHOLD=0.35\nSEND_THRESHOLD=0.75\n", encoding="utf-8")
     s = load_settings(ini_path)
     assert s.view_threshold == 0.35
     assert s.send_threshold == 0.75
@@ -213,7 +211,7 @@ def test_load_settings_threshold_invalid(ini_path: Path, ini_content: str, match
 
 
 def test_load_settings_threshold_view_equals_send_ok(ini_path: Path) -> None:
-    """view == send is a valid degenerate config (everything shown = everything sent)."""
+    """View == send is a valid degenerate config (everything shown = everything sent)."""
     ini_path.write_text("[Settings]\nVIEW_THRESHOLD=0.5\nSEND_THRESHOLD=0.5\n", encoding="utf-8")
     s = load_settings(ini_path)
     assert s.view_threshold == s.send_threshold == 0.5

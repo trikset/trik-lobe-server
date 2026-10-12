@@ -91,8 +91,10 @@ class MindServer:
                 prediction, confidence, labels = await asyncio.to_thread(self._predict_full)
                 inference_s = time.monotonic() - t0
 
-                below_path = (prediction is None or confidence is None) or confidence < self._settings.send_threshold
-                payload = "-1" if below_path else prediction
+                if prediction is None or (confidence is not None and confidence < self._settings.send_threshold):
+                    payload = "-1"
+                else:
+                    payload = prediction
                 if self._last_payload == payload:  # pragma: no cover  # dedup
                     logger.debug("Prediction: %s (repeated)", payload)
                 else:
@@ -102,7 +104,9 @@ class MindServer:
 
                 if self._formatter is not None:
                     try:
-                        if prediction is None or confidence is None or confidence < self._settings.view_threshold:
+                        above_view = confidence is not None and confidence >= self._settings.view_threshold
+                        above_send = confidence is not None and confidence >= self._settings.send_threshold
+                        if prediction is None or not above_view:
                             self._formatter.on_error(timing_s=inference_s, top_labels=labels)
                         else:
                             self._formatter.on_prediction(
@@ -110,7 +114,7 @@ class MindServer:
                                 confidence=confidence if confidence is not None else 0.0,
                                 timing_s=inference_s,
                                 top_labels=labels,
-                                sent=confidence >= self._settings.send_threshold,
+                                sent=above_send,
                             )
                     except Exception:
                         logger.exception("Formatter error (output suppressed, detection continues)")

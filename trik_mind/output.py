@@ -29,6 +29,7 @@ _HIST_COL_LBL = 10
 _HIST_COL_EVT = 3
 _HIST_COL_SP = 1
 _HIST_BAR_MIN = 10
+_MAX_COLORED_SEGMENTS = 3
 _BAR_COLORS = ("\x1b[92m", "\x1b[94m", "\x1b[95m", "\x1b[2m")
 _BAR_BG = ("\033[42m", "\033[44m", "\033[45m", "\033[2m")
 
@@ -39,12 +40,11 @@ _ANSI_RE = re.compile(r"\033\[[0-9;]*[mK]")
 
 
 class _Unicode:
-    BLOCK_FULL = "█"
     BLOCK_EMPTY = "░"
     PIPE = "│"
     ARROW_R = "→"
     SENT = "↑"
-    HOLD = "×"
+    HOLD = "×"  # noqa: RUF001  # intentional hold glyph, distinct from 'x'
     DELTA = "Δ"
     DASH = "─"
     CORNER_TL = "╭"
@@ -57,7 +57,6 @@ class _Unicode:
 
 
 class _ASCII:
-    BLOCK_FULL = "#"
     BLOCK_EMPTY = "·"
     PIPE = "|"
     ARROW_R = "->"
@@ -369,11 +368,7 @@ class UserOutputFormatter:
 
         # Column header aligned to data columns
         header = (
-            f"{'Bar':>{bar_w}}"
-            f"{'%':>{_HIST_COL_PCT}} "
-            f"{'#':>{_HIST_COL_NUM}} "
-            f"{'Label':<{lbl_w}} "
-            f"{'Evt':>{_HIST_COL_EVT}}"
+            f"{'Bar':>{bar_w}}{'%':>{_HIST_COL_PCT}} {'#':>{_HIST_COL_NUM}} {'Label':<{lbl_w}} {'Evt':>{_HIST_COL_EVT}}"
         )
         lines.append(self._box_line(header))
 
@@ -383,7 +378,9 @@ class UserOutputFormatter:
         lines.extend(self._blank_history_row(bar_w, _HIST_COL_LBL) for _ in range(blank_rows))
         return lines
 
-    def _labels_text(self, entry: tuple[int, str, float, float, float, bool, str | None, list[tuple[str, float]] | None, bool]) -> str:
+    def _labels_text(
+        self, entry: tuple[int, str, float, float, float, bool, str | None, list[tuple[str, float]] | None, bool]
+    ) -> str:
         """Comma-separated matched label names (each ≤10 chars) for the label column."""
         mid = self._mid_labels(entry[7])
         if not mid:
@@ -405,24 +402,49 @@ class UserOutputFormatter:
         taken.add(up)
         return up
 
+    def _evt_mark(self, *, is_change: bool, sent: bool) -> str:
+        """Change arrow + sent/hold glyph for the history Evt column."""
+        g = self._glyphs
+        evt = f" {g.ARROW_R}" if is_change else " "
+        mark = self._c(self._GREEN, g.SENT) if sent else self._c(self._RED, g.HOLD)
+        return f"{evt} {mark}"
+
     def _history_row(
-        self, entry: tuple[int, str, float, float, float, bool, str | None, list[tuple[str, float]] | None, bool],
-        bar_w: int, lbl_w: int,
+        self,
+        entry: tuple[int, str, float, float, float, bool, str | None, list[tuple[str, float]] | None, bool],
+        bar_w: int,
+        lbl_w: int,
     ) -> str:
         """One history line: letter-char stacked bar + pct + num + labels + change arrow."""
-        g = self._glyphs
         idx, conf, is_change, top_labels, sent = entry[0], entry[2], entry[5], entry[7], entry[8]
         tier = self._tier(conf)
         seg = self._history_bar(top_labels, bar_w)
         pct = self._c(tier, f"{conf * 100:.0f}%".rjust(_HIST_COL_PCT))
         num = self._c(tier, f"{idx}".rjust(_HIST_COL_NUM))
         cl = self._labels_text(entry)[:lbl_w].ljust(lbl_w)
-        evt = f" {g.ARROW_R}" if is_change else " "
-        sent_mark = self._c(self._GREEN, g.SENT) if sent else self._c(self._RED, g.HOLD)
-        return self._box_line(f"{seg} {pct} {num} {cl}{evt} {sent_mark}")
+        return self._box_line(f"{seg} {pct} {num} {cl}{self._evt_mark(is_change=is_change, sent=sent)}")
+
+    def _bar_segments(self, mid: list[tuple[str, float]]) -> list[tuple[str, str, float]]:
+        """Build (bg_code, letter, weight) segments for the mid+ labels of one bar."""
+        g = self._glyphs
+        parts: list[tuple[str, str, float]] = []
+        taken: set[str] = set()
+        letter = self._unique_letter(mid[0][0], taken)
+        parts.append((self._tier_bg(mid[0][1]), letter, mid[0][1]))
+        for rank, (name, conf) in enumerate(mid[1:_MAX_COLORED_SEGMENTS], start=1):
+            parts.append((_BAR_BG[rank], self._unique_letter(name, taken), conf))
+        if len(mid) > _MAX_COLORED_SEGMENTS:
+            parts.append((self._DIM, g.BLOCK_EMPTY, sum(c for _, c in mid[_MAX_COLORED_SEGMENTS:])))
+        return parts
+
+    def _bar_widths(self, parts: list[tuple[str, str, float]], total: float, bar_w: int) -> list[int]:
+        """Segment widths: runner floors, winner absorbs the remainder so the sum is exactly bar_w."""
+        others = sum(int(w / total * bar_w) for _, _, w in parts[1:])
+        return [max(0, bar_w - others)] + [int(w / total * bar_w) for _, _, w in parts[1:]]
 
     def _history_bar(self, top_labels: list[tuple[str, float]] | None, bar_w: int) -> str:
-        """Stacked distribution bar: each label = its unique capital letter on colored background.
+        """
+        Stacked distribution bar: each label = its unique capital letter on colored background.
 
         Only labels at/above the view threshold participate; their sum is
         the denominator. Non-winner segments floor their width, the winner absorbs the
@@ -436,22 +458,10 @@ class UserOutputFormatter:
         total = sum(c for _, c in mid)
         if total <= 0:  # pragma: no cover  # defensive — mid is non-empty, all >= view > 0
             return self._c(self._DIM, g.BLOCK_EMPTY * bar_w)
-
-        parts: list[tuple[str, str, float]] = []  # (fg/bg code, letter, weight)
-        taken: set[str] = set()
-        letter = self._unique_letter(mid[0][0], taken)
-        parts.append((self._tier_bg(mid[0][1]), letter, mid[0][1]))
-        if len(mid) > 1:
-            parts.append(("\033[44m", self._unique_letter(mid[1][0], taken), mid[1][1]))
-        if len(mid) > 2:
-            parts.append(("\033[45m", self._unique_letter(mid[2][0], taken), mid[2][1]))
-        if len(mid) > 3:
-            parts.append((self._DIM, g.BLOCK_EMPTY, sum(c for _, c in mid[3:])))
-
-        others = sum(int(w / total * bar_w) for _, _, w in parts[1:])
-        widths = [max(0, bar_w - others)] + [int(w / total * bar_w) for _, _, w in parts[1:]]
-        out = []
-        for (code, letter, _), w in zip(parts, widths):
+        parts = self._bar_segments(mid)
+        widths = self._bar_widths(parts, total, bar_w)
+        out: list[str] = []
+        for (code, letter, _), w in zip(parts, widths, strict=True):
             if w <= 0:
                 continue
             out.append(self._c(code, letter * w))
@@ -497,6 +507,7 @@ class UserOutputFormatter:
         confidence: float,
         timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,
+        *,
         sent: bool = True,
     ) -> None:
         """Handle one prediction result — btop-style multi-zone layout."""
@@ -581,6 +592,7 @@ class StdoutOutputFormatter:
         confidence: float,
         timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,  # noqa: ARG002  # pylint: disable=unused-argument
+        *,
         sent: bool = True,  # noqa: ARG002  # pylint: disable=unused-argument
     ) -> None:
         self._total_count += 1

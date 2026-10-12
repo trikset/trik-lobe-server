@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import NamedTuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -95,7 +95,17 @@ def _load_font() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.load_default()
 
 
-_Cell = NamedTuple("_Cell", [("char", str), ("fg", tuple[int, int, int] | None), ("bg", tuple[int, int, int] | None), ("x", int), ("y", int), ("x_end", int), ("y_end", int), ("font", "ImageFont.FreeTypeFont | ImageFont.ImageFont"), ("fg_default", tuple[int, int, int]), ("bg_default", tuple[int, int, int])])  # type: ignore[no-any-expr]  # pyright: ignore[reportUnknownVariableType,reportMissingTypeArgument]
+class _Cell(NamedTuple):
+    char: str
+    fg: tuple[int, int, int] | None
+    bg: tuple[int, int, int] | None
+    x: int
+    y: int
+    x_end: int
+    y_end: int
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    fg_default: tuple[int, int, int]
+    bg_default: tuple[int, int, int]  # type: ignore[no-any-expr]  # pyright: ignore[reportUnknownVariableType,reportMissingTypeArgument]
 
 
 def _draw_cell(draw: ImageDraw.ImageDraw, cell: _Cell) -> None:

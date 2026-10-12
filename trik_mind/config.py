@@ -77,6 +77,15 @@ def _fallback_hull(s: configparser.SectionProxy) -> int:
     return old
 
 
+def _threshold(section: configparser.SectionProxy, key: str, default: float) -> float:
+    """Read a confidence threshold key: must be in (0, 1]."""
+    value = _get_float(section, key, default)
+    if not 0.0 < value <= 1.0:
+        msg = _("{key} must be in (0, 1]: {value}").format(key=key, value=value)
+        raise ValueError(msg)
+    return value
+
+
 def _fallback_camera_source(s: configparser.SectionProxy) -> str:
     """Read CAMERA_SOURCE with old keys (GET_IMAGES_FROM_ROBOT, PHOTO_URL, CAMERA_NUMBER) as fallback."""
     src = (s.get("CAMERA_SOURCE") or "").strip()
@@ -129,15 +138,8 @@ def load_settings(path: Path | None = None) -> Settings:
 
     camera_source = _fallback_camera_source(s)
 
-    view_threshold = _get_float(s, "VIEW_THRESHOLD", 0.4)
-    if not 0.0 < view_threshold <= 1.0:
-        msg = _("VIEW_THRESHOLD must be in (0, 1]: {value}").format(value=view_threshold)
-        raise ValueError(msg)
-
-    send_threshold = _get_float(s, "SEND_THRESHOLD", 0.6)
-    if not 0.0 < send_threshold <= 1.0:
-        msg = _("SEND_THRESHOLD must be in (0, 1]: {value}").format(value=send_threshold)
-        raise ValueError(msg)
+    view_threshold = _threshold(s, "VIEW_THRESHOLD", 0.4)
+    send_threshold = _threshold(s, "SEND_THRESHOLD", 0.6)
     if view_threshold > send_threshold:
         msg = _("VIEW_THRESHOLD ({view}) must not exceed SEND_THRESHOLD ({send})").format(
             view=view_threshold, send=send_threshold
