@@ -17,7 +17,7 @@ _SAMPLE = dedent(
     ROBOT_HULL=5
     ROBOT_PORT=9999
     ROBOT_VIDEO_PORT=8081
-    MODEL_PATH=C:\\models\\lobe
+    MODEL_PATH=C:\\models\\mind
     CAMERA_SOURCE=0
     """
 )
@@ -35,7 +35,7 @@ def test_load_settings_full(ini_path: Path) -> None:
     assert s.my_hull_number == 5
     assert s.robot_port == 9999
     assert s.robot_video_port == 8081
-    assert s.model_path == "C:\\models\\lobe"
+    assert s.model_path == "C:\\models\\mind"
     assert s.camera_source == "0"
 
 

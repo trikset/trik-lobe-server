@@ -95,15 +95,15 @@ def test_main_with_stdout_output_mode() -> None:
         patch.object(sys, "argv", ["prog", "-o", "stdout"]),
         patch("TRIKMind.load_settings", return_value=mock_settings),
         patch("TRIKMind.resolve_model_path", return_value=MagicMock()),
-        patch("TRIKMind.MindServer") as mock_lobe,
+        patch("TRIKMind.MindServer") as mock_mind,
         patch("TRIKMind.asyncio.run", side_effect=KeyboardInterrupt),
         patch.object(sys.stdin, "isatty", return_value=False),
         patch.object(builtins, "input"),
     ):
         TRIKMind.main()
 
-    assert mock_lobe.called
-    _call_kwargs = mock_lobe.call_args.kwargs  # type: ignore[reportUnknownVariableType]
+    assert mock_mind.called
+    _call_kwargs = mock_mind.call_args.kwargs  # type: ignore[reportUnknownVariableType]
     formatter = _call_kwargs.get("formatter")
     assert isinstance(formatter, StdoutOutputFormatter)
 

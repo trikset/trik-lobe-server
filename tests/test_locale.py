@@ -66,7 +66,7 @@ class TestSetupLocale:
         assert "\u041d\u0430\u0436\u043c\u0438\u0442\u0435" in result
 
 
-class TestLobeTranslations:
+class TestMindTranslations:
     def test_english_returns_identity(self) -> None:
         t = _MindTranslations("en")
         assert t.gettext("Hello, World!") == "Hello, World!"
