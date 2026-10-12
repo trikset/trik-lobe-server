@@ -942,22 +942,51 @@ width defaults.
 `screenshots-dark.png`) showing live output. These must reflect the actual
 output format, or the README becomes misleading.
 
-**Decision:** The screenshot pipeline has two parts:
+**Decision (2026-10-11 revision):** Two-screenshot design:
 
-1. `.tmp/gen_demo.py` — runs a fake prediction sequence through the formatter
-   and captures the ANSI output (encoding is preserved).
-1. `.tmp/render_screenshots.py` — parses the ANSI output, extracts the last
-   complete panel, and renders it as a PNG via Pillow with proper ANSI color
-   parsing.
+| File | Theme | Mode | Purpose |
+|------|-------|------|---------|
+| `screenshots-light.png` | Light (white bg) | Colorless / ASCII fallback | Newcomers with no-color terminals see the same layout |
+| `screenshots-dark.png` | Dark (navy bg) | ANSI colors + Unicode | The "beauty shot" — green bars, color tiers, ★ flash |
 
-**Guardrail:** When the output format changes (line count, box-drawing
-characters, cursor-up sequence), BOTH scripts must be updated. The render
-script splits on `\033[4A\033[J` (the current cursor-up + clear sequence) and
-expects a 4-line panel matching the formatter's output.
+Screenshots are generated programmatically, not taken from a real terminal.
+This ensures reproducibility and easy regeneration when the output format
+changes:
 
-**Failure mode:** If the render script is not updated, the screenshots will
-show either (a) multiple overlaid frames (tall image), (b) the wrong number
-of lines, or (c) no visible text.
+1. `.tmp/gen_demo.py` — creates a `UserOutputFormatter`, feeds a realistic
+   prediction sequence (4 classes, 33 frames, 3 label changes, 10-17 FPS
+   random timing), and writes the ANSI output (both color and colorless)
+   to `.tmp/demo-dark.ansi` / `.tmp/demo-light.ansi`.
+1. `.tmp/render_screenshots.py` — parses the ANSI, extracts the last 41
+   rows of scrollback (simulating a terminal viewport), and renders each
+   character cell via Pillow. `█` blocks become filled rectangles in the
+   active ANSI colour; `░` light shade becomes a dotted pattern. Regular
+   characters are drawn as text via Pillow.
+
+**Regeneration:**
+
+```bash
+uv run .tmp/gen_demo.py
+uv run .tmp/render_screenshots.py .tmp/demo-dark.ansi screenshots-dark.png --dark
+uv run .tmp/render_screenshots.py .tmp/demo-light.ansi screenshots-light.png
+```
+
+**Design choices for the demo:**
+
+- **81 × 41** terminal size — typical classroom/real-world window
+- Labels: **Apple, Banana, Cherry, Dewberry** — unambiguous English words,
+  no Cyrillic/Unicode confusion (previous screenshots used Russian labels
+  that caused encoding issues in the render pipeline)
+- 33 predictions with 3 class changes and random 10–17 FPS timing
+  (realistic inference speed for ONNX on CPU)
+- Final prediction is always a label change → change event stays visible
+  in the screenshot (not overwritten by the next refresh)
+
+**Guardrail:** When the output format changes (line count, cursor-up
+sequence, box-drawing characters), BOTH scripts must be updated. The render
+script depends on `\033[4A` as the cursor-up marker and expects a 4-line
+panel matching the formatter's output. If the formatter changes these,
+the screenshots will show wrong content.
 
 ### [2026-09-18] Camera source redesign: unified CAMERA_SOURCE
 
@@ -1052,3 +1081,53 @@ LiteRT / Python) can shift floors — re-verify wheel platform tags on bump.
 Undeliverable options rejected: universal macOS binary (no x86_64 wheels),
 old-runtime downgrade for Intel Macs (EOL security, missing ops),
 paywalled signing (notarization $99/yr, code-sign certs).
+
+### [2026-10-12] btop-style multi-zone dashboard
+
+**Context:** The original 3-line panel (`dash_top`/`dash_mid`/`stats_line`/`build_bot`) had
+off-by-one width bugs, inconsistent stats-bar widths, and scrolled off the screen when
+history grew. The diagnostic string appeared on every frame (~4500×/hour). Users resizing
+the terminal saw broken alignment and missing content.
+
+**Decision:** Redesign as a full-screen btop/htop-inspired multi-zone layout:
+
+| Zone | Content | Always visible |
+|------|---------|----------------|
+| **Current box** (╭─Current──╮) | Label + confidence, metrics (fps/#/Δ), candidate labels, model/source/diagnostic in header | Yes, top 3 lines |
+| **History zone** (├─History─┤) | Process-list style: bar first, then % / # / label / event marker. Newest at top. Fills available space. | Yes, variable rows |
+| **Stats box** (├─Stats─┤) | All labels with counts, alphabetical, wraps to multiple lines. No bars. | Yes, bottom |
+
+Key design decisions:
+
+- **Full-screen redraw** (`\033[H\033[J` instead of `\033[<N>A\033[J`). Panel always starts
+  at terminal row 1. No cursor-position tracking needed.
+- **Height-capped**: history rows = `terminal_lines - fixed_boxes` so `{panel}\n` never
+  overflows the terminal.
+- **`_box_line` pads by visible length** (strips ANSI codes before padding). Fixes the
+  long-standing width bug with colored bars.
+- **`_box_top` / `_section_header`** use `width - 5 - len(title)` to avoid the off-by-one
+  that plagued the old `inner - 10` formula.
+- **Compact header**: `╭─Current──model│source│diag───╮` — no spaces, pipe separators,
+  model/camera from `set_context()`.
+- **Stats without bars**: labels truncated to 10 chars, shown as `Name  count` only.
+  Multiple lines for many labels. Removed `_STATS_FREQ_*` constants.
+- **Window title** updated with model + source + diagnostic via OSC 0 escape.
+- **Error state**: `---` placeholder keeps the 2-line Current box structure (label line +
+  candidate line with dim `---`).
+- **Placeholder rows** (`░░░  ---  ---  ---`) fill empty history space so stats sits at
+  the bottom from frame 1.
+- **Newest at top**: history `reversed(list(self._history)[-max_rows:])` → latest
+  detection always immediately below Current box.
+
+**Removed dead code:**
+
+| Method | Replaced by |
+|--------|-------------|
+| `_dash_top()` / `_dash_mid()` | `_build_current()` with label + metrics + candidates |
+| `_stats_line()` / `_build_bot()` | `_build_stats_lines()` (returns list[str]) + `_box_bot()` |
+| `_bar()` / `_meter()` / `_top_n()` | No longer needed |
+
+**Permanent dependencies:** The render scripts `.tmp/gen_demo.py` and
+`.tmp/render_screenshots.py` depend on the exact cursor-up sequence (`\033[4A`) and
+the box-drawing character set. If the formatter changes these, both must be updated
+to keep screenshots in sync.
