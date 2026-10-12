@@ -133,12 +133,14 @@ class TestUserAdvanced:
         assert "Test context" in stderr
 
     def test_context_not_repeated(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Context appears in Current box header, not as a separate line."""
         fmt = UserOutputFormatter(color_enabled=False)
-        fmt.set_context("Header")
+        fmt.set_context("my_model.onnx")
         fmt.on_prediction("cat", 0.90, 0.05)
         capsys.readouterr()
         fmt.on_prediction("cat", 0.90, 0.05)
-        assert "Header" not in capsys.readouterr().err
+        stderr = capsys.readouterr().err
+        assert "my_model.onnx" in stderr  # in the box header
 
     def test_set_status_shows_badge(self, capsys: pytest.CaptureFixture[str]) -> None:
         """set_status() shows a badge on the dashboard top line."""
@@ -245,8 +247,9 @@ class TestUserAdvanced:
         ):
             fmt._refresh_width()
         stderr = capsys.readouterr().err
-        # Must appear as OSC title escape
-        assert "\033]0;TRIK Lobe [W148" in stderr
+        # Must appear as OSC title escape — format: TRIK Lobe  ...  W148
+        assert "\033]0;TRIK Lobe " in stderr
+        assert "W148" in stderr
 
     def test_update_title_cache_hit(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Second title write with same diagnostic is suppressed."""

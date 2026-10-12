@@ -144,6 +144,7 @@ class UserOutputFormatter:
         self._inference_times: deque[float] = deque(maxlen=50)
         self._first_output = True
         self._context: str | None = None
+        self._source: str = ""
         self._last_change_time = 0.0
         self._status: str | None = None
         self._stats: Counter[str] = Counter()
@@ -178,19 +179,22 @@ class UserOutputFormatter:
         return "+".join([f"W{self._raw_width}>{self._width}", enc, f"VT{int(self._vt_ok)}", f"COL{int(self._color)}"])
 
     def _update_title(self) -> None:
-        """Push diagnostic to window/tab title (OSC 0). Only writes on actual change."""
+        """Push model + source + diagnostic to window/tab title (OSC 0)."""
         title = self._diagnostic()
+        if self._source:
+            title = f"{self._source}  |  {title}"
         if title == self._last_title:
             return
         self._last_title = title
-        # OSC 0 escape — sets window/tab title on all modern terminals (Linux,
-        # macOS, Windows Terminal, iTerm2, etc.). On old cmd.exe this silently
-        # does nothing; no wider effect.
-        sys.stderr.write(f"\033]0;TRIK Lobe [{title}]\007")
+        sys.stderr.write(f"\033]0;TRIK Lobe  {title}\007")
         sys.stderr.flush()
 
     def set_context(self, context: str) -> None:
         self._context = context
+        # Model/source for header — everything before Ctrl+C hint, pipes compacted
+        src = re.sub(r"  \|  Ctrl\+C.*$", "", context).strip() or context
+        src = re.sub(r"\s*\|\s*", "\u2502", src)  # normalize pipes to │
+        self._source = src
 
     def set_status(self, status: str | None) -> None:
         """Set a transient status shown as a badge on the top line."""
@@ -243,15 +247,14 @@ class UserOutputFormatter:
         return f"{g.TJUNCTION_L}{g.DASH} {title} {g.DASH * (width - 5 - len(title))}{g.TJUNCTION_R}"
 
     def _box_top(self, title: str, width: int, props: str = "") -> str:
-        """╭─ title ── props ─╮ — props right-aligned when present."""
+        """╭─Title──info──╮ compact box top — no spaces, dashes fill to right."""
         g = self._glyphs
-        inner = width - 3 - len(title)  # ╭ + dashes + ╮
         if not props:
-            return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * (inner - 3)}{g.CORNER_TR}"
-        # Format: ╭─ title ── props ─╮
-        props_block = f" {props} "
-        dash_slots = inner - len(props_block) - 3
-        return f"{g.CORNER_TL}{g.DASH} {title} {g.DASH * max(1, dash_slots)}{props_block}{g.DASH}{g.CORNER_TR}"
+            return f"{g.CORNER_TL}{g.DASH}{title}{g.DASH * (width - 2 - len(title))}{g.CORNER_TR}"
+        prefix = f"{g.DASH}{title}{g.DASH}{g.DASH}"  # ─Title──
+        suffix = f"{g.DASH}{g.CORNER_TR}"            # ─╮
+        avail = width - 2 - len(prefix) - _visible_len(props) - len(suffix)
+        return f"{g.CORNER_TL}{prefix}{props}{g.DASH * max(0, avail)}{suffix}"
 
     def _box_bot(self, width: int) -> str:
         """╰──────────╯ box bottom."""
@@ -261,6 +264,13 @@ class UserOutputFormatter:
     def _available_history_rows(self) -> int:
         """Return how many history rows fit the terminal."""
         return max(2, self._lines - 4 - 1 - 3 - 1)
+
+    def _header_props(self) -> str:
+        """Static info for the Current box header — compact, pipe-separated."""
+        parts = [self._diagnostic()]
+        if self._source:
+            parts.insert(0, self._source)
+        return "│".join(parts)
 
     def _redraw(self, panel: str) -> None:
         """Write panel with full-screen clear (TTY) or append (pipe)."""
@@ -288,7 +298,7 @@ class UserOutputFormatter:
             if is_fresh and self._color
             else self._cb(tier, label)
         )
-        lines = [self._box_top("Current", self._width, self._diagnostic())]
+        lines = [self._box_top("Current", self._width, self._header_props())]
         # ── label + confidence + metrics on one line ──
         pct = self._c(tier, f"{confidence * 100:.1f}%")
         metrics = f"fps:{fps:.0f}  #{self._total_count}"
