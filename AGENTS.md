@@ -112,6 +112,12 @@ configurations, update this section and the referenced config files
 ### Before release
 
 - Gates: 0 open PRs, 0 security alerts, green main CI
+- **Pre-release review gate**: before tagging, run the aggressive reviewer
+  (`review-work` / Momus + Oracle pass) that reads the docs — especially
+  guardrails, constraints, app design decisions, and design decisions — and:
+  checks docs+code for decisions, docs+code consistency, tests for clarity and
+  conciseness; improves docs to prevent problems (errors, undocumented tricks).
+  No tag until this pass is clean
 - Version = zero-filled date: set `pyproject.toml` to `YY.MM.DD` on the release
   branch (`YY.MM.DD.dev0` on main); commit the version bump
 - **Generate release notes** via the `release-notes` skill, then embed them into
