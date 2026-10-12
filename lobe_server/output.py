@@ -250,11 +250,12 @@ class UserOutputFormatter:
         """╭─Title──info──╮ compact box top — no spaces, dashes fill to right."""
         g = self._glyphs
         if not props:
-            return f"{g.CORNER_TL}{g.DASH}{title}{g.DASH * (width - 2 - len(title))}{g.CORNER_TR}"
-        prefix = f"{g.DASH}{title}{g.DASH}{g.DASH}"  # ─Title──
-        suffix = f"{g.DASH}{g.CORNER_TR}"            # ─╮
-        avail = width - 2 - len(prefix) - _visible_len(props) - len(suffix)
-        return f"{g.CORNER_TL}{prefix}{props}{g.DASH * max(0, avail)}{suffix}"
+            return f"{g.CORNER_TL}{g.DASH}{title}{g.DASH * (width - 3 - len(title))}{g.CORNER_TR}"
+        # Visual: ╭(1) + ─Title──(1+len+2) + props + ─╮(2)
+        prefix_vis = 1 + len(title) + 2
+        suffix_vis = 2
+        avail = width - 1 - prefix_vis - _visible_len(props) - suffix_vis
+        return f"{g.CORNER_TL}{g.DASH}{title}{g.DASH}{g.DASH}{props}{g.DASH * max(0, avail)}{g.DASH}{g.CORNER_TR}"
 
     def _box_bot(self, width: int) -> str:
         """╰──────────╯ box bottom."""

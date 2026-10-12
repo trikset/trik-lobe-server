@@ -118,7 +118,7 @@ def main() -> None:
     args = parser.parse_args()
 
     fmt = UserOutputFormatter(color_enabled=not args.no_color)
-    fmt.set_context("fruit_classifier.onnx  |  USB @ 640x480  |  Ctrl+C to stop")
+    fmt.set_context("fruit_classifier.onnx  |  USB@640x480  |  Ctrl+C to stop")
     if not args.no_color and not fmt._tty:
         print("Note: color disabled (stderr is not a TTY)", file=sys.stderr)
 
