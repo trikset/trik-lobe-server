@@ -70,6 +70,15 @@ class TestBuildFormatter:
     def test_user_mode(self) -> None:
         fmt = TRIKMind._build_formatter("user", color_enabled=True, verbose=0)
         assert isinstance(fmt, UserOutputFormatter)
+        assert fmt._view_threshold == 0.4  # noqa: SLF001
+
+    def test_user_mode_custom_view_threshold(self) -> None:
+        fmt = TRIKMind._build_formatter(
+            "user", color_enabled=True, verbose=0, view_threshold=0.55
+        )
+        assert isinstance(fmt, UserOutputFormatter)
+        assert fmt._view_threshold == 0.55  # noqa: SLF001
+        assert isinstance(fmt, UserOutputFormatter)
 
 
 def test_main_missing_settings_exits() -> None:

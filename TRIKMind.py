@@ -120,11 +120,11 @@ def _pause_for_user() -> None:
 
 
 def _build_formatter(
-    output_mode: str, *, color_enabled: bool, verbose: int
+    output_mode: str, *, color_enabled: bool, verbose: int, view_threshold: float = 0.4
 ) -> UserOutputFormatter | StdoutOutputFormatter:
     if output_mode == "stdout":
         return StdoutOutputFormatter(verbose=verbose)
-    return UserOutputFormatter(color_enabled=color_enabled)
+    return UserOutputFormatter(color_enabled=color_enabled, view_threshold=view_threshold)
 
 
 def _find_model_file(model_path: Path) -> str:
@@ -203,7 +203,12 @@ def main() -> None:
         settings.camera_source = args.camera_source
 
     color_enabled = not args.no_color and settings.color_enabled
-    formatter = _build_formatter(settings.output_mode, color_enabled=color_enabled, verbose=args.verbose)
+    formatter = _build_formatter(
+        settings.output_mode,
+        color_enabled=color_enabled,
+        verbose=args.verbose,
+        view_threshold=settings.view_threshold,
+    )
 
     model_path = resolve_model_path(settings)
     logger.info("Model path: %s", model_path)
