@@ -135,12 +135,23 @@ def _pause_for_user() -> None:
         input(_("Press any key to close the window..."))
 
 
-def _build_formatter(
-    output_mode: str, *, color_enabled: bool, verbose: int, view_threshold: float = 0.4
+def _build_formatter(  # noqa: PLR0913  # pylint: disable=too-many-arguments
+    output_mode: str,
+    *,
+    color_enabled: bool,
+    verbose: int,
+    view_threshold: float = 0.4,
+    send_threshold: float = 0.6,
+    robot_addr: str = "",
 ) -> UserOutputFormatter | StdoutOutputFormatter:
     if output_mode == "stdout":
         return StdoutOutputFormatter(verbose=verbose)
-    return UserOutputFormatter(color_enabled=color_enabled, view_threshold=view_threshold)
+    return UserOutputFormatter(
+        color_enabled=color_enabled,
+        view_threshold=view_threshold,
+        send_threshold=send_threshold,
+        robot_addr=robot_addr,
+    )
 
 
 def _find_model_file(model_path: Path) -> str:
@@ -202,7 +213,11 @@ def _create_server_or_exit(
 def _run_demo(args: argparse.Namespace) -> None:
     """Run the standalone dashboard demo — fake predictions, no robot."""
     color_enabled = not args.no_color
-    formatter = UserOutputFormatter(color_enabled=color_enabled, view_threshold=DemoSource.VIEW_THRESHOLD)
+    formatter = UserOutputFormatter(
+        color_enabled=color_enabled,
+        view_threshold=DemoSource.VIEW_THRESHOLD,
+        robot_addr="xxx.xxx.xxx.xxx:ppppp",
+    )
     formatter.set_context("Demo  |  fruit_classifier.onnx  |  Ctrl+C to stop")
     source = DemoSource(formatter, fps=args.fps)
     try:
@@ -238,11 +253,14 @@ def main() -> None:
         settings.camera_source = args.camera_source
 
     color_enabled = not args.no_color and settings.color_enabled
+    robot_addr = f"{settings.robot_ip}:{settings.robot_port}" if settings.robot_ip else ""
     formatter = _build_formatter(
         settings.output_mode,
         color_enabled=color_enabled,
         verbose=args.verbose,
         view_threshold=settings.view_threshold,
+        send_threshold=settings.send_threshold,
+        robot_addr=robot_addr,
     )
 
     model_path = resolve_model_path(settings)

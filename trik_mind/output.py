@@ -124,10 +124,20 @@ class UserOutputFormatter:
 
     PREDICTION_INTERVAL = 0.2
 
-    def __init__(self, *, color_enabled: bool = True, view_threshold: float = 0.4) -> None:
+    def __init__(
+        self,
+        *,
+        color_enabled: bool = True,
+        view_threshold: float = 0.4,
+        send_threshold: float = 0.6,
+        robot_addr: str = "",
+    ) -> None:
         self._color = color_enabled and sys.stderr.isatty()
         self._tty = sys.stderr.isatty()
         self._view_threshold = view_threshold
+        self._view_pct = round(view_threshold * 100)
+        self._send_pct = round(send_threshold * 100)
+        self._robot_addr = robot_addr
         self._glyphs = _Unicode if _HAS_UNICODE else _ASCII
         self._width = _BOX_WIDTH
         self._raw_width = _BOX_WIDTH
@@ -183,27 +193,29 @@ class UserOutputFormatter:
                 self._update_title()
 
     def _diagnostic(self) -> str:
-        """Compact terminal diagnostic: Wraw→capped+encoding+VT+COL."""
+        """Compact terminal diagnostic: W{width}+H{lines}+{enc}+VT{vt}+COL{col}."""
         enc = (getattr(sys.stderr, "encoding", "") or "?").upper().replace("-", "")
-        return "+".join([f"W{self._raw_width}>{self._width}", enc, f"VT{int(self._vt_ok)}", f"COL{int(self._color)}"])
+        return "+".join([f"W{self._width}", f"H{self._lines}", enc, f"VT{int(self._vt_ok)}", f"COL{int(self._color)}"])
 
     def _update_title(self) -> None:
         """Push model + source + diagnostic to window/tab title (OSC 0)."""
-        title = self._diagnostic()
-        if self._source:
-            title = f"{self._source}  |  {title}"
+        title = self._header_props()
         if title == self._last_title:
             return
         self._last_title = title
-        sys.stderr.write(f"\033]0;TRIK Mind  {title}\007")
-        sys.stderr.flush()
+        title_str = f"TRIK Mind  {title}" if title else ""
+        if title_str:
+            sys.stderr.write(f"\033]0;{title_str}\007")
+            sys.stderr.flush()
 
     def set_context(self, context: str) -> None:
         self._context = context
-        # Model/source for header — everything before Ctrl+C hint, pipes compacted
+        # Compact identifier for header — just model/source name (no "Model: ", camera, robot)
         src = re.sub(r"  \|  Ctrl\+C.*$", "", context).strip() or context
-        src = re.sub(r"\s*\|\s*", self._glyphs.PIPE, src)  # normalize pipes to the active glyph
-        self._source = src
+        parts = re.split(r"\s*\|\s*", src)
+        if parts:
+            self._source = parts[0].removeprefix("Model: ").strip()
+        self._update_title()
 
     def set_status(self, status: str | None) -> None:
         """Set a transient status shown as a badge on the top line."""
@@ -281,11 +293,56 @@ class UserOutputFormatter:
         return max(2, self._lines - 4 - 1 - 3 - 1)
 
     def _header_props(self) -> str:
-        """Build compact pipe-separated header for the Current box."""
-        parts = [self._diagnostic()]
+        """
+        Build pipe-separated header for the Current box.
+
+        Progressive levels — first that fits `_width` wins:
+          wide:    source│IP:PORT│diagnostic│thresholds
+          narrow:  source│IP:PORT│thresholds      (drop diagnostic)
+          ultra:   IP only│thresholds              (drop source, drop :port)
+          source+d: source│diagnostic│thresholds    (no IP)
+          source:  source│thresholds                (no IP, no diagnostic)
+          no-src:  diagnostic│thresholds             (no source)
+          bare:    thresholds only
+        """
+        g = self._glyphs
+        diag = self._diagnostic()
+        thresh = f"{self._send_pct}/{self._view_pct}"
+        ip_only = self._robot_addr.split(":", 1)[0] if self._robot_addr else ""
+
+        def _try(parts: list[str]) -> str | None:
+            active = [p for p in parts if p]
+            if not active:  # pragma: no cover  # defensive — all callers pass thresh
+                return ""
+            s = g.PIPE.join(active)
+            return s if _visible_len(s) + 13 <= self._width else None
+
+        candidates: list[list[str]] = []
+
+        # Full: source │ IP:PORT │ diagnostic │ thresholds
+        if self._source and self._robot_addr:
+            candidates.append([self._source, self._robot_addr, diag, thresh])
+            # Narrow: source │ IP:PORT │ thresholds (no diagnostic)
+            candidates.append([self._source, self._robot_addr, thresh])
+            # Ultra: IP only │ thresholds (drop source, drop :port)
+            candidates.append([ip_only, thresh])
+
+        # Source + diagnostic + thresholds (no IP)
         if self._source:
-            parts.insert(0, self._source)
-        return self._glyphs.PIPE.join(parts)
+            candidates.append([self._source, diag, thresh])
+            # Source + thresholds (no IP, no diagnostic)
+            candidates.append([self._source, thresh])
+
+        # Diagnostic + thresholds (no source)
+        candidates.append([diag, thresh])
+        # Bare: thresholds only
+        candidates.append([thresh])
+
+        for parts in candidates:
+            v = _try(parts)
+            if v is not None:
+                return v
+        return ""
 
     def _redraw(self, panel: str) -> None:
         """Write panel with full-screen clear (TTY) or append (pipe)."""
@@ -372,7 +429,8 @@ class UserOutputFormatter:
 
         # Column header aligned to data columns
         header = (
-            f"{'Bar':>{bar_w}}{'%':>{_HIST_COL_PCT}} {'#':>{_HIST_COL_NUM}} {'Label':<{lbl_w}} {'Evt':>{_HIST_COL_EVT}}"
+            f"{f'V{self._view_pct}% S{self._send_pct}%':>{bar_w}}"
+            f"{'%':>{_HIST_COL_PCT}} {'#':>{_HIST_COL_NUM}} {'Label':<{lbl_w}} {'Evt':>{_HIST_COL_EVT}}"
         )
         lines.append(self._box_line(header))
 

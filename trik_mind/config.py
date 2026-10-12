@@ -23,6 +23,7 @@ class Settings:
     send_threshold: float = 0.6
     output_mode: str = "user"
     color_enabled: bool = True
+    send_on_change_only: bool = False
 
 
 def _get_int(section: configparser.SectionProxy, key: str, default: int) -> int:
@@ -45,6 +46,14 @@ def _get_float(section: configparser.SectionProxy, key: str, default: float) -> 
     except ValueError:
         msg = _("Invalid {key} in settings.ini: {raw!r}").format(key=key, raw=raw)
         raise ValueError(msg) from None
+
+
+def _get_boolean(section: configparser.SectionProxy, key: str, *, default: bool) -> bool:
+    """Read a boolean key: true/yes/1/false/no/0, case-insensitive."""
+    raw = section.get(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("true", "yes", "1")
 
 
 def _deprecated(section: configparser.SectionProxy, old: str, fallback: str) -> str | None:
@@ -152,6 +161,7 @@ def load_settings(path: Path | None = None) -> Settings:
         msg = _("Invalid OUTPUT_MODE in settings.ini: {mode!r}").format(mode=output_mode)
         raise ValueError(msg)
     color_enabled = ui.get("COLOR_ENABLED", "true").lower() == "true"
+    send_on_change_only = _get_boolean(s, "SEND_ON_CHANGE_ONLY", default=False)
 
     return Settings(
         robot_ip=robot_ip,
@@ -164,6 +174,7 @@ def load_settings(path: Path | None = None) -> Settings:
         send_threshold=send_threshold,
         output_mode=output_mode,
         color_enabled=color_enabled,
+        send_on_change_only=send_on_change_only,
     )
 
 

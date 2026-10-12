@@ -6,6 +6,7 @@
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -228,7 +229,7 @@ class TestUserAdvanced:
         assert fmt._width == 120
 
     def test_diagnostic_shows_capped_width(self) -> None:
-        """Diagnostic string shows raw to capped width mapping."""
+        """Diagnostic string shows capped width + height, no >raw mapping."""
         fmt = UserOutputFormatter(color_enabled=False)
         with (
             patch.object(fmt, "_tty", True),  # noqa: FBT003
@@ -236,11 +237,12 @@ class TestUserAdvanced:
         ):
             fmt._refresh_width()
         diag = fmt._diagnostic()
-        assert "W298" in diag
-        assert ">120" in diag
+        assert "W120" in diag  # capped at _MAX_WIDTH
+        assert "H24" in diag  # terminal height in diagnostic
+        assert ">" not in diag  # >raw mapping dropped
 
     def test_diagnostic_goes_to_title(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Diagnostic moves to OSC window title, not panel."""
+        """Diagnostic moves to OSC window title (via _header_props), not panel."""
         fmt = UserOutputFormatter(color_enabled=False)
         capsys.readouterr()
         with (
@@ -249,9 +251,9 @@ class TestUserAdvanced:
         ):
             fmt._refresh_width()
         stderr = capsys.readouterr().err
-        # Must appear as OSC title escape — format: TRIK Mind  ...  W148
         assert "\033]0;TRIK Mind " in stderr
-        assert "W148" in stderr
+        assert "W120" in stderr  # capped width
+        assert "60/40" in stderr  # thresholds in title via _header_props
 
     def test_update_title_cache_hit(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Second title write with same diagnostic is suppressed."""
@@ -357,7 +359,7 @@ class TestStdoutOutputFormatter:
 class TestThresholdsAndBars:
     """View/send threshold filtering, letter-char bars, sent/hold markers."""
 
-    def _fmt(self, **kw: float) -> UserOutputFormatter:
+    def _fmt(self, **kw: Any) -> UserOutputFormatter:
         fmt = UserOutputFormatter(color_enabled=False, **kw)  # type: ignore[arg-type]  # view_threshold only
         fmt.set_context("t")
         return fmt
