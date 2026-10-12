@@ -14,11 +14,7 @@ def _release_files() -> list[str]:
     steps = data["jobs"]["release"]["steps"]
     publish = next(step for step in steps if step.get("name") == "Publish draft release")
     # Strip internal CI paths (e.g. pack/) — users see the basename on GitHub
-    return [
-        line.strip().split("/")[-1]
-        for line in publish["with"]["files"].splitlines()
-        if line.strip()
-    ]
+    return [line.strip().split("/")[-1] for line in publish["with"]["files"].splitlines() if line.strip()]
 
 
 def test_release_artifact_names_documented_in_readme() -> None:

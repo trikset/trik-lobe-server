@@ -21,6 +21,9 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# fmt: off
+# Ruff joins short-key/long-value dict entries past E501's 120-char limit — hand-split keeps
+# translations readable and lint-clean, so the formatter must leave these blocks alone.
 _RU: dict[str, str] = {
     # --- model.py ---
     "Model file specified in signature.json not found: {path}":
@@ -88,13 +91,17 @@ _RU: dict[str, str] = {
     "(held {time:.1f}s, {count} detections)":
         "(продолжение {time:.1f}с, {count} обнаружений)",
 
-    # --- server.py (dashboard badges only) ---
+# --- server.py (dashboard badges only) ---
     "connecting":
         "подключение",
     "reconnecting":
         "переподключение",
 }
+# fmt: on
 
+# fmt: off
+# Ruff joins short-key/long-value dict entries past E501's 120-char limit — hand-split keeps
+# translations readable and lint-clean, so the formatter must leave these blocks alone.
 _ES: dict[str, str] = {
     # --- model.py ---
     "Model file specified in signature.json not found: {path}":
@@ -168,6 +175,7 @@ _ES: dict[str, str] = {
     "reconnecting":
         "reconectando",
 }
+# fmt: on
 
 
 class _LobeTranslations(gettext.NullTranslations):

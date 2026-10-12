@@ -74,6 +74,7 @@ def _enable_vt() -> bool:  # pragma: no cover (Windows-only)
         return True
     try:
         import ctypes as _ct  # noqa: PLC0415
+
         kernel32 = _ct.windll.kernel32  # type: ignore[attr-defined]
         handle = kernel32.GetStdHandle(-11)
         mode = _ct.c_ulong(0)
@@ -228,11 +229,7 @@ class UserOutputFormatter:
         pct = self._c(tier, f"{confidence * 100:.1f}%")
 
         is_fresh = self._last_change_time and time.monotonic() - self._last_change_time < 1.0
-        lbl = (
-            self._c(self._BOLD + tier, f"{g.STAR} {label}")
-            if is_fresh and self._color
-            else self._cb(tier, label)
-        )
+        lbl = self._c(self._BOLD + tier, f"{g.STAR} {label}") if is_fresh and self._color else self._cb(tier, label)
 
         fps_str = f"fps:{fps:.1f}"
         cnt_str = f"#{self._total_count}"
@@ -334,12 +331,14 @@ class UserOutputFormatter:
         self._dets_since_change += 1
         self._prev_label = label
 
-        panel = "\n".join([
-            self._dash_top(label, confidence, fps),
-            self._dash_mid(confidence, top_labels),
-            self._stats_line(),
-            self._build_bot(),
-        ])
+        panel = "\n".join(
+            [
+                self._dash_top(label, confidence, fps),
+                self._dash_mid(confidence, top_labels),
+                self._stats_line(),
+                self._build_bot(),
+            ]
+        )
 
         if self._first_output:
             self._first_output = False
@@ -411,7 +410,10 @@ class StdoutOutputFormatter:
         """No-op — stdout mode has no dashboard to display status on."""
 
     def on_prediction(
-        self, label: str, confidence: float, timing_s: float,
+        self,
+        label: str,
+        confidence: float,
+        timing_s: float,
         top_labels: list[tuple[str, float]] | None = None,  # noqa: ARG002  # pylint: disable=unused-argument
     ) -> None:
         self._total_count += 1

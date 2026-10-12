@@ -297,9 +297,7 @@ async def test_prediction_loop_calls_formatter(
 
 
 @pytest.mark.asyncio
-async def test_run_forever_calls_set_status(
-    settings: Settings, mock_model: MagicMock, mock_camera: MagicMock
-) -> None:
+async def test_run_forever_calls_set_status(settings: Settings, mock_model: MagicMock, mock_camera: MagicMock) -> None:
     """run_forever calls formatter.set_status on connect/reconnect."""
     formatter = MagicMock()
     connect_fail = MagicMock()
@@ -316,8 +314,7 @@ async def test_run_forever_calls_set_status(
         async def stop_on_sleep(_seconds: float) -> None:
             server.shutdown()
 
-        with patch.object(server, "RECONNECT_DELAY", 0.01), \
-             patch("lobe_server.server.asyncio.sleep", stop_on_sleep):
+        with patch.object(server, "RECONNECT_DELAY", 0.01), patch("lobe_server.server.asyncio.sleep", stop_on_sleep):
             await server.run_forever()
 
     assert formatter.set_status.call_count >= 2  # called on connect attempt + reconnect
